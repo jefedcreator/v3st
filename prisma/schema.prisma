@@ -1,5 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// V3ST beta schema. Money is BigInt minor units (kobo for NGN, micro-units for USDC).
+// Every table is @@map'ed to snake_case; columns keep Prisma camelCase.
 
 generator client {
     provider = "prisma-client-js"
@@ -8,43 +8,193 @@ generator client {
 
 datasource db {
     provider = "postgresql"
-    // NOTE: When using mysql or sqlserver, uncomment the @db.Text annotations in model Account below
-    // Further reading:
-    // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
-    // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
     url      = env("DATABASE_URL")
 }
 
-model Post {
-    id        Int      @id @default(autoincrement())
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    createdBy   User   @relation(fields: [createdById], references: [id])
-    createdById String
-
-    @@index([name])
+enum UserRole {
+    user
+    operator
 }
 
-// Necessary for Next auth
-model Account {
-    id                       String  @id @default(cuid())
-    userId                   String
-    type                     String
-    provider                 String
-    providerAccountId        String
-    refresh_token            String? // @db.Text
-    access_token             String? // @db.Text
-    expires_at               Int?
-    token_type               String?
-    scope                    String?
-    id_token                 String? // @db.Text
-    session_state            String?
-    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-    refresh_token_expires_in Int?
+enum KycStatus {
+    none
+    verified
+    rejected
+}
 
-    @@unique([provider, providerAccountId])
+enum EarningsMode {
+    unset
+    payout
+    reinvest
+}
+
+enum WalletFamily {
+    evm
+    solana
+}
+
+enum ProviderMode {
+    sandbox
+    simulated
+}
+
+enum ProviderId {
+    yellowcard
+    paycrest
+}
+
+enum SettlementModel {
+    partner_float
+    direct_chain
+}
+
+enum OrderKind {
+    deposit
+    withdrawal
+    earnings_payout
+}
+
+enum OrderDirection {
+    in
+    out
+}
+
+enum OrderStatus {
+    created
+    awaiting_transfer
+    received
+    funded
+    settled
+    expired
+    refunded
+    failed
+    funds_collected
+    submitted
+    paid
+    reversed
+}
+
+enum HoldReason {
+    name_mismatch
+    amount_mismatch
+    missing_sender
+    treasury_short
+    float_short
+    rate_moved
+    screening
+    paused
+    needs_review
+}
+
+enum BankAccountStatus {
+    active
+    replaced
+    rejected
+}
+
+enum LedgerOwner {
+    user
+    treasury
+    float
+    external
+    clearing
+    venue
+    equity
+}
+
+enum TransferPurpose {
+    deposit_funding
+    payout_collection
+    payout_return
+    direct_payout_funding
+    float_topup
+}
+
+enum TransferStatus {
+    awaiting_approval
+    pending
+    submitted
+    confirmed
+    failed
+}
+
+enum TradeSide {
+    buy
+    sell
+}
+
+enum TradePurpose {
+    deposit_buy
+    retry_buy
+    reinvest
+    withdrawal_sell
+}
+
+enum TradeSource {
+    cash
+    earnings
+    stock
+}
+
+enum TradeStatus {
+    pending
+    submitted
+    filled
+    failed
+}
+
+enum JobStatus {
+    pending
+    running
+    done
+    dead
+}
+
+enum AlertSeverity {
+    info
+    warning
+    critical
+}
+
+enum TreasuryOpKind {
+    float_topup
+    float_withdrawal
+}
+
+enum TreasuryOpStatus {
+    planned
+    transferring
+    awaiting_provider
+    complete
+    failed
+}
+
+enum ReconStatus {
+    balanced
+    breached
+    incomplete
+}
+
+model User {
+    id              String       @id @default(cuid())
+    phone           String       @unique
+    identitySubject String       @unique
+    identityMode    ProviderMode
+    role            UserRole     @default(user)
+    kycStatus       KycStatus    @default(none)
+    kycTier         Int          @default(0)
+    verifiedName    String?
+    kycPersona      String?
+    kycProfile      Json?
+    kycMode         ProviderMode?
+    earningsMode    EarningsMode @default(unset)
+    reinvestStockId String?
+    createdAt       DateTime     @default(now())
+    updatedAt       DateTime     @updatedAt
+
+    sessions Session[]
+
+    @@map("users")
 }
 
 model Session {
@@ -52,24 +202,455 @@ model Session {
     sessionToken String   @unique
     userId       String
     expires      DateTime
-    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt    DateTime @default(now())
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
+    @@map("sessions")
 }
 
-model User {
+model Wallet {
+    id               String       @id @default(cuid())
+    userId           String
+    family           WalletFamily
+    address          String
+    providerWalletId String
+    providerMode     ProviderMode
+    createdAt        DateTime     @default(now())
+
+    @@unique([userId, family])
+    @@unique([family, address])
+    @@map("wallets")
+}
+
+model TreasuryWallet {
+    id               String       @id @default(cuid())
+    chain            String       @unique
+    address          String
+    providerWalletId String
+    providerMode     ProviderMode
+    createdAt        DateTime     @default(now())
+
+    @@map("treasury_wallets")
+}
+
+model BankAccount {
+    id            String            @id @default(cuid())
+    userId        String
+    bankCode      String
+    bankName      String
+    accountNumber String
+    resolvedName  String
+    nameMatch     Boolean
+    status        BankAccountStatus
+    provider      ProviderId
+    providerMode  ProviderMode
+    createdAt     DateTime          @default(now())
+
+    @@index([userId])
+    @@map("bank_accounts")
+}
+
+model WithdrawalQuote {
+    id            String       @id @default(cuid())
+    userId        String
+    provider      ProviderId
+    providerMode  ProviderMode
+    ngnAmount     BigInt
+    feeNgn        BigInt
+    netNgn        BigInt
+    usdAmount     BigInt
+    debitUsdc     BigInt
+    rateKobo      BigInt
+    rateMicroUsd  BigInt
+    chain         String
+    stockId       String?
+    sellQuantity  BigInt?
+    bankAccountId String
+    expiresAt     DateTime
+    consumedAt    DateTime?
+    createdAt     DateTime     @default(now())
+
+    @@index([userId])
+    @@map("withdrawal_quotes")
+}
+
+model RampOrder {
+    id                  String          @id @default(cuid())
+    userId              String
+    kind                OrderKind
+    direction           OrderDirection
+    provider            ProviderId
+    providerMode        ProviderMode
+    settlementModel     SettlementModel
+    status              OrderStatus     @default(created)
+    holdReason          HoldReason?
+    version             Int             @default(0)
+    idempotencyKey      String          @unique
+    requestHash         String
+    providerRef         String?
+    ngnAmount           BigInt
+    feeNgn              BigInt?
+    usdAmount           BigInt?
+    lockedUsd           BigInt?
+    rateKobo            BigInt?
+    rateMicroUsd        BigInt?
+    receivedNgn         BigInt?
+    netNgn              BigInt?
+    debitUsdc           BigInt?
+    chain               String?
+    stockId             String?
+    quoteId             String?         @unique
+    sourceBankAccountId String?
+    payToBankName       String?
+    payToAccountNumber  String?
+    payToAccountName    String?
+    payToReference      String?
+    destBankCode        String?
+    destBankName        String?
+    destAccountNumber   String?
+    destAccountName     String?
+    bankReference       String?
+    fundingAddress      String?
+    fundingAmount       BigInt?
+    expiresAt           DateTime?
+    failureReason       String?
+    createdAt           DateTime        @default(now())
+    updatedAt           DateTime        @updatedAt
+
+    @@unique([provider, providerRef])
+    @@index([userId, createdAt])
+    @@index([status])
+    @@map("ramp_orders")
+}
+
+model OrderTransition {
+    id         String       @id @default(cuid())
+    orderId    String
+    fromStatus OrderStatus?
+    toStatus   OrderStatus
+    holdReason HoldReason?
+    actor      String
+    reason     String?
+    createdAt  DateTime     @default(now())
+
+    @@index([orderId])
+    @@map("order_transitions")
+}
+
+model LedgerAccount {
+    id            String      @id @default(cuid())
+    code          String      @unique
+    asset         String
+    ownerType     LedgerOwner
+    userId        String?
+    allowNegative Boolean
+    createdAt     DateTime    @default(now())
+
+    @@index([userId])
+    @@map("ledger_accounts")
+}
+
+model LedgerJournal {
+    id          String   @id @default(cuid())
+    key         String   @unique
+    kind        String
+    orderId     String?
+    requestHash String
+    createdAt   DateTime @default(now())
+
+    @@map("ledger_journals")
+}
+
+model LedgerEntry {
+    id              String   @id @default(cuid())
+    journalId       String
+    debitAccountId  String
+    creditAccountId String
+    asset           String
+    amount          BigInt
+    createdAt       DateTime @default(now())
+
+    @@index([debitAccountId])
+    @@index([creditAccountId])
+    @@map("ledger_entries")
+}
+
+model ChainTransfer {
+    id                  String          @id @default(cuid())
+    key                 String          @unique
+    purpose             TransferPurpose
+    status              TransferStatus
+    chain               String
+    token               String
+    fromAddress         String
+    toAddress           String
+    amount              BigInt
+    orderId             String?
+    treasuryOperationId String?
+    txHash              String?
+    approvals           String[]
+    failureReason       String?
+    gasAsset            String?
+    gasAmount           BigInt?
+    providerMode        ProviderMode
+    createdAt           DateTime        @default(now())
+    updatedAt           DateTime        @updatedAt
+
+    @@unique([chain, txHash])
+    @@index([status])
+    @@map("chain_transfers")
+}
+
+model Stock {
+    id                            String   @id @default(cuid())
+    symbol                        String   @unique
+    name                          String
+    chain                         String
+    tokenAddress                  String
+    decimals                      Int
+    enabled                       Boolean
+    simPriceMicroUsdc             BigInt
+    simWeeklyEarningMicroPerShare BigInt
+    createdAt                     DateTime @default(now())
+
+    @@map("stocks")
+}
+
+model TradeOrder {
+    id            String       @id @default(cuid())
+    key           String       @unique
+    userId        String
+    side          TradeSide
+    purpose       TradePurpose
+    fundsSource   TradeSource
+    stockId       String
+    orderId       String?
+    chain         String
+    venueId       String?
+    amountIn      BigInt
+    minAmountOut  BigInt?
+    amountOut     BigInt?
+    status        TradeStatus  @default(pending)
+    failureReason String?
+    venueRef      String?
+    version       Int          @default(0)
+    providerMode  ProviderMode
+    createdAt     DateTime     @default(now())
+    updatedAt     DateTime     @updatedAt
+
+    @@index([userId])
+    @@index([status])
+    @@map("trade_orders")
+}
+
+model Earning {
+    id              String   @id @default(cuid())
+    userId          String
+    stockId         String
+    week            String
+    chain           String
+    amountUsdc      BigInt
+    harvestedAt     DateTime
+    payoutOrderId   String?
+    reinvestTradeId String?
+    createdAt       DateTime @default(now())
+
+    @@unique([userId, stockId, week])
+    @@index([userId, payoutOrderId])
+    @@map("earnings")
+}
+
+model WebhookEvent {
+    id             String       @id @default(cuid())
+    provider       ProviderId
+    eventKey       String
+    payload        Json
+    signatureValid Boolean
+    providerMode   ProviderMode
+    receivedAt     DateTime     @default(now())
+    processedAt    DateTime?
+
+    @@unique([provider, eventKey])
+    @@map("webhook_events")
+}
+
+model Job {
+    id          String    @id @default(cuid())
+    kind        String
+    subjectId   String
+    key         String    @unique
+    payload     Json
+    status      JobStatus @default(pending)
+    runAt       DateTime
+    attempts    Int       @default(0)
+    maxAttempts Int       @default(10)
+    lockedUntil DateTime?
+    lockedBy    String?
+    rearmAt     DateTime?
+    lastError   String?
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
+
+    @@index([status, runAt])
+    @@map("jobs")
+}
+
+model ScheduleRun {
+    name      String
+    slot      String
+    createdAt DateTime @default(now())
+
+    @@id([name, slot])
+    @@map("schedule_runs")
+}
+
+model UserEvent {
+    seq       BigInt   @id @default(autoincrement())
+    userId    String
+    type      String
+    subjectId String
+    status    String?
+    createdAt DateTime @default(now())
+
+    @@index([userId, seq])
+    @@map("user_events")
+}
+
+model OperationalControl {
+    scope       String   @id
+    paused      Boolean
+    reason      String?
+    updatedById String?
+    updatedAt   DateTime @updatedAt
+
+    @@map("operational_controls")
+}
+
+model OperationalAlert {
+    id           String        @id @default(cuid())
+    kind         String
+    severity     AlertSeverity
+    dedupeKey    String
+    message      String
+    context      Json
+    createdAt    DateTime      @default(now())
+    resolvedAt   DateTime?
+    resolvedById String?
+
+    @@map("operational_alerts")
+}
+
+model TreasuryOperation {
+    id            String           @id @default(cuid())
+    key           String           @unique
+    kind          TreasuryOpKind
+    provider      ProviderId
+    chain         String
+    amountUsd     BigInt
+    amountUsdc    BigInt?
+    status        TreasuryOpStatus @default(planned)
+    externalRef   String?
+    failureReason String?
+    providerMode  ProviderMode
+    createdAt     DateTime         @default(now())
+    updatedAt     DateTime         @updatedAt
+
+    @@map("treasury_operations")
+}
+
+model ReconciliationRun {
+    id        String      @id @default(cuid())
+    asOf      DateTime
+    status    ReconStatus
+    results   Json
+    createdAt DateTime    @default(now())
+
+    @@map("reconciliation_runs")
+}
+
+model ProviderHealth {
+    provider            ProviderId @id
+    consecutiveFailures Int        @default(0)
+    lastFailureAt       DateTime?
+    lastSuccessAt       DateTime?
+    openUntil           DateTime?
+
+    @@map("provider_health")
+}
+
+model SimRampTx {
+    id                       String          @id @default(cuid())
+    provider                 ProviderId
+    key                      String
+    kind                     String
+    direction                OrderDirection?
+    state                    String
+    ngnAmount                BigInt?
+    usdAmount                BigInt
+    feeNgn                   BigInt?
+    rateKobo                 BigInt?
+    rateMicroUsd             BigInt?
+    sourceAccountNumber      String?
+    sourceAccountName        String?
+    senderName               String?
+    destinationAccountNumber String?
+    bankReference            String?
+    chain                    String?
+    recipientAddress         String?
+    fundingAddress           String?
+    settleAt                 DateTime?
+    expiresAt                DateTime?
+    outcome                  String?
+    createdAt                DateTime        @default(now())
+    updatedAt                DateTime        @updatedAt
+
+    @@unique([provider, key])
+    @@map("sim_ramp_txs")
+}
+
+model SimChainTx {
+    id            String   @id @default(cuid())
+    key           String   @unique
+    chain         String
+    hash          String   @unique
+    fromAddress   String
+    toAddress     String
+    token         String
+    amount        BigInt
+    status        String
+    confirmAt     DateTime
+    failureReason String?
+    createdAt     DateTime @default(now())
+
+    @@map("sim_chain_txs")
+}
+
+model SimSwap {
     id            String    @id @default(cuid())
-    name          String?
-    email         String?   @unique
-    emailVerified DateTime?
-    image         String?
-    accounts      Account[]
-    sessions      Session[]
-    posts         Post[]
+    key           String    @unique
+    venueId       String
+    stockId       String
+    side          TradeSide
+    amountIn      BigInt
+    minAmountOut  BigInt
+    amountOut     BigInt?
+    status        String
+    settleAt      DateTime
+    failureReason String?
+    createdAt     DateTime  @default(now())
+
+    @@map("sim_swaps")
 }
 
-model VerificationToken {
-    identifier String
-    token      String   @unique
-    expires    DateTime
+model SimFault {
+    id         String    @id @default(cuid())
+    scope      String
+    key        String
+    consumedAt DateTime?
+    createdAt  DateTime  @default(now())
 
-    @@unique([identifier, token])
+    @@unique([scope, key])
+    @@map("sim_faults")
 }
