@@ -48,6 +48,19 @@ export async function seedTreasury(chain: string, microUsdc: bigint): Promise<vo
   );
 }
 
+export async function creditTreasury(chain: string, microUsdc: bigint): Promise<void> {
+  await withTx((tx) =>
+    ledgerService.post(tx, {
+      key: `treasury-credit:${chain}:${randomUUID()}`,
+      kind: "openingBalance",
+      orderId: null,
+      entries: [
+        { debit: acct.equityOpening("USDC"), credit: acct.treasury(chain), amount: microUsdc },
+      ],
+    }),
+  );
+}
+
 export async function seedFloat(provider: ProviderId, microUsd: bigint): Promise<void> {
   await withTx((tx) =>
     ledgerService.post(

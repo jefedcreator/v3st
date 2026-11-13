@@ -21,7 +21,7 @@ import { NotFoundException } from "@/utils/exceptions";
 
 import { tradeRouter } from "./router";
 
-function toDto(t: TradeOrder): TradeDto {
+export function tradeToDto(t: TradeOrder): TradeDto {
   return {
     id: t.id,
     side: t.side,
@@ -242,7 +242,7 @@ class TradeService {
   async retry(userId: string, tradeId: string, idempotencyKey: string): Promise<TradeDto> {
     const key = `trade-retry:${userId}:${idempotencyKey}`;
     const existing = await db.tradeOrder.findUnique({ where: { key } });
-    if (existing) return toDto(existing);
+    if (existing) return tradeToDto(existing);
     const trade = await db.tradeOrder.findUnique({ where: { id: tradeId } });
     if (trade?.userId !== userId || trade.side !== "buy" || trade.status !== "failed") {
       throw new NotFoundException("Retryable trade not found", "NOT_FOUND");
@@ -258,7 +258,7 @@ class TradeService {
         orderId: trade.orderId ?? undefined,
       }),
     );
-    return toDto(created);
+    return tradeToDto(created);
   }
 }
 

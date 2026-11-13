@@ -11,7 +11,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<unknown, Record<string, string>>(
   async (request) => {
-    const id = request.params?.id as string;
+    const id = request.params!.id!;
     const trade = await tradeService.retry(request.user!.id, id, request.idempotencyKey!);
     return ok(trade, "Trade retry accepted");
   },
