@@ -249,6 +249,8 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
 ) => { /* ... */ };
 ```
 
+The exported route function takes a **required** second argument `context: { params: Promise<Record<string, string>> }` (Next 15 `RouteContext`); `withMiddleware` awaits it and passes the resolved `params` record to the handler.
+
 ### `authMiddleware`
 
 Reads the session token from the `sara-session` httpOnly cookie (or falls back to `Authorization: Bearer <token>`), validates it against the `Session` table, checks expiry, and attaches `request.user = { ...user, session }`. Throws `UnauthorizedException` on any failure; deletes expired sessions lazily.
