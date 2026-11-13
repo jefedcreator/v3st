@@ -5,6 +5,13 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+  async rewrites() {
+    return [
+      { source: "/v1/:path*", destination: "/api/v1/:path*" },
+      { source: "/webhooks/:provider", destination: "/api/v1/webhooks/:provider" },
+    ];
+  },
+};
 
 export default config;

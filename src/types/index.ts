@@ -1,0 +1,66 @@
+export type ErrorCode =
+  | "BAD_REQUEST"
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "INTERNAL"
+  | "MALFORMED_JSON"
+  | "PAYLOAD_TOO_LARGE"
+  | "IDEMPOTENCY_KEY_REQUIRED"
+  | "CROSS_ORIGIN"
+  | "VALIDATION_FAILED"
+  | "NAME_MISMATCH"
+  | "BELOW_MINIMUM"
+  | "KYC_REQUIRED"
+  | "BANK_ACCOUNT_REQUIRED"
+  | "TRAVEL_RULE_DATA_MISSING"
+  | "IDEMPOTENCY_KEY_REUSED"
+  | "QUOTE_EXPIRED"
+  | "QUOTE_CONSUMED"
+  | "INSUFFICIENT_FUNDS"
+  | "LIMIT_EXCEEDED"
+  | "STALE_STATE"
+  | "INVALID_TRANSITION"
+  | "DEPOSITS_PAUSED"
+  | "PAYOUTS_PAUSED"
+  | "RAIL_UNAVAILABLE"
+  | "RATES_UNAVAILABLE"
+  | "FLOAT_UNAVAILABLE"
+  | "ACCOUNT_NOT_FOUND"
+  | "ALREADY_APPROVED"
+  | "ALREADY_VERIFIED"
+  | "AMOUNT_OUT_OF_RANGE"
+  | "BELOW_PROVIDER_MINIMUM"
+  | "INVALID_SCENARIO_STATE"
+  | "LEDGER_KEY_REUSED"
+  | "MODE_MISMATCH"
+  | "NOT_DEAD"
+  | "SCENARIO_UNAVAILABLE"
+  | "SCREENING_DENIED"
+  | "SLIPPAGE"
+  | "STOCK_UNAVAILABLE"
+  | "TEST_PHONE_REQUIRED"
+  | "TRADING_PAUSED"
+  | "WALLET_NOT_READY"
+  | "SELL_FAILED";
+
+export interface ApiResponse<T> {
+  status: number;
+  message: string;
+  data: T;
+}
+
+export interface PaginatedApiResponse<T> extends ApiResponse<T> {
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface ApiErrorResponse {
+  status: number;
+  message: string;
+  code: ErrorCode;
+  data: null;
+}
