@@ -1,4 +1,12 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+
+let cuidCounter = 0;
+
+export function newCuid(): string {
+  cuidCounter += 1;
+  const random = randomBytes(6).toString("base64url").replace(/[-_]/g, "x");
+  return `c${Date.now().toString(36)}${cuidCounter.toString(36).padStart(4, "0")}${random}`;
+}
 
 const REDACT_KEY =
   /(token|secret|password|account_?number|bvn|id_?number|phone|signature|authorization|cookie)/i;

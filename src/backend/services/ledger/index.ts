@@ -1,20 +1,10 @@
-import { randomBytes } from "node:crypto";
-
 import { Prisma } from "@/server/prisma";
 import { type DbClient, db, lockRows, type Tx } from "@/server/db";
-import { canonicalJson, sha256Hex } from "@/utils";
+import { canonicalJson, newCuid, sha256Hex } from "@/utils";
 import { BadRequestException, ConflictException } from "@/utils/exceptions";
 
 import type { AccountSpec } from "./accounts";
 import type { JournalInput } from "./postings";
-
-let cuidCounter = 0;
-
-function newCuid(): string {
-  cuidCounter += 1;
-  const random = randomBytes(6).toString("base64url").replace(/[-_]/g, "x");
-  return `c${Date.now().toString(36)}${cuidCounter.toString(36).padStart(4, "0")}${random}`;
-}
 
 async function balanceById(client: DbClient, accountId: string): Promise<bigint> {
   const rows = await client.$queryRaw<Array<{ balance: string }>>`
