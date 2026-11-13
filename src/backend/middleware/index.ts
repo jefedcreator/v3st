@@ -5,13 +5,17 @@ import { z } from "zod";
 
 import { logRequest, reportError } from "@/backend/observability";
 import { env } from "@/env";
+import { authService } from "@/backend/services/auth";
+import { SESSION_COOKIE_NAME } from "@/server/auth/constants";
 import type { ApiErrorResponse, ErrorCode } from "@/types";
 import { redact } from "@/utils";
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   InternalServerErrorException,
   PayloadTooLargeException,
+  UnauthorizedException,
 } from "@/utils/exceptions";
 
 import type {
@@ -243,6 +247,68 @@ export const idempotencyKeyMiddleware = async <B, Q>(
     };
   }
   request.idempotencyKey = key;
+  return { message: "", statusCode: 200, next: true };
+};
+
+export const authMiddleware = async <B, Q>(
+  request: AuthRequest<B, Q>,
+): Promise<MiddlewareResponse> => {
+  const cookieToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  let sessionToken: string | undefined;
+  if (cookieToken) {
+    sessionToken = cookieToken;
+  } else {
+    const header = request.headers.get("authorization");
+    const bearer = header?.replace(/^Bearer\s+/i, "").trim();
+    if (bearer) {
+      sessionToken = bearer;
+    }
+  }
+  if (!sessionToken || sessionToken === "undefined" || sessionToken === "null") {
+    throw new UnauthorizedException("Unauthorized");
+  }
+  try {
+    const user = await authService.authenticate(sessionToken);
+    request.user = user;
+    request.authTransport = cookieToken ? "cookie" : "bearer";
+  } catch (error) {
+    if (error instanceof HttpException) throw error;
+    throw new UnauthorizedException("Invalid auth token");
+  }
+  return { message: "", statusCode: 200, next: true };
+};
+
+export const optionalAuthMiddleware = async <B, Q>(
+  request: AuthRequest<B, Q>,
+): Promise<MiddlewareResponse> => {
+  const cookieToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  let sessionToken: string | undefined;
+  if (cookieToken) {
+    sessionToken = cookieToken;
+  } else {
+    const header = request.headers.get("authorization");
+    const bearer = header?.replace(/^Bearer\s+/i, "").trim();
+    if (bearer) sessionToken = bearer;
+  }
+  if (!sessionToken || sessionToken === "undefined" || sessionToken === "null") {
+    request.user = null;
+    return { message: "", statusCode: 200, next: true };
+  }
+  try {
+    request.user = await authService.authenticate(sessionToken);
+    request.authTransport = cookieToken ? "cookie" : "bearer";
+  } catch {
+    request.user = null;
+  }
+  return { message: "", statusCode: 200, next: true };
+};
+
+export const operatorMiddleware = async <B, Q>(
+  request: AuthRequest<B, Q>,
+): Promise<MiddlewareResponse> => {
+  if (request.user?.role !== "operator") {
+    throw new ForbiddenException("Operator role required");
+  }
   return { message: "", statusCode: 200, next: true };
 };
 
