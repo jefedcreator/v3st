@@ -43,7 +43,8 @@ export type ErrorCode =
   | "TEST_PHONE_REQUIRED"
   | "TRADING_PAUSED"
   | "WALLET_NOT_READY"
-  | "SELL_FAILED";
+  | "SELL_FAILED"
+  | "NO_ROUTE";
 
 export interface ApiResponse<T> {
   status: number;

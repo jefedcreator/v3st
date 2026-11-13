@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { BankAccount, ChainTransfer, Prisma, ProviderId, RampOrder, User } from "@/server/prisma";
+import type { BankAccount, ChainTransfer, Prisma, ProviderId, RampOrder, Stock, User } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { kycService, type PersonaId } from "@/backend/services/kyc";
@@ -102,6 +102,25 @@ export async function makeBankAccount(
   return db.bankAccount.findFirstOrThrow({
     where: { userId, accountNumber, status: "active" },
   });
+}
+
+export async function makeStock(
+  overrides?: Partial<Prisma.StockCreateInput>,
+): Promise<Stock> {
+  const data: Prisma.StockCreateInput = {
+    symbol: "TSTA",
+    name: "Test Stock A (simulated)",
+    chain: "base",
+    tokenAddress: `0x${randomUUID().replace(/-/g, "").slice(0, 40)}`,
+    decimals: 6,
+    enabled: true,
+    simPriceMicroUsdc: 2_000_000n,
+    simWeeklyEarningMicroPerShare: 200_000n,
+  };
+  if (overrides) {
+    Object.assign(data, overrides);
+  }
+  return db.stock.create({ data });
 }
 
 export async function makeOrder(
