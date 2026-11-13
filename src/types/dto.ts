@@ -142,3 +142,11 @@ export type TransferDto = {
   approvals: string[];
   failure_reason: string | null;
 };
+
+export type UserEventDto = {
+  id: string;
+  type: string;
+  subject_id: string;
+  status: string | null;
+  created_at: string;
+};
