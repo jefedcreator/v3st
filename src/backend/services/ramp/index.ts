@@ -1,8 +1,9 @@
 import type { RampOrder } from "@/server/prisma";
-import { integrationModes } from "@/backend/integrations/beta-policy";
+import { env } from "@/env";
+import { BetaPolicyError, integrationModes } from "@/backend/integrations/beta-policy";
 import { PermanentJobError } from "@/backend/services/jobs/types";
 
-import { createYellowcardSandboxProvider } from "./sandbox";
+import { YellowCardProvider } from "./yellowcard";
 import { createSimulatedRampProvider } from "./simulated";
 import type { Direction, ProviderId, RampProvider } from "./types";
 
@@ -11,7 +12,15 @@ const providers = new Map<ProviderId, RampProvider>();
 function build(id: ProviderId): RampProvider {
   const modes = integrationModes();
   if (id === "yellowcard" && modes.yellowcard === "sandbox") {
-    return createYellowcardSandboxProvider();
+    if (!env.YELLOWCARD_API_KEY || !env.YELLOWCARD_API_SECRET) {
+      throw new BetaPolicyError(
+        "YELLOWCARD_MODE=sandbox requires YELLOWCARD_API_KEY and YELLOWCARD_API_SECRET",
+      );
+    }
+    return new YellowCardProvider({
+      apiKey: env.YELLOWCARD_API_KEY,
+      secret: env.YELLOWCARD_API_SECRET,
+    });
   }
   return createSimulatedRampProvider(id);
 }

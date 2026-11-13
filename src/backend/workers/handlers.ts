@@ -7,8 +7,13 @@ import type {
 } from "@/server/prisma";
 
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
+import { webhookService } from "@/backend/services/webhooks";
 
-export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {};
+export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
+  "webhook.process": async (job) => {
+    await webhookService.process(job.subjectId);
+  },
+};
 
 export const transferSettledHandlers: Partial<
   Record<TransferPurpose, (t: ChainTransfer) => Promise<void>>

@@ -1,0 +1,12 @@
+{
+  "_source": "docs.yellowcard.engineering — GET /business/receive/{id} documented complete example (2026-11-13)",
+  "id": "8f0c4d2e",
+  "sequenceId": "dep_test_0001",
+  "status": "complete",
+  "localAmount": "20000.00",
+  "amount": "12.375",
+  "feeLocal": "200.00",
+  "senderName": "ADAEZE OBI",
+  "bankReference": "TRF123456",
+  "executedAt": 1763017200000
+}
