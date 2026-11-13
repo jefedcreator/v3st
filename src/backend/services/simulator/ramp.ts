@@ -54,7 +54,12 @@ export async function applyLazyOutcome(row: SimRampTx): Promise<SimRampTx> {
       const blocked = row.destinationAccountNumber === "0000000000" || fault !== null;
       const data: Prisma.SimRampTxUpdateInput = blocked
         ? { state: "failed", outcome: fault ? "injected fault" : "blocked destination", updatedAt: at }
-        : { state: "complete", outcome: "complete", updatedAt: at };
+        : {
+            state: "complete",
+            outcome: "complete",
+            bankReference: `BR-${sha256Hex(`br:${row.provider}:${row.key}`).slice(0, 12).toUpperCase()}`,
+            updatedAt: at,
+          };
       return db.simRampTx.update({ where: { id: row.id }, data });
     }
     if (row.kind === "collection") {

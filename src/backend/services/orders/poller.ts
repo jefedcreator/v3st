@@ -40,5 +40,15 @@ export async function pollOpenWork(at: Date): Promise<number> {
     await rearm("trade.progress", trade.id);
   }
 
+  const payouts = await db.rampOrder.findMany({
+    where: {
+      kind: { in: ["withdrawal", "earnings_payout"] },
+      status: { in: ["created", "funds_collected", "submitted", "reversed"] },
+    },
+  });
+  for (const order of payouts) {
+    await rearm("payout.progress", order.id);
+  }
+
   return count;
 }

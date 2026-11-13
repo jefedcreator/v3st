@@ -13,6 +13,7 @@ import { pollOpenWork } from "@/backend/services/orders/poller";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
 import { webhookService } from "@/backend/services/webhooks";
+import { withdrawalService } from "@/backend/services/withdrawals";
 
 export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   "webhook.process": async (job) => {
@@ -30,6 +31,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   "poll.open_work": async () => {
     await pollOpenWork(now());
   },
+  "payout.progress": async (job) => {
+    await withdrawalService.progress(job.subjectId);
+  },
   "chain.progress": async (job) => {
     const transfer = await walletService.progressTransfer(job.subjectId);
     if (transfer.status === "confirmed" || transfer.status === "failed") {
@@ -45,6 +49,12 @@ export const transferSettledHandlers: Partial<
   deposit_funding: async (t) => {
     await depositService.onFundingSettled(t);
   },
+  payout_collection: async (t) => {
+    await withdrawalService.onCollectionSettled(t);
+  },
+  payout_return: async (t) => {
+    await withdrawalService.onReturnSettled(t);
+  },
 };
 
 export const tradeSettledHandlers: Partial<
@@ -52,6 +62,9 @@ export const tradeSettledHandlers: Partial<
 > = {
   deposit_buy: async (t) => {
     await depositService.onBuySettled(t);
+  },
+  withdrawal_sell: async (t) => {
+    await withdrawalService.onSellSettled(t);
   },
 };
 
