@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import { Prisma, type ProviderId, type RampOrder, type User } from "@/server/prisma";
+import type { ChainTransfer, Prisma, ProviderId, RampOrder, User } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { openingBalance } from "@/backend/services/ledger/postings";
+import { walletService } from "@/backend/services/wallets";
 
 let phoneCounter = Math.floor(Math.random() * 900);
 
@@ -51,6 +52,34 @@ export async function seedFloat(provider: ProviderId, microUsd: bigint): Promise
       tx,
       openingBalance({ account: acct.float(provider), amount: microUsd }),
     ),
+  );
+}
+
+export async function makeUserWithWallets(): Promise<User> {
+  const u = await makeUser();
+  await walletService.ensureUserWallets(u.id);
+  return u;
+}
+
+export async function createFundingTransfer(opts?: {
+  key?: string;
+  amount?: bigint;
+}): Promise<ChainTransfer> {
+  const key = opts?.key ?? "fund:o2";
+  const amount = opts?.amount ?? 4_000_000n;
+  if ((await ledgerService.balance(acct.treasury("base"))) === 0n) {
+    await seedTreasury("base", 1_000_000_000_000n);
+  }
+  const u = await makeUserWithWallets();
+  return withTx((tx) =>
+    walletService.createTransfer(tx, {
+      key,
+      purpose: "deposit_funding",
+      chain: "base",
+      amount,
+      from: { kind: "treasury" },
+      to: { kind: "user", userId: u.id },
+    }),
   );
 }
 

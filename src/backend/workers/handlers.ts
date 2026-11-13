@@ -7,11 +7,22 @@ import type {
 } from "@/server/prisma";
 
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
+import { walletService } from "@/backend/services/wallets";
 import { webhookService } from "@/backend/services/webhooks";
 
 export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   "webhook.process": async (job) => {
     await webhookService.process(job.subjectId);
+  },
+  "wallets.provision": async (job) => {
+    await walletService.ensureUserWallets(job.subjectId);
+  },
+  "chain.progress": async (job) => {
+    const transfer = await walletService.progressTransfer(job.subjectId);
+    if (transfer.status === "confirmed" || transfer.status === "failed") {
+      const settled = transferSettledHandlers[transfer.purpose];
+      if (settled) await settled(transfer);
+    }
   },
 };
 

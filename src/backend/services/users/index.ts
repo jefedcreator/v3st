@@ -14,7 +14,9 @@ class UserService {
         verified_name: user.verifiedName,
         simulated: user.kycMode === "simulated",
       },
-      wallets: [],
+      wallets: (
+        await db.wallet.findMany({ where: { userId } })
+      ).map((w) => ({ family: w.family, address: w.address })),
       bank_account: null,
       earnings_preference: {
         mode: user.earningsMode,
