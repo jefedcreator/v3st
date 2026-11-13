@@ -12,6 +12,7 @@ import { earningsBatchService } from "@/backend/services/earnings/batch";
 import { earningsService } from "@/backend/services/earnings";
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
 import { pollOpenWork } from "@/backend/services/orders/poller";
+import { reconciliationService } from "@/backend/services/reconciliation";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
 import { treasuryService } from "@/backend/services/treasury";
@@ -51,6 +52,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "earnings.payout_batch": async (job) => {
     await earningsBatchService.runBatch(job.subjectId, now());
+  },
+  "reconcile.run": async (job) => {
+    await reconciliationService.run(new Date(job.subjectId));
   },
   "chain.progress": async (job) => {
     const transfer = await walletService.progressTransfer(job.subjectId);

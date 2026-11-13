@@ -113,3 +113,32 @@ export type EarningsPreferenceDto = {
   minimum_payout_ngn: string;
   payout_fee_ngn: string | null;
 };
+
+export type ControlDto = {
+  scope: string;
+  paused: boolean;
+  reason: string | null;
+  updated_by: string | null;
+};
+
+export type OpsStatusDto = {
+  controls: ControlDto[];
+  open_alerts: { id: string; kind: string; severity: string; message: string; created_at: string }[];
+  dead_jobs: number;
+  oldest_pending_job_age_seconds: number | null;
+  awaiting_approval_transfers: number;
+  last_reconciliation: { id: string; as_of: string; status: string } | null;
+};
+
+export type TransferDto = {
+  id: string;
+  key: string;
+  purpose: string;
+  status: string;
+  chain: string;
+  from_address: string;
+  to_address: string;
+  amount: string;
+  approvals: string[];
+  failure_reason: string | null;
+};
