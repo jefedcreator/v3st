@@ -83,15 +83,13 @@ export function assertBetaRuntime(source: BetaEnvSource): IntegrationModes {
 let cachedModes: IntegrationModes | null = null;
 
 export function integrationModes(): IntegrationModes {
-  if (cachedModes === null) {
-    cachedModes = assertBetaRuntime({
-      APP_STAGE: env.APP_STAGE,
-      NODE_ENV: env.NODE_ENV,
-      YELLOWCARD_MODE: env.YELLOWCARD_MODE,
-      YELLOWCARD_API_KEY: env.YELLOWCARD_API_KEY,
-      YELLOWCARD_API_SECRET: env.YELLOWCARD_API_SECRET,
-    });
-  }
+  cachedModes ??= assertBetaRuntime({
+    APP_STAGE: env.APP_STAGE,
+    NODE_ENV: env.NODE_ENV,
+    YELLOWCARD_MODE: env.YELLOWCARD_MODE,
+    YELLOWCARD_API_KEY: env.YELLOWCARD_API_KEY,
+    YELLOWCARD_API_SECRET: env.YELLOWCARD_API_SECRET,
+  });
   return cachedModes;
 }
 

@@ -71,7 +71,8 @@ export function createYellowCardClient(opts: YellowCardClientOpts) {
       });
       const timeout = new Promise<never>((_resolve, reject) => {
         request.signal.addEventListener("abort", () => {
-          reject(request.signal.reason ?? new Error("Request timed out"));
+          const reason: unknown = request.signal.reason;
+          reject(reason instanceof Error ? reason : new Error("Request timed out"));
         });
       });
 
@@ -88,10 +89,14 @@ export function createYellowCardClient(opts: YellowCardClientOpts) {
       const text = await res.text();
       if (!res.ok) {
         const parsed = safeJson(text);
-        const code = String(
-          parsed?.code ?? parsed?.errorCode ?? parsed?.error ?? res.status,
-        );
-        const message = String(parsed?.message ?? "");
+        const asText = (value: unknown): string =>
+          typeof value === "string" || typeof value === "number" ? String(value) : "";
+        const code =
+          asText(parsed?.code) ||
+          asText(parsed?.errorCode) ||
+          asText(parsed?.error) ||
+          String(res.status);
+        const message = asText(parsed?.message);
         if (res.status === 429 || res.status >= 500) {
           throw new ProviderError("transient", code);
         }

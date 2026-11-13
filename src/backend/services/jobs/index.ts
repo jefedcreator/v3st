@@ -1,4 +1,4 @@
-import { Prisma, type Job } from "@/server/prisma";
+import { type Prisma, type Job } from "@/server/prisma";
 import { type DbClient, db, withTx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";

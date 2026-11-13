@@ -1,4 +1,4 @@
-import { Prisma, type ProviderId, type SimRampTx } from "@/server/prisma";
+import { type Prisma, type ProviderId, type SimRampTx } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
@@ -118,15 +118,19 @@ export const simRamp = {
   },
 
   async seedFloat(provider: ProviderId, usd: bigint): Promise<void> {
-    await db.$executeRawUnsafe(
-      `INSERT INTO "sim_ramp_txs" (id, provider, key, kind, state, "usdAmount", "createdAt", "updatedAt")
-       VALUES ($1, $2::"ProviderId", 'seed', 'seed', 'complete', $3, $4, $4)
-       ON CONFLICT (provider, key) DO UPDATE SET "usdAmount" = EXCLUDED."usdAmount", "updatedAt" = EXCLUDED."updatedAt"`,
-      `seed-${provider}`,
-      provider,
-      usd,
-      now(),
-    );
+    await db.simRampTx.upsert({
+      where: { provider_key: { provider, key: "seed" } },
+      create: {
+        provider,
+        key: "seed",
+        kind: "seed",
+        state: "complete",
+        usdAmount: usd,
+        createdAt: now(),
+        updatedAt: now(),
+      },
+      update: { usdAmount: usd, updatedAt: now() },
+    });
   },
 
   async floatBalance(provider: ProviderId): Promise<bigint> {

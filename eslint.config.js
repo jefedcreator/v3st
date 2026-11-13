@@ -36,6 +36,13 @@ export default tseslint.config(
     },
   },
   {
+    files: ["tests/**/*.ts", "tests/**/*.tsx"],
+    rules: {
+      // useTestDatabase() is a Vitest setup helper, not a React hook.
+      "react-hooks/rules-of-hooks": "off",
+    },
+  },
+  {
     linterOptions: {
       reportUnusedDisableDirectives: true,
     },

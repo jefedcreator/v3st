@@ -54,12 +54,23 @@ function wrapWithHealth(p: RampProvider): RampProvider {
       throw error;
     }
   };
-  return {
-    ...p,
-    quote: (direction, ngnAmount) => record(() => p.quote(direction, ngnAmount)),
-    createCollection: (input) => record(() => p.createCollection(input)),
-    createPayout: (input) => record(() => p.createPayout(input)),
-  };
+  return new Proxy(p, {
+    get(target, prop, receiver) {
+      if (prop === "quote") {
+        return (direction: Direction, ngnAmount: bigint) =>
+          record(() => target.quote(direction, ngnAmount));
+      }
+      if (prop === "createCollection") {
+        return (input: Parameters<RampProvider["createCollection"]>[0]) =>
+          record(() => target.createCollection(input));
+      }
+      if (prop === "createPayout") {
+        return (input: Parameters<RampProvider["createPayout"]>[0]) =>
+          record(() => target.createPayout(input));
+      }
+      return Reflect.get(target, prop, receiver) as RampProvider[keyof RampProvider];
+    },
+  });
 }
 
 export function register(p: RampProvider): void {

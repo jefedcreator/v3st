@@ -25,7 +25,7 @@ function signedHeaders(body = rawBody): Headers {
 
 beforeEach(() => {
   reset();
-  rampRegistry.register(new YellowCardProvider({ apiKey: "test-key", secret }));
+  register(new YellowCardProvider({ apiKey: "test-key", secret }));
 });
 
 it("stores a signed event once and enqueues one processing job", async () => {

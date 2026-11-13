@@ -80,14 +80,15 @@ describe("operations", () => {
       headers: headers(operatorToken),
     });
     expect(res.status).toBe(200);
-    expect(res.json).toMatchObject({
+    const expected: Record<string, unknown> = {
       data: {
-        controls: expect.any(Array),
-        open_alerts: expect.any(Array),
-        dead_jobs: expect.any(Number),
-        awaiting_approval_transfers: expect.any(Number),
+        controls: expect.any(Array) as unknown,
+        open_alerts: expect.any(Array) as unknown,
+        dead_jobs: expect.any(Number) as unknown,
+        awaiting_approval_transfers: expect.any(Number) as unknown,
       },
-    });
+    };
+    expect(res.json).toMatchObject(expected);
   });
 
   it("retries only dead jobs", async () => {

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { expect, it } from "vitest";
 
-import { Prisma } from "@/server/prisma";
+import { type Prisma } from "@/server/prisma";
 import { db } from "@/server/db";
 
 import { useTestDatabase } from "../helpers/db";

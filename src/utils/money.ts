@@ -104,5 +104,5 @@ export function parseProviderJson(text: string): unknown {
     }
     return value;
   };
-  return JSON.parse(text, reviver as (key: string, value: unknown) => unknown);
+  return JSON.parse(text, reviver);
 }

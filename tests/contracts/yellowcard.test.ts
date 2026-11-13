@@ -16,7 +16,7 @@ function fixture(name: string): unknown {
 
 function recordingFetch(calls: Request[], fixtureBody: unknown, status = 201) {
   return async (input: RequestInfo | URL): Promise<Response> => {
-    const req = new Request(input as Request);
+    const req = new Request(input);
     calls.push(req);
     return new Response(JSON.stringify(fixtureBody), {
       status,
@@ -28,7 +28,7 @@ function recordingFetch(calls: Request[], fixtureBody: unknown, status = 201) {
 function routerFetch(routes: Record<string, [number, unknown]>) {
   const calls: Request[] = [];
   const fn = async (input: RequestInfo | URL): Promise<Response> => {
-    const req = new Request(input as Request);
+    const req = new Request(input);
     calls.push(req);
     const url = new URL(req.url);
     const key = `${req.method} ${url.pathname.replace("/business", "")}${url.search}`;
@@ -44,7 +44,7 @@ function routerFetch(routes: Record<string, [number, unknown]>) {
       headers: { "content-type": "application/json" },
     });
   };
-  return { calls, fn: fn as typeof fetch };
+  return { calls, fn: fn };
 }
 
 const signing = {
@@ -154,7 +154,7 @@ it("does not accept a send whose locked cost exceeds maxUsd", async () => {
 });
 
 it("classifies a timeout as transient and a validation 400 as rejected", async () => {
-  const hanging = (async () => new Promise<Response>(() => {})) as typeof fetch;
+  const hanging = (async () => new Promise<Response>(() => undefined)) as typeof fetch;
   const client = createYellowCardClient({ ...signing, fetch: hanging, timeoutMs: 10 });
   await expect(client.request("GET", "/rates?currency=NGN")).rejects.toMatchObject({
     kind: "transient",

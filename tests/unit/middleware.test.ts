@@ -8,7 +8,11 @@ import {
   pathParamValidatorMiddleware,
   withMiddleware,
 } from "@/backend/middleware";
-import type { AuthRequest, MiddlewareResponse } from "@/backend/middleware/types";
+import type {
+  AuthRequest,
+  MiddlewareResponse,
+  QueryParameters,
+} from "@/backend/middleware/types";
 import { idParamSchema } from "@/backend/validators/index.validator";
 import { ok } from "@/utils/response";
 import { redact } from "@/utils";
@@ -109,11 +113,16 @@ it("requires a well-formed Idempotency-Key", async () => {
 });
 
 it("rejects cross-origin cookie mutations", async () => {
-  const asCookie = async (req: AuthRequest): Promise<MiddlewareResponse> => {
+  const asCookie = async (
+    req: AuthRequest<unknown, QueryParameters>,
+  ): Promise<MiddlewareResponse> => {
     req.authTransport = "cookie";
     return { message: "", statusCode: 200, next: true };
   };
-  const route = withMiddleware(async () => ok({}, "ok"), [asCookie, originMiddleware]);
+  const route = withMiddleware<unknown, QueryParameters>(async () => ok({}, "ok"), [
+    asCookie,
+    originMiddleware,
+  ]);
   const res = await callRoute(route, {
     method: "POST",
     url: "/x",

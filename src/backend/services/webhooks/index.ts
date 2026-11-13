@@ -65,7 +65,7 @@ class WebhookService {
       const eventData: Prisma.WebhookEventCreateInput = {
         provider,
         eventKey: hint.eventKey,
-        payload: storedPayload as Prisma.InputJsonValue,
+        payload: storedPayload,
         signatureValid: true,
         providerMode: p.mode,
         receivedAt: now(),

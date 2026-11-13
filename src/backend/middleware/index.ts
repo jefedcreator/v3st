@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { type z } from "zod";
 
 import { logRequest, reportError } from "@/backend/observability";
 import { env } from "@/env";
@@ -157,7 +157,7 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
 
   return async (
     req: unknown,
-    context: { params?: Promise<Record<string, string>> } | undefined,
+    context: { params: Promise<Record<string, string>> },
   ): Promise<Response> => {
     const start = Date.now();
     const request = req as AuthRequest<B, Q>;
@@ -203,7 +203,7 @@ export const queryValidatorMiddleware =
         code: "VALIDATION_FAILED",
       };
     }
-    request.query = result.data;
+    request.query = result.data as z.infer<Q>;
     return { message: "", statusCode: 200, next: true };
   };
 

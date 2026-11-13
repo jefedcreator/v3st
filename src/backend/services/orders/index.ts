@@ -1,10 +1,11 @@
-import { Prisma, type HoldReason, type OrderKind, type OrderStatus, type RampOrder } from "@/server/prisma";
+import { type Prisma, type HoldReason, type OrderKind, type OrderStatus, type RampOrder } from "@/server/prisma";
 import { db, type Tx, lockRows } from "@/server/db";
 import { now } from "@/backend/clock";
 import { ConflictException, NotFoundException } from "@/utils/exceptions";
 import type { JournalInput } from "@/backend/services/ledger/postings";
 import { ledgerService } from "@/backend/services/ledger";
-import { jobService, type JobInput } from "@/backend/services/jobs";
+import { jobService } from "@/backend/services/jobs";
+import type { JobInput } from "@/backend/services/jobs/types";
 
 import { DEPOSIT_TRANSITIONS, PAYOUT_TRANSITIONS } from "./transitions";
 

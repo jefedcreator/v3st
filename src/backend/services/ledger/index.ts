@@ -1,4 +1,4 @@
-import { Prisma } from "@/server/prisma";
+import { type Prisma } from "@/server/prisma";
 import { type DbClient, db, lockRows, type Tx } from "@/server/db";
 import { canonicalJson, newCuid, sha256Hex } from "@/utils";
 import { BadRequestException, ConflictException } from "@/utils/exceptions";
@@ -123,8 +123,8 @@ class LedgerService {
     for (const entry of journal.entries) {
       const entryData: Prisma.LedgerEntryCreateInput = {
         journalId: created.id,
-        debitAccountId: accountIds.get(entry.debit.code) as string,
-        creditAccountId: accountIds.get(entry.credit.code) as string,
+        debitAccountId: accountIds.get(entry.debit.code)!,
+        creditAccountId: accountIds.get(entry.credit.code)!,
         asset: entry.debit.asset,
         amount: entry.amount,
       };

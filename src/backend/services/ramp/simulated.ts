@@ -1,4 +1,4 @@
-import { Prisma, type ProviderId, type ProviderMode, type SimRampTx } from "@/server/prisma";
+import { type Prisma, type ProviderId, type ProviderMode, type SimRampTx } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
@@ -42,7 +42,7 @@ function toProviderTx(row: SimRampTx): ProviderTx {
   return {
     ref: refForKey(row.key),
     key: row.key,
-    direction: (row.direction ?? "in") as Direction,
+    direction: (row.direction ?? "in"),
     state: row.state as ProviderTx["state"],
     ngnAmount: row.ngnAmount,
     usdAmount: row.usdAmount,
@@ -388,7 +388,7 @@ export function createSimulatedRampProvider(id: ProviderId): RampProvider {
       const row = await db.simRampTx.findUnique({
         where: { provider_key: { provider: id, key } },
       });
-      if (!row || row.direction !== direction) {
+      if (row?.direction !== direction) {
         throw new ProviderError("not_found", "NOT_FOUND");
       }
       return resolveRow(row);
@@ -398,7 +398,7 @@ export function createSimulatedRampProvider(id: ProviderId): RampProvider {
       const row = await db.simRampTx.findUnique({
         where: { provider_key: { provider: id, key } },
       });
-      if (!row || row.direction !== direction) return null;
+      if (row?.direction !== direction) return null;
       return resolveRow(row);
     },
 

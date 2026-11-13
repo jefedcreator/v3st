@@ -291,6 +291,7 @@ class TreasuryService {
   }): Promise<void> {
     const mode = integrationModes().wallets;
     for (const [chain, amount] of Object.entries(i.treasuryMicroUsdc) as [Chain, bigint][]) {
+      if (amount <= 0n) continue;
       await withTx((tx) =>
         ledgerService.post(tx, openingBalance({ account: acct.treasury(chain), amount })),
       );

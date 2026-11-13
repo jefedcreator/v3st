@@ -224,14 +224,14 @@ export class YellowCardProvider implements RampProvider {
   async getTransaction(direction: Direction, ref: string): Promise<ProviderTx> {
     const resource = direction === "in" ? "receive" : "send";
     const raw = await this.client.request("GET", `/${resource}/${ref}`);
-    return mapYellowCardTx(direction, receiveResponseSchema.parse(raw) as YellowCardTxPayload);
+    return mapYellowCardTx(direction, receiveResponseSchema.parse(raw));
   }
 
   async findByKey(direction: Direction, key: string): Promise<ProviderTx | null> {
     const resource = direction === "in" ? "receive" : "send";
     try {
       const raw = await this.client.request("GET", `/${resource}/sequence-id/${key}`);
-      return mapYellowCardTx(direction, sendResponseSchema.parse(raw) as YellowCardTxPayload);
+      return mapYellowCardTx(direction, sendResponseSchema.parse(raw));
     } catch (error) {
       if (error instanceof ProviderError && error.kind === "not_found") return null;
       throw error;

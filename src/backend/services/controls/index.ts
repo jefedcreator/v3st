@@ -1,4 +1,4 @@
-import { Prisma, type OperationalControl } from "@/server/prisma";
+import { type Prisma, type OperationalControl } from "@/server/prisma";
 import { type DbClient, db } from "@/server/db";
 import type { ErrorCode } from "@/types";
 import { ServiceUnavailableException } from "@/utils/exceptions";

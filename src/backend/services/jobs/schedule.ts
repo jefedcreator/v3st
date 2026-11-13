@@ -55,7 +55,7 @@ const pad = (n: number): string => n.toString().padStart(2, "0");
 export function lagosDayStart(d: Date): Date {
   const { isoDate } = lagosParts(d);
   const [year, month, day] = isoDate.split("-").map(Number);
-  return new Date(Date.UTC(year!, month! - 1, day!, 0, 0, 0) - LAGOS_OFFSET_MS);
+  return new Date(Date.UTC(year!, month! - 1, day, 0, 0, 0) - LAGOS_OFFSET_MS);
 }
 
 export function lagosMonthStart(d: Date): Date {

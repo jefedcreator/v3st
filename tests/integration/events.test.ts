@@ -85,7 +85,7 @@ describe("events", () => {
     const decoder = new TextDecoder();
     const first = await reader.read();
     expect(first.done).toBe(false);
-    const frame = decoder.decode(first.value!);
+    const frame = decoder.decode(first.value);
     expect(frame).toContain("id: 1");
     expect(frame).toContain("event: order.updated");
     expect(frame).toContain(`"subject_id":"${order.id}"`);
