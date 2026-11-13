@@ -15,7 +15,9 @@ class WebhookService {
     rawBody: Uint8Array,
   ): Promise<{ duplicate: boolean }> {
     const p = rampRegistry.get(provider);
-    if (p.mode !== "sandbox") {
+    const webhooksAllowed =
+      p.mode === "sandbox" || (provider === "paycrest" && p.mode === "simulated");
+    if (!webhooksAllowed) {
       throw new NotFoundException("Webhook endpoint is not available in simulated mode");
     }
     const valid = p.verifyWebhook(headers, rawBody);

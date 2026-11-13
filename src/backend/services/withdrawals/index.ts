@@ -11,6 +11,8 @@ import { acct } from "@/backend/services/ledger/accounts";
 import {
   cashReleased,
   cashReserved,
+  directPayoutCollected,
+  directPayoutRefunded,
   payoutCollected,
   payoutPaid,
   payoutRejected,
@@ -22,12 +24,14 @@ import { RetryableError } from "@/backend/services/jobs/types";
 import { orderService } from "@/backend/services/orders";
 import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
+import { paycrestFundingAddress } from "@/backend/services/ramp/paycrest";
 import type { Quote } from "@/backend/services/ramp/types";
+import { refForKey } from "@/backend/services/simulator/ramp";
 import { simulatedVenue } from "@/backend/services/simulator/venue";
 import { stockService } from "@/backend/services/stocks";
 import { capacityService } from "@/backend/services/treasury/capacity";
 import { tradeService } from "@/backend/services/trades";
-import type { Chain } from "@/backend/services/wallets/chains";
+import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import { walletService } from "@/backend/services/wallets";
 import { sha256Hex } from "@/utils";
 import {
@@ -150,19 +154,22 @@ class WithdrawalService {
     if (quote.consumedAt) {
       throw new ConflictException("Quote already consumed", "QUOTE_CONSUMED");
     }
-    const available = await capacityService.floatAvailable(quote.provider);
-    if (available < quote.usdAmount) {
-      await alertService.raise(db, {
-        kind: "float.short",
-        severity: "critical",
-        dedupeKey: `float.short:${quote.provider}`,
-        message: `Float short for ${quote.provider}`,
-        context: { provider: quote.provider },
-      });
-      throw new ServiceUnavailableException(
-        "Provider float is unavailable",
-        "FLOAT_UNAVAILABLE",
-      );
+    const provider = rampRegistry.get(quote.provider);
+    if (provider.settlementModel !== "direct_chain") {
+      const available = await capacityService.floatAvailable(quote.provider);
+      if (available < quote.usdAmount) {
+        await alertService.raise(db, {
+          kind: "float.short",
+          severity: "critical",
+          dedupeKey: `float.short:${quote.provider}`,
+          message: `Float short for ${quote.provider}`,
+          context: { provider: quote.provider },
+        });
+        throw new ServiceUnavailableException(
+          "Provider float is unavailable",
+          "FLOAT_UNAVAILABLE",
+        );
+      }
     }
     const created = await withTx(async (tx) => {
       await complianceService.assertCanTransact(tx, {
@@ -182,7 +189,7 @@ class WithdrawalService {
           direction: "out",
           provider: quote.provider,
           providerMode: quote.providerMode,
-          settlementModel: "partner_float",
+          settlementModel: provider.settlementModel,
           status: "created",
           idempotencyKey: key,
           requestHash,
@@ -259,7 +266,7 @@ class WithdrawalService {
         direction: "out",
         provider: i.quote.provider,
         providerMode: "simulated",
-        settlementModel: "partner_float",
+        settlementModel: rampRegistry.get(i.quote.provider).settlementModel,
         status: "created",
         idempotencyKey: key,
         requestHash: `earnings:${i.week}`,
@@ -375,6 +382,85 @@ class WithdrawalService {
     return "ok";
   }
 
+  private async ensureDirectPayout(tx: Tx, order: RampOrder): Promise<void> {
+    const chain = (order.chain ?? policy.defaultChain) as Chain;
+    const provider = rampRegistry.forOrder(order);
+    const existing = await provider.findByKey("out", order.id);
+    if (!existing && !order.providerRef) {
+      const quote = await provider.quote("out", order.ngnAmount);
+      const bank = await tx.bankAccount.findUniqueOrThrow({
+        where: { id: order.sourceBankAccountId! },
+      });
+      const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
+      const maxUsd =
+        ((order.usdAmount ?? 0n) * (10_000n + BigInt(policy.withdrawals.fxDriftBps))) / 10_000n;
+      try {
+        const result = await provider.createPayout({
+          quote,
+          destination: {
+            bankCode: bank.bankCode,
+            accountNumber: bank.accountNumber,
+            accountName: bank.resolvedName,
+          },
+          customer: customerFor(user),
+          key: order.id,
+          maxUsd,
+          chain,
+        });
+        const funding = result.funding;
+        if (funding.kind !== "chain") {
+          throw new RetryableError("DIRECT_FUNDING_REQUIRED");
+        }
+        await orderService.transition(tx, {
+          order,
+          to: "created",
+          patch: {
+            providerRef: result.ref,
+            fundingAddress: funding.address,
+            fundingAmount: funding.amount,
+            lockedUsd: result.locked.usdAmount,
+          },
+          actor: "system",
+        });
+      } catch (error) {
+        if (error instanceof ProviderError && error.kind === "transient") {
+          throw new RetryableError(error.code);
+        }
+        if (error instanceof ProviderError && error.kind === "duplicate") {
+          const fundingAddress = paycrestFundingAddress(chain, order.id);
+          await orderService.transition(tx, {
+            order,
+            to: "created",
+            patch: {
+              providerRef: refForKey(order.id),
+              fundingAddress,
+              fundingAmount: order.debitUsdc ?? 0n,
+              lockedUsd: order.usdAmount ?? 0n,
+            },
+            actor: "system",
+          });
+        } else {
+          throw error;
+        }
+      }
+    }
+    const reloaded = await tx.rampOrder.findUniqueOrThrow({ where: { id: order.id } });
+    if (!reloaded.fundingAddress || !reloaded.fundingAmount) return;
+    const existingTransfer = await tx.chainTransfer.findUnique({
+      where: { key: `collect:${order.id}` },
+    });
+    if (existingTransfer) return;
+    await walletService.createTransfer(tx, {
+      key: `collect:${order.id}`,
+      purpose: "direct_payout_funding",
+      chain,
+      amount: reloaded.fundingAmount,
+      from: { kind: "user", userId: order.userId },
+      to: { kind: "external", address: reloaded.fundingAddress },
+      orderId: order.id,
+    });
+  }
+
   async progress(orderId: string): Promise<void> {
     const retry: { code?: string; delayMs?: number } = {};
     await withTx(async (tx) => {
@@ -414,6 +500,10 @@ class WithdrawalService {
               }),
             );
           }
+        }
+        if (order.settlementModel === "direct_chain") {
+          await this.ensureDirectPayout(tx, order);
+          return;
         }
         await this.ensureCollectTransfer(tx, order);
         return;
@@ -477,13 +567,16 @@ class WithdrawalService {
           order,
           to: "submitted",
           patch: { providerRef: ref, lockedUsd },
-          journals: [
-            payoutSubmitted({
-              orderId: order.id,
-              provider: order.provider,
-              usd: lockedUsd,
-            }),
-          ],
+          journals:
+            order.settlementModel === "direct_chain"
+              ? []
+              : [
+                  payoutSubmitted({
+                    orderId: order.id,
+                    provider: order.provider,
+                    usd: lockedUsd,
+                  }),
+                ],
           actor: "system",
         });
         return;
@@ -516,11 +609,66 @@ class WithdrawalService {
             order,
             to: "paid",
             patch: { bankReference: txState.bankReference },
+            journals:
+              order.settlementModel === "direct_chain"
+                ? []
+                : [
+                    payoutPaid({
+                      orderId: order.id,
+                      provider: order.provider,
+                      usd: order.lockedUsd ?? txState.usdAmount ?? 0n,
+                    }),
+                  ],
+            actor: "system",
+          });
+          return;
+        }
+        if (txState.state === "refunded" && order.settlementModel === "direct_chain") {
+          const settle = txState.chainSettlement;
+          if (!settle) return;
+          const chain = (order.chain ?? policy.defaultChain) as Chain;
+          const wallet = await tx.wallet.findUnique({
+            where: { userId_family: { userId: order.userId, family: CHAINS[chain].family } },
+          });
+          if (!wallet) {
+            throw new RetryableError("WALLET_NOT_READY");
+          }
+          const observed = await walletService.observeIncoming(chain, settle.txHash, {
+            to: wallet.address,
+            amount: settle.amount,
+          });
+          if (observed !== "confirmed") return;
+          await orderService.transition(tx, {
+            order,
+            to: "reversed",
             journals: [
-              payoutPaid({
+              directPayoutRefunded({
                 orderId: order.id,
                 provider: order.provider,
-                usd: order.lockedUsd ?? txState.usdAmount ?? 0n,
+                userId: order.userId,
+                chain,
+                amount: settle.amount,
+                to: order.kind === "earnings_payout" ? "earnings" : "cash",
+              }),
+            ],
+            actor: "system",
+          });
+          return;
+        }
+        if (txState.state === "failed" && order.settlementModel === "direct_chain") {
+          const chain = (order.chain ?? policy.defaultChain) as Chain;
+          await orderService.transition(tx, {
+            order,
+            to: "reversed",
+            patch: { failureReason: txState.failureCode ?? "PAYOUT_FAILED" },
+            journals: [
+              directPayoutRefunded({
+                orderId: order.id,
+                provider: order.provider,
+                userId: order.userId,
+                chain,
+                amount: order.lockedUsd ?? txState.usdAmount ?? 0n,
+                to: order.kind === "earnings_payout" ? "earnings" : "cash",
               }),
             ],
             actor: "system",
@@ -549,6 +697,7 @@ class WithdrawalService {
       }
 
       if (order.status === "reversed") {
+        if (order.settlementModel === "direct_chain") return;
         const result = await this.ensureReturnTransfer(tx, order);
         if (result === "short") {
           retry.code = "TREASURY_SHORT";
@@ -608,6 +757,60 @@ class WithdrawalService {
           order,
           to: "failed",
           patch: { failureReason: t.failureReason ?? "COLLECTION_FAILED" },
+          actor: "system",
+        });
+      }
+    });
+  }
+
+  async onDirectFundingSettled(t: ChainTransfer): Promise<void> {
+    const orderId = t.orderId;
+    if (!orderId) return;
+    await withTx(async (tx) => {
+      const order = await orderService.loadForUpdate(tx, orderId);
+      if (order.kind !== "withdrawal" && order.kind !== "earnings_payout") return;
+      if (order.settlementModel !== "direct_chain") return;
+      if (t.status === "confirmed") {
+        if (order.status !== "created") return;
+        await ledgerService.post(
+          tx,
+          directPayoutCollected({
+            id: t.id,
+            provider: order.provider,
+            userId: order.userId,
+            chain: t.chain,
+            amount: t.amount,
+          }),
+        );
+        await orderService.transition(tx, {
+          order,
+          to: "funds_collected",
+          patch: { holdReason: null },
+          jobs: [{ kind: "payout.progress", subjectId: order.id }],
+          actor: "system",
+        });
+        return;
+      }
+      if (t.status === "failed") {
+        const to = order.kind === "earnings_payout" ? "earnings" : "cash";
+        await ledgerService.post(
+          tx,
+          cashReleased({
+            key: `order:${order.id}`,
+            userId: order.userId,
+            chain: t.chain,
+            amount: t.amount,
+            to,
+          }),
+        );
+        await tx.earning.updateMany({
+          where: { payoutOrderId: order.id },
+          data: { payoutOrderId: null },
+        });
+        await orderService.transition(tx, {
+          order,
+          to: "failed",
+          patch: { failureReason: t.failureReason ?? "FUNDING_FAILED" },
           actor: "system",
         });
       }

@@ -115,7 +115,7 @@ it("raises an alert once per open dedupe key", async () => {
     message: "m",
   });
   expect(await db.operationalAlert.count({ where: { dedupeKey: "k1" } })).toBe(1);
-  const first = await db.operationalAlert.findUniqueOrThrow({ where: { dedupeKey: "k1" } });
+  const first = await db.operationalAlert.findFirstOrThrow({ where: { dedupeKey: "k1" } });
   await alertService.resolve(first.id, "op1");
   await alertService.raise(db, {
     kind: "recon.breach",

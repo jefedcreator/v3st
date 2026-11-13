@@ -10,7 +10,12 @@ import { jobService } from "@/backend/services/jobs";
 import { controlsService } from "@/backend/services/controls";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
-import { depositReceived, transferReleased, userFunded } from "@/backend/services/ledger/postings";
+import {
+  depositReceived,
+  depositReceivedDirect,
+  transferReleased,
+  userFunded,
+} from "@/backend/services/ledger/postings";
 import { orderService } from "@/backend/services/orders";
 import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
@@ -156,6 +161,17 @@ class DepositService {
             where: { userId: order.userId, status: "active" },
           });
           const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
+          let recipient: { chain: Chain; address: string } | null = null;
+          if (order.settlementModel === "direct_chain") {
+            const chain = (order.chain ?? policy.defaultChain) as Chain;
+            const wallet = await tx.wallet.findUnique({
+              where: { userId_family: { userId: order.userId, family: CHAINS[chain].family } },
+            });
+            if (!wallet) {
+              throw new RetryableError("WALLET_NOT_READY");
+            }
+            recipient = { chain, address: wallet.address };
+          }
           try {
             collection = await provider.createCollection({
               quote,
@@ -166,7 +182,7 @@ class DepositService {
                 accountName: bank.resolvedName,
               },
               key: order.id,
-              recipient: null,
+              recipient,
             });
             ref = collection.ref;
           } catch (error) {
@@ -256,6 +272,79 @@ class DepositService {
           return;
         }
         if (txState.state !== "complete") return;
+        if (order.settlementModel === "direct_chain") {
+          const settle = txState.chainSettlement;
+          if (!settle) {
+            await this.hold(tx, order, "needs_review", {
+              kind: "deposit.settlement_missing",
+              severity: "critical",
+              message: `Deposit ${order.id} completed without a chain settlement`,
+            });
+            return;
+          }
+          const settleChain = settle.chain;
+          const wallet = await tx.wallet.findUnique({
+            where: {
+              userId_family: { userId: order.userId, family: CHAINS[settleChain].family },
+            },
+          });
+          if (!wallet) {
+            throw new RetryableError("WALLET_NOT_READY");
+          }
+          const observed = await walletService.observeIncoming(settleChain, settle.txHash, {
+            to: wallet.address,
+            amount: settle.amount,
+          });
+          if (observed === "pending") return;
+          if (observed === "mismatch") {
+            await this.hold(tx, order, "needs_review", {
+              kind: "deposit.settlement_mismatch",
+              severity: "critical",
+              message: `Deposit ${order.id} chain settlement mismatch`,
+            });
+            return;
+          }
+          let current = await orderService.transition(tx, {
+            order,
+            to: "received",
+            patch: {
+              receivedNgn: txState.ngnAmount ?? order.ngnAmount,
+              usdAmount: settle.amount,
+              holdReason: null,
+            },
+            journals: [
+              depositReceivedDirect({
+                orderId: order.id,
+                provider: order.provider,
+                userId: order.userId,
+                chain: settleChain,
+                amount: settle.amount,
+              }),
+            ],
+            jobs: [{ kind: "deposit.progress", subjectId: order.id }],
+            actor: "system",
+          });
+          current = await orderService.transition(tx, {
+            order: current,
+            to: "funded",
+            patch: { holdReason: null },
+            actor: "system",
+          });
+          if (order.stockId) {
+            await tradeService.createBuy(tx, {
+              key: `deposit-buy:${order.id}`,
+              userId: order.userId,
+              purpose: "deposit_buy",
+              fundsSource: "cash",
+              amountIn: settle.amount,
+              stockId: order.stockId,
+              orderId: order.id,
+            });
+          } else {
+            await orderService.transition(tx, { order: current, to: "settled", actor: "system" });
+          }
+          return;
+        }
         const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
         const received = txState.ngnAmount ?? order.ngnAmount;
         if (!txState.senderName) {

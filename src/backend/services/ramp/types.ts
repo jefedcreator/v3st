@@ -111,6 +111,7 @@ export interface RampProvider {
     customer: Customer;
     key: string;
     maxUsd: bigint;
+    chain?: Chain;
   }): Promise<PayoutResult>;
   getTransaction(direction: Direction, ref: string): Promise<ProviderTx>;
   findByKey(direction: Direction, key: string): Promise<ProviderTx | null>;

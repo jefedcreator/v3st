@@ -74,6 +74,9 @@ export const transferSettledHandlers: Partial<
   payout_collection: async (t) => {
     await withdrawalService.onCollectionSettled(t);
   },
+  direct_payout_funding: async (t) => {
+    await withdrawalService.onDirectFundingSettled(t);
+  },
   payout_return: async (t) => {
     await withdrawalService.onReturnSettled(t);
   },
