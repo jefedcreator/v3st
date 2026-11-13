@@ -7,16 +7,17 @@ export const env = createEnv({
    * isn't built with invalid env vars.
    */
   server: {
-    AUTH_SECRET:
-      process.env.NODE_ENV === "production"
-        ? z.string()
-        : z.string().optional(),
-    AUTH_DISCORD_ID: z.string(),
-    AUTH_DISCORD_SECRET: z.string(),
+    APP_STAGE: z.literal("beta"),
     DATABASE_URL: z.string().url(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+    YELLOWCARD_MODE: z.enum(["sandbox", "simulated"]).default("simulated"),
+    YELLOWCARD_API_KEY: z.string().optional(),
+    YELLOWCARD_API_SECRET: z.string().optional(),
+    SIMULATED_IDENTITY_SECRET: z.string().min(32),
+    PAYCREST_SIM_WEBHOOK_SECRET: z.string().min(16).optional(),
+    SENTRY_DSN: z.string().url().optional(),
   },
 
   /**
@@ -25,7 +26,7 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    // NEXT_PUBLIC_CLIENTVAR: z.string(),
+    NEXT_PUBLIC_APP_URL: z.string().url(),
   },
 
   /**
@@ -33,11 +34,16 @@ export const env = createEnv({
    * middlewares) or client-side so we need to destruct manually.
    */
   runtimeEnv: {
-    AUTH_SECRET: process.env.AUTH_SECRET,
-    AUTH_DISCORD_ID: process.env.AUTH_DISCORD_ID,
-    AUTH_DISCORD_SECRET: process.env.AUTH_DISCORD_SECRET,
+    APP_STAGE: process.env.APP_STAGE,
     DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
+    YELLOWCARD_MODE: process.env.YELLOWCARD_MODE,
+    YELLOWCARD_API_KEY: process.env.YELLOWCARD_API_KEY,
+    YELLOWCARD_API_SECRET: process.env.YELLOWCARD_API_SECRET,
+    SIMULATED_IDENTITY_SECRET: process.env.SIMULATED_IDENTITY_SECRET,
+    PAYCREST_SIM_WEBHOOK_SECRET: process.env.PAYCREST_SIM_WEBHOOK_SECRET,
+    SENTRY_DSN: process.env.SENTRY_DSN,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
