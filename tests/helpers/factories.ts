@@ -49,6 +49,20 @@ export async function seedTreasury(chain: string, microUsdc: bigint): Promise<vo
   );
 }
 
+export async function creditFloat(provider: ProviderId, microUsd: bigint): Promise<void> {
+  await withTx((tx) =>
+    ledgerService.post(tx, {
+      key: `float-credit:${provider}:${randomUUID()}`,
+      kind: "openingBalance",
+      orderId: null,
+      entries: [
+        { debit: acct.equityOpening("USD"), credit: acct.float(provider), amount: microUsd },
+      ],
+    }),
+  );
+  await simRamp.seedFloat(provider, microUsd);
+}
+
 export async function creditTreasury(chain: string, microUsdc: bigint): Promise<void> {
   await withTx((tx) =>
     ledgerService.post(tx, {

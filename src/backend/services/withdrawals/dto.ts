@@ -1,4 +1,4 @@
-import type { RampOrder, TradeOrder } from "@/server/prisma";
+import type { RampOrder } from "@/server/prisma";
 import { db } from "@/server/db";
 import { integrationModes } from "@/backend/integrations/beta-policy";
 import { maskAccountNumber } from "@/backend/services/bank-accounts";

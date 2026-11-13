@@ -8,6 +8,8 @@ import type {
 
 import { now } from "@/backend/clock";
 import { depositService } from "@/backend/services/deposits";
+import { earningsBatchService } from "@/backend/services/earnings/batch";
+import { earningsService } from "@/backend/services/earnings";
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
 import { pollOpenWork } from "@/backend/services/orders/poller";
 import { tradeService } from "@/backend/services/trades";
@@ -40,6 +42,15 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "treasury.progress": async (job) => {
     await treasuryService.progressOperation(job.subjectId);
+  },
+  "earnings.harvest": async (job) => {
+    await earningsService.harvest(job.subjectId);
+  },
+  "earnings.float_precheck": async (job) => {
+    await earningsBatchService.precheck(job.subjectId);
+  },
+  "earnings.payout_batch": async (job) => {
+    await earningsBatchService.runBatch(job.subjectId, now());
   },
   "chain.progress": async (job) => {
     const transfer = await walletService.progressTransfer(job.subjectId);
@@ -77,6 +88,15 @@ export const tradeSettledHandlers: Partial<
   },
   withdrawal_sell: async (t) => {
     await withdrawalService.onSellSettled(t);
+  },
+  reinvest: async (t) => {
+    await earningsService.onReinvestSettled(
+      t.id,
+      t.status === "failed",
+      t.key,
+      t.userId,
+      t.chain,
+    );
   },
 };
 

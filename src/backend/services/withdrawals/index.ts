@@ -22,11 +22,12 @@ import { RetryableError } from "@/backend/services/jobs/types";
 import { orderService } from "@/backend/services/orders";
 import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
+import type { Quote } from "@/backend/services/ramp/types";
 import { simulatedVenue } from "@/backend/services/simulator/venue";
 import { stockService } from "@/backend/services/stocks";
 import { capacityService } from "@/backend/services/treasury/capacity";
 import { tradeService } from "@/backend/services/trades";
-import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
+import type { Chain } from "@/backend/services/wallets/chains";
 import { walletService } from "@/backend/services/wallets";
 import { sha256Hex } from "@/utils";
 import {
@@ -231,6 +232,68 @@ class WithdrawalService {
       return order;
     });
     return { withdrawal: await toWithdrawalDto(created), created: true };
+  }
+
+  async createEarningsPayout(
+    tx: Tx,
+    i: {
+      userId: string;
+      week: string;
+      earningIds: string[];
+      amountUsdc: bigint;
+      quote: Quote;
+    },
+  ): Promise<RampOrder> {
+    const key = `earnings:${i.userId}:${i.week}`;
+    const existing = await tx.rampOrder.findUnique({ where: { idempotencyKey: key } });
+    if (existing) return existing;
+    const bank = await tx.bankAccount.findFirstOrThrow({
+      where: { userId: i.userId, status: "active" },
+    });
+    const chain = policy.defaultChain;
+    const debitUsdc = ngnToUsd(i.quote.ngnAmount, i.quote.rate, "ceil");
+    const order = await tx.rampOrder.create({
+      data: {
+        userId: i.userId,
+        kind: "earnings_payout",
+        direction: "out",
+        provider: i.quote.provider,
+        providerMode: "simulated",
+        settlementModel: "partner_float",
+        status: "created",
+        idempotencyKey: key,
+        requestHash: `earnings:${i.week}`,
+        ngnAmount: i.quote.ngnAmount,
+        feeNgn: i.quote.feeNgn,
+        usdAmount: i.quote.usdAmount,
+        debitUsdc,
+        netNgn: i.quote.ngnAmount - i.quote.feeNgn,
+        rateKobo: i.quote.rate.kobo,
+        rateMicroUsd: i.quote.rate.microUsd,
+        chain,
+        sourceBankAccountId: bank.id,
+        destBankCode: bank.bankCode,
+        destBankName: bank.bankName,
+        destAccountNumber: bank.accountNumber,
+        destAccountName: bank.resolvedName,
+      },
+    });
+    await ledgerService.post(
+      tx,
+      cashReserved({
+        key: `order:${order.id}`,
+        userId: i.userId,
+        chain,
+        amount: debitUsdc,
+        from: "earnings",
+      }),
+    );
+    await tx.earning.updateMany({
+      where: { id: { in: i.earningIds } },
+      data: { payoutOrderId: order.id },
+    });
+    await jobService.enqueue(tx, { kind: "payout.progress", subjectId: order.id });
+    return order;
   }
 
   async get(userId: string, id: string): Promise<WithdrawalDto> {
@@ -537,6 +600,10 @@ class WithdrawalService {
             to,
           }),
         );
+        await tx.earning.updateMany({
+          where: { payoutOrderId: order.id },
+          data: { payoutOrderId: null },
+        });
         await orderService.transition(tx, {
           order,
           to: "failed",
@@ -564,6 +631,12 @@ class WithdrawalService {
           to: order.kind === "earnings_payout" ? "earnings" : "cash",
         }),
       );
+      if (order.kind === "earnings_payout") {
+        await tx.earning.updateMany({
+          where: { payoutOrderId: order.id },
+          data: { payoutOrderId: null },
+        });
+      }
     });
   }
 

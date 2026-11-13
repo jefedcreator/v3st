@@ -96,3 +96,20 @@ export type PortfolioDto = {
   as_of: string;
   beta: BetaDto;
 };
+
+export type EarningsWeekDto = {
+  week: string;
+  earned_usdc: string;
+  paid_usdc: string;
+  reinvested_usdc: string;
+  pending_usdc: string;
+  ngn_value: string | null;
+  status: "pending" | "paid" | "reinvested" | "mixed";
+};
+
+export type EarningsPreferenceDto = {
+  mode: "unset" | "payout" | "reinvest";
+  stock_id: string | null;
+  minimum_payout_ngn: string;
+  payout_fee_ngn: string | null;
+};
