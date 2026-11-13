@@ -1,4 +1,5 @@
 import { db } from "@/server/db";
+import { bankAccountService } from "@/backend/services/bank-accounts";
 import type { MeDto } from "@/types/dto";
 
 class UserService {
@@ -17,7 +18,7 @@ class UserService {
       wallets: (
         await db.wallet.findMany({ where: { userId } })
       ).map((w) => ({ family: w.family, address: w.address })),
-      bank_account: null,
+      bank_account: await bankAccountService.getActive(userId),
       earnings_preference: {
         mode: user.earningsMode,
         stock_id: user.reinvestStockId,

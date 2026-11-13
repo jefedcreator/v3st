@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { ChainTransfer, Prisma, ProviderId, RampOrder, User } from "@/server/prisma";
+import type { BankAccount, ChainTransfer, Prisma, ProviderId, RampOrder, User } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
+import { bankAccountService } from "@/backend/services/bank-accounts";
+import { kycService, type PersonaId } from "@/backend/services/kyc";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { openingBalance } from "@/backend/services/ledger/postings";
@@ -81,6 +83,25 @@ export async function createFundingTransfer(opts?: {
       to: { kind: "user", userId: u.id },
     }),
   );
+}
+
+export async function makeVerifiedUser(persona: PersonaId = "ada_tier2"): Promise<User> {
+  const u = await makeUser();
+  await kycService.verify(u.id, { persona });
+  return db.user.findUniqueOrThrow({ where: { id: u.id } });
+}
+
+export async function makeBankAccount(
+  userId: string,
+  accountNumber = "0123456789",
+): Promise<BankAccount> {
+  await bankAccountService.add(userId, {
+    bank_code: "sim-bank-a",
+    account_number: accountNumber,
+  });
+  return db.bankAccount.findFirstOrThrow({
+    where: { userId, accountNumber, status: "active" },
+  });
 }
 
 export async function makeOrder(
