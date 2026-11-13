@@ -7,6 +7,7 @@ import { kycService, type PersonaId } from "@/backend/services/kyc";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { openingBalance } from "@/backend/services/ledger/postings";
+import { simRamp } from "@/backend/services/simulator/ramp";
 import { walletService } from "@/backend/services/wallets";
 
 let phoneCounter = Math.floor(Math.random() * 900);
@@ -68,6 +69,7 @@ export async function seedFloat(provider: ProviderId, microUsd: bigint): Promise
       openingBalance({ account: acct.float(provider), amount: microUsd }),
     ),
   );
+  await simRamp.seedFloat(provider, microUsd);
 }
 
 export async function makeUserWithWallets(): Promise<User> {

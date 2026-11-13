@@ -16,6 +16,10 @@ class CapacityService {
     });
     return float - (reserved._sum.usdAmount ?? 0n);
   }
+
+  async treasuryAvailable(chain: string): Promise<bigint> {
+    return ledgerService.balance(acct.treasury(chain));
+  }
 }
 
 export const capacityService = new CapacityService();

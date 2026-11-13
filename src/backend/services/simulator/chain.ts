@@ -67,14 +67,15 @@ export const simChain = {
     return { txHash: hash };
   },
 
-  async mint(chain: Chain, address: string, amount: bigint, key: string): Promise<void> {
+  async mint(chain: Chain, address: string, amount: bigint, key: string): Promise<{ txHash: string }> {
     const existing = await db.simChainTx.findUnique({ where: { key } });
-    if (existing) return;
+    if (existing) return { txHash: existing.hash };
+    const hash = hashFor("mint", chain, key);
     await db.simChainTx.create({
       data: {
         key,
         chain,
-        hash: hashFor("mint", chain, key),
+        hash,
         fromAddress: faucetAddress(chain),
         toAddress: address,
         token: CHAINS[chain].usdc,
@@ -83,6 +84,7 @@ export const simChain = {
         confirmAt: now(),
       },
     });
+    return { txHash: hash };
   },
 
   async addFault(key: string): Promise<void> {

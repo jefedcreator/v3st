@@ -50,5 +50,12 @@ export async function pollOpenWork(at: Date): Promise<number> {
     await rearm("payout.progress", order.id);
   }
 
+  const ops = await db.treasuryOperation.findMany({
+    where: { status: { notIn: ["complete", "failed"] } },
+  });
+  for (const op of ops) {
+    await rearm("treasury.progress", op.id);
+  }
+
   return count;
 }

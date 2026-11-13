@@ -12,6 +12,7 @@ import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
 import { pollOpenWork } from "@/backend/services/orders/poller";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
+import { treasuryService } from "@/backend/services/treasury";
 import { webhookService } from "@/backend/services/webhooks";
 import { withdrawalService } from "@/backend/services/withdrawals";
 
@@ -34,6 +35,12 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   "payout.progress": async (job) => {
     await withdrawalService.progress(job.subjectId);
   },
+  "treasury.rebalance": async () => {
+    await treasuryService.rebalance(now());
+  },
+  "treasury.progress": async (job) => {
+    await treasuryService.progressOperation(job.subjectId);
+  },
   "chain.progress": async (job) => {
     const transfer = await walletService.progressTransfer(job.subjectId);
     if (transfer.status === "confirmed" || transfer.status === "failed") {
@@ -54,6 +61,11 @@ export const transferSettledHandlers: Partial<
   },
   payout_return: async (t) => {
     await withdrawalService.onReturnSettled(t);
+  },
+  float_topup: async (t) => {
+    if (t.treasuryOperationId) {
+      await treasuryService.progressOperation(t.treasuryOperationId);
+    }
   },
 };
 
