@@ -80,6 +80,7 @@ export const policy = {
       sellNgnPerUsd: "1540",
       feeMicroUsd: 0n,
       minMicroUsd: 500_000n,
+      settleSeconds: 5,
     },
     chain: {
       confirmSeconds: { base: 4, solana: 2 },
