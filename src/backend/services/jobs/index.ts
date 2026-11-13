@@ -2,6 +2,7 @@ import { Prisma, type Job } from "@/server/prisma";
 import { type DbClient, db, withTx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
+import { alertService } from "@/backend/services/alerts";
 import { newCuid } from "@/utils";
 
 import { PermanentJobError, RetryableError, backoffMs, type JobInput } from "./types";
@@ -9,24 +10,13 @@ import { PermanentJobError, RetryableError, backoffMs, type JobInput } from "./t
 const MAX_ATTEMPTS = policy.worker.maxAttempts;
 
 async function raiseDeadAlert(job: Job): Promise<void> {
-  const data: Prisma.OperationalAlertCreateInput = {
+  await alertService.raise(db, {
     kind: "job.dead",
     severity: "critical",
     dedupeKey: `job.dead:${job.key}`,
     message: `Job ${job.key} is dead`,
     context: { jobKey: job.key, kind: job.kind, subjectId: job.subjectId },
-  };
-  try {
-    await db.operationalAlert.create({ data });
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return;
-    }
-    throw error;
-  }
+  });
 }
 
 class JobService {

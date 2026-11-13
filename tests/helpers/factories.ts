@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Prisma, type ProviderId, type User } from "@/server/prisma";
+import { Prisma, type ProviderId, type RampOrder, type User } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
@@ -52,4 +52,30 @@ export async function seedFloat(provider: ProviderId, microUsd: bigint): Promise
       openingBalance({ account: acct.float(provider), amount: microUsd }),
     ),
   );
+}
+
+export async function makeOrder(
+  overrides?: Partial<Prisma.RampOrderCreateInput>,
+): Promise<RampOrder> {
+  let userId = overrides?.userId;
+  if (!userId) {
+    const u = await makeUser();
+    userId = u.id;
+  }
+  const data: Prisma.RampOrderCreateInput = {
+    userId,
+    kind: "deposit",
+    direction: "in",
+    provider: "yellowcard",
+    providerMode: "simulated",
+    settlementModel: "partner_float",
+    status: "created",
+    idempotencyKey: `idem-${randomUUID()}`,
+    requestHash: "test",
+    ngnAmount: 100_000n,
+  };
+  if (overrides) {
+    Object.assign(data, overrides);
+  }
+  return db.rampOrder.create({ data });
 }
