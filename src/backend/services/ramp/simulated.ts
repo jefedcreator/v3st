@@ -16,10 +16,8 @@ import {
   paycrestSimAddress,
 } from "./paycrest";
 import type {
-  BankDestination,
   Chain,
   Collection,
-  Customer,
   Direction,
   PayoutResult,
   ProviderTx,

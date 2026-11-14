@@ -56,11 +56,14 @@ beforeEach(async () => {
 });
 
 function headers(token: string, key?: string) {
-  return {
+  const result: Record<string, string> = {
     cookie: `sara-session=${token}`,
     origin: "http://localhost:3000",
-    ...(key ? { "idempotency-key": key } : {}),
   };
+  if (key) {
+    result["idempotency-key"] = key;
+  }
+  return result;
 }
 
 async function postDeposit(token: string, body: unknown, key: string) {

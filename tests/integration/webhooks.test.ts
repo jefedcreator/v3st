@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
 
 import { POST } from "@/app/api/v1/webhooks/yellowcard/route";
-import { register, reset, rampRegistry } from "@/backend/services/ramp";
+import { register, reset } from "@/backend/services/ramp";
 import { YellowCardProvider } from "@/backend/services/ramp/yellowcard";
 import { webhookService } from "@/backend/services/webhooks";
 import { db } from "@/server/db";

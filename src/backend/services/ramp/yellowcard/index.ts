@@ -22,7 +22,7 @@ import type {
   WebhookHint,
 } from "../types";
 import { createYellowCardClient } from "./client";
-import { mapYellowCardStatus, mapYellowCardTx, type YellowCardTxPayload } from "./mapping";
+import { mapYellowCardStatus, mapYellowCardTx } from "./mapping";
 import {
   accountResponseSchema,
   channelsResponseSchema,

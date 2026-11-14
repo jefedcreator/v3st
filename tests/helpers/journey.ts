@@ -33,11 +33,14 @@ export type JourneyContext = {
 };
 
 export function authHeaders(token: string, key?: string): Record<string, string> {
-  return {
+  const result: Record<string, string> = {
     cookie: `sara-session=${token}`,
     origin: JOURNEY_ORIGIN,
-    ...(key ? { "idempotency-key": key } : {}),
   };
+  if (key) {
+    result["idempotency-key"] = key;
+  }
+  return result;
 }
 
 export async function stepIdentityToken(phone: string): Promise<string> {
@@ -152,10 +155,14 @@ export async function stepQuote(
   ngnAmount: string,
   stockId?: string,
 ): Promise<string> {
+  const body: Record<string, string> = { ngn_amount: ngnAmount };
+  if (stockId) {
+    body.stock_id = stockId;
+  }
   const res = await callRoute(quotePOST, {
     method: "POST",
     url: `${JOURNEY_ORIGIN}/api/v1/withdrawals/quote`,
-    body: JSON.stringify({ ngn_amount: ngnAmount, ...(stockId ? { stock_id: stockId } : {}) }),
+    body: JSON.stringify(body),
     headers: authHeaders(token),
   });
   expect(res.status).toBe(200);
