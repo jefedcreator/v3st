@@ -20,6 +20,10 @@
     "seed:beta": "tsx --env-file-if-exists=.env scripts/seed-beta.ts",
     "start": "next start",
     "test": "vitest run",
+    "test:api": "vitest run tests/api",
+    "test:contracts": "forge test",
+    "testnet:start": "tsx --env-file-if-exists=.env scripts/testnet-start.ts",
+    "testnet:deploy": "tsx --env-file-if-exists=.env scripts/testnet-deploy.ts",
     "typecheck": "tsc --noEmit",
     "worker": "tsx --env-file-if-exists=.env src/backend/workers/run.ts"
   },
@@ -30,6 +34,7 @@
     "next": "^15.2.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "viem": "2.57.19",
     "zod": "^3.24.2"
   },
   "devDependencies": {

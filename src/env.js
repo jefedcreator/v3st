@@ -18,6 +18,12 @@ export const env = createEnv({
     SIMULATED_IDENTITY_SECRET: z.string().min(32),
     PAYCREST_SIM_WEBHOOK_SECRET: z.string().min(16).optional(),
     SENTRY_DSN: z.string().url().optional(),
+    TESTNET_RPC_URL: z.string().url().optional(),
+    TESTNET_CHAIN_ID: z.coerce.number().int().positive().default(31337),
+    TESTNET_SIGNER_PRIVATE_KEY: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
   },
 
   /**
@@ -43,6 +49,9 @@ export const env = createEnv({
     SIMULATED_IDENTITY_SECRET: process.env.SIMULATED_IDENTITY_SECRET,
     PAYCREST_SIM_WEBHOOK_SECRET: process.env.PAYCREST_SIM_WEBHOOK_SECRET,
     SENTRY_DSN: process.env.SENTRY_DSN,
+    TESTNET_RPC_URL: process.env.TESTNET_RPC_URL,
+    TESTNET_CHAIN_ID: process.env.TESTNET_CHAIN_ID,
+    TESTNET_SIGNER_PRIVATE_KEY: process.env.TESTNET_SIGNER_PRIVATE_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**

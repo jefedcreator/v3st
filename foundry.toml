@@ -1,0 +1,19 @@
+[profile.default]
+src = "contracts/testnet"
+test = "contracts/test"
+script = "contracts/script"
+out = "build/foundry/out"
+cache_path = "build/foundry/cache"
+libs = ["contracts/lib"]
+solc = "0.8.30"
+evm_version = "prague"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+fs_permissions = [{ access = "read", path = "./tests/contracts/fixtures" }, { access = "read-write", path = "./.testnet" }]
+
+[profile.default.fuzz]
+runs = 256
+
+[profile.default.invariant]
+runs = 64
