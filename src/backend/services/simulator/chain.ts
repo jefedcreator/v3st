@@ -6,6 +6,7 @@ import { now } from "@/backend/clock";
 import { sha256Hex } from "@/utils";
 
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
+import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 
 type RemoteStatus = "pending" | "confirmed" | "failed";
 
@@ -59,7 +60,7 @@ export const simChain = {
         fromAddress: input.from,
         toAddress: input.to,
         token: input.token,
-        amount: input.amount,
+        amount: toDbRaw(input.amount),
         status: "pending",
         confirmAt: new Date(now().getTime() + CHAINS[chain].confirmSeconds * 1_000),
       },
@@ -79,7 +80,7 @@ export const simChain = {
         fromAddress: faucetAddress(chain),
         toAddress: address,
         token: CHAINS[chain].usdc,
-        amount,
+        amount: toDbRaw(amount),
         status: "confirmed",
         confirmAt: now(),
       },
@@ -122,7 +123,7 @@ export const simChain = {
       from: row.fromAddress,
       to: row.toAddress,
       token: row.token,
-      amount: row.amount,
+      amount: fromDbRaw(row.amount),
     };
   },
 

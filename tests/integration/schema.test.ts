@@ -5,6 +5,8 @@ import { expect, it } from "vitest";
 import { type Prisma } from "@/server/prisma";
 import { db } from "@/server/db";
 
+import { toDbRaw } from "@/utils/asset-units";
+
 import { useTestDatabase } from "../helpers/db";
 
 useTestDatabase();
@@ -42,7 +44,7 @@ async function insertEntry(input: {
     debitAccountId: debit.id,
     creditAccountId: credit.id,
     asset: input.asset,
-    amount: input.amount,
+    amount: toDbRaw(input.amount),
   };
   return db.ledgerEntry.create({ data });
 }
@@ -135,7 +137,7 @@ it("rejects non-positive amounts and self-transfers", async () => {
 it("keeps journals and entries append-only", async () => {
   const entry = await insertValidEntry();
   await expect(
-    db.ledgerEntry.update({ where: { id: entry.id }, data: { amount: 2n } }),
+    db.ledgerEntry.update({ where: { id: entry.id }, data: { amount: toDbRaw(2n) } }),
   ).rejects.toThrow(/append-only/);
   await expect(db.ledgerEntry.delete({ where: { id: entry.id } })).rejects.toThrow(
     /append-only/,

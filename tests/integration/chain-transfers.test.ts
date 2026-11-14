@@ -6,6 +6,8 @@ import { simChain } from "@/backend/services/simulator/chain";
 import { simulatedWalletProvider } from "@/backend/services/wallets/simulated";
 import { walletService } from "@/backend/services/wallets";
 
+import { fromDbRaw } from "@/utils/asset-units";
+
 import { useTestDatabase } from "../helpers/db";
 import { createFundingTransfer, makeUserWithWallets } from "../helpers/factories";
 import { setNow } from "../helpers/time";
@@ -27,7 +29,7 @@ describe("chain transfer progression", () => {
       from: ref,
       to: t.toAddress,
       token: "sim-usdc-base",
-      amount: t.amount,
+      amount: fromDbRaw(t.amount),
     });
     await walletService.progressTransfer(t.id);
     expect(await db.simChainTx.count({ where: { key: t.key } })).toBe(1);
@@ -83,16 +85,16 @@ describe("observeIncoming", () => {
     expect(
       await walletService.observeIncoming("base", row.txHash!, {
         to: t.toAddress,
-        amount: t.amount,
+        amount: fromDbRaw(t.amount),
       }),
     ).toBe("pending");
     expect(
       await walletService.observeIncoming("base", row.txHash!, {
         to: t.toAddress,
-        amount: t.amount + 1n,
+        amount: fromDbRaw(t.amount) + 1n,
       }),
     ).toBe("mismatch");
-    expect(await walletService.observeIncoming("base", "0xdeadbeef", { to: t.toAddress, amount: t.amount })).toBe(
+    expect(await walletService.observeIncoming("base", "0xdeadbeef", { to: t.toAddress, amount: fromDbRaw(t.amount) })).toBe(
       "mismatch",
     );
 
@@ -100,7 +102,7 @@ describe("observeIncoming", () => {
     expect(
       await walletService.observeIncoming("base", row.txHash!, {
         to: t.toAddress,
-        amount: t.amount,
+        amount: fromDbRaw(t.amount),
       }),
     ).toBe("confirmed");
   });

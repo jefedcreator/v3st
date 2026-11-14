@@ -34,6 +34,7 @@ import { tradeService } from "@/backend/services/trades";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import { walletService } from "@/backend/services/wallets";
 import { sha256Hex } from "@/utils";
+import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 import {
   ConflictException,
   ForbiddenException,
@@ -107,7 +108,7 @@ class WithdrawalService {
         rateMicroUsd: providerQuote.rate.microUsd,
         chain,
         stockId,
-        sellQuantity,
+        sellQuantity: sellQuantity === null ? null : toDbRaw(sellQuantity),
         bankAccountId: bank.id,
         expiresAt: new Date(now().getTime() + policy.withdrawals.quoteTtlSeconds * 1_000),
       },
@@ -215,7 +216,7 @@ class WithdrawalService {
           key: `withdrawal-sell:${order.id}`,
           userId,
           stockId: quote.stockId,
-          quantity: quote.sellQuantity,
+          quantity: fromDbRaw(quote.sellQuantity),
           minAmountOut: quote.debitUsdc,
           orderId: order.id,
         });
@@ -725,7 +726,7 @@ class WithdrawalService {
             id: t.id,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
           }),
         );
         await orderService.transition(tx, {
@@ -745,7 +746,7 @@ class WithdrawalService {
             key: `order:${order.id}`,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
             to,
           }),
         );
@@ -779,7 +780,7 @@ class WithdrawalService {
             provider: order.provider,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
           }),
         );
         await orderService.transition(tx, {
@@ -799,7 +800,7 @@ class WithdrawalService {
             key: `order:${order.id}`,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
             to,
           }),
         );
@@ -830,7 +831,7 @@ class WithdrawalService {
           id: t.id,
           userId: order.userId,
           chain: t.chain,
-          amount: t.amount,
+          amount: fromDbRaw(t.amount),
           to: order.kind === "earnings_payout" ? "earnings" : "cash",
         }),
       );

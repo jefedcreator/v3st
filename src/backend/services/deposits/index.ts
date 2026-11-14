@@ -26,6 +26,7 @@ import { tradeService } from "@/backend/services/trades";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import { walletService } from "@/backend/services/wallets";
 import { canonicalJson, sha256Hex } from "@/utils";
+import { fromDbRaw } from "@/utils/asset-units";
 import { ConflictException, ForbiddenException } from "@/utils/exceptions";
 import { ngnToUsd } from "@/utils/money";
 
@@ -463,7 +464,7 @@ class DepositService {
         if (order.status !== "received") return;
         await ledgerService.post(
           tx,
-          userFunded({ id: t.id, userId: order.userId, chain: t.chain, amount: t.amount, to: "cash" }),
+          userFunded({ id: t.id, userId: order.userId, chain: t.chain, amount: fromDbRaw(t.amount), to: "cash" }),
         );
         if (order.stockId) {
           await tradeService.createBuy(tx, {
@@ -471,7 +472,7 @@ class DepositService {
             userId: order.userId,
             purpose: "deposit_buy",
             fundsSource: "cash",
-            amountIn: order.usdAmount ?? t.amount,
+            amountIn: order.usdAmount ?? fromDbRaw(t.amount),
             stockId: order.stockId,
             orderId: order.id,
           });
@@ -495,7 +496,7 @@ class DepositService {
       if (t.status === "failed") {
         await ledgerService.post(
           tx,
-          transferReleased({ id: t.id, chain: t.chain, amount: t.amount }),
+          transferReleased({ id: t.id, chain: t.chain, amount: fromDbRaw(t.amount) }),
         );
         await this.hold(tx, order, "needs_review", {
           kind: "deposit.funding_failed",

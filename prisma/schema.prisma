@@ -175,6 +175,107 @@ enum ReconStatus {
     incomplete
 }
 
+enum IntegrationKind {
+    local_testnet_replica
+    verified_provider_testnet
+}
+
+enum CustodyKind {
+    application_account
+    provider_managed
+}
+
+enum AuthScope {
+    investments
+    strategies
+    all
+}
+
+enum OperationKind {
+    spot
+    strategy
+}
+
+enum OperationStatus {
+    pending
+    prepared
+    signed
+    broadcast
+    confirmed
+    finalized
+    reverted
+    failed
+    unknown
+    needs_review
+}
+
+enum StepStatus {
+    pending
+    prepared
+    signed
+    broadcast
+    confirmed
+    reverted
+    failed
+    unknown
+}
+
+enum ObsState {
+    pending
+    confirmed
+    reverted
+    unknown
+    reorged
+}
+
+enum InvestmentStatus {
+    quoted
+    reserved
+    executing
+    filled
+    partial
+    failed
+    cancelled
+    needs_confirmation
+}
+
+enum StrategyPositionState {
+    reserved
+    executing
+    active
+    exit_pending
+    exited
+    needs_review
+}
+
+enum ReceiptState {
+    estimated
+    received_asset
+    conversion_pending
+    available
+    reserved_for_payout
+    paid
+    reinvested
+}
+
+enum RewardSource {
+    hydrex_lp_fees
+    hydropump_creator_fees
+    stonks_distribution
+    basestonk_hook_fees
+    feel_distribution
+    cash_distribution
+    sale_gain
+    legacy_fixture
+}
+
+enum AllocationState {
+    reserved
+    paid
+    reinvested
+    released
+}
+
 model User {
     id              String       @id @default(cuid())
     phone           String       @unique
@@ -211,13 +312,15 @@ model Session {
 }
 
 model Wallet {
-    id               String       @id @default(cuid())
-    userId           String
-    family           WalletFamily
-    address          String
-    providerWalletId String
-    providerMode     ProviderMode
-    createdAt        DateTime     @default(now())
+    id                String       @id @default(cuid())
+    userId            String
+    family            WalletFamily
+    address           String
+    providerWalletId  String
+    providerMode      ProviderMode
+    executionAddress  String?
+    custodyProfileId  String?
+    createdAt         DateTime     @default(now())
 
     @@unique([userId, family])
     @@unique([family, address])
@@ -266,7 +369,7 @@ model WithdrawalQuote {
     rateMicroUsd  BigInt
     chain         String
     stockId       String?
-    sellQuantity  BigInt?
+    sellQuantity  Decimal? @db.Decimal(78, 0)
     bankAccountId String
     expiresAt     DateTime
     consumedAt    DateTime?
@@ -369,7 +472,7 @@ model LedgerEntry {
     debitAccountId  String
     creditAccountId String
     asset           String
-    amount          BigInt
+    amount          Decimal  @db.Decimal(78, 0)
     createdAt       DateTime @default(now())
 
     @@index([debitAccountId])
@@ -386,14 +489,14 @@ model ChainTransfer {
     token               String
     fromAddress         String
     toAddress           String
-    amount              BigInt
+    amount              Decimal  @db.Decimal(78, 0)
     orderId             String?
     treasuryOperationId String?
     txHash              String?
     approvals           String[]
     failureReason       String?
     gasAsset            String?
-    gasAmount           BigInt?
+    gasAmount           Decimal? @db.Decimal(78, 0)
     providerMode        ProviderMode
     createdAt           DateTime        @default(now())
     updatedAt           DateTime        @updatedAt
@@ -405,16 +508,30 @@ model ChainTransfer {
 
 model Stock {
     id                            String   @id @default(cuid())
-    symbol                        String   @unique
+    symbol                        String
+    assetKey                      String?  @unique
     name                          String
+    kind                          String   @default("stock")
+    issuer                        String?
+    rightsSummary                 String?
     chain                         String
+    networkId                     String?
+    network                       OnchainNetwork? @relation(fields: [networkId], references: [id])
     tokenAddress                  String
     decimals                      Int
     enabled                       Boolean
+    paused                        Boolean  @default(false)
+    delisted                      Boolean  @default(false)
     simPriceMicroUsdc             BigInt
     simWeeklyEarningMicroPerShare BigInt
+    multiplierWad                 Decimal  @db.Decimal(78, 0) @default(1000000000000000000)
+    referencePriceMicroUsd        BigInt?
+    referenceBasis                String?
+    referenceAsOf                 DateTime?
+    provenance                    Json?
     createdAt                     DateTime @default(now())
 
+    @@index([symbol])
     @@map("stocks")
 }
 
@@ -429,9 +546,11 @@ model TradeOrder {
     orderId       String?
     chain         String
     venueId       String?
-    amountIn      BigInt
-    minAmountOut  BigInt?
-    amountOut     BigInt?
+    investmentId  String?      @unique
+    investment    Investment?  @relation(fields: [investmentId], references: [id])
+    amountIn      Decimal      @db.Decimal(78, 0)
+    minAmountOut  Decimal?     @db.Decimal(78, 0)
+    amountOut     Decimal?     @db.Decimal(78, 0)
     status        TradeStatus  @default(pending)
     failureReason String?
     venueRef      String?
@@ -455,6 +574,8 @@ model Earning {
     harvestedAt     DateTime
     payoutOrderId   String?
     reinvestTradeId String?
+    provenance      String   @default("legacy_fixture")
+    receiptId       String?
     createdAt       DateTime @default(now())
 
     @@unique([userId, stockId, week])
@@ -618,7 +739,7 @@ model SimChainTx {
     fromAddress   String
     toAddress     String
     token         String
-    amount        BigInt
+    amount        Decimal  @db.Decimal(78, 0)
     status        String
     confirmAt     DateTime
     failureReason String?
@@ -633,9 +754,9 @@ model SimSwap {
     venueId       String
     stockId       String
     side          TradeSide
-    amountIn      BigInt
-    minAmountOut  BigInt
-    amountOut     BigInt?
+    amountIn      Decimal  @db.Decimal(78, 0)
+    minAmountOut  Decimal  @db.Decimal(78, 0)
+    amountOut     Decimal? @db.Decimal(78, 0)
     status        String
     settleAt      DateTime
     failureReason String?
@@ -653,4 +774,344 @@ model SimFault {
 
     @@unique([scope, key])
     @@map("sim_faults")
+}
+
+model OnchainNetwork {
+    id           String          @id @default(cuid())
+    networkId    String          @unique
+    chainId      Int
+    kind         IntegrationKind
+    genesisHash  String?
+    deploymentId String          @unique
+    label        String
+    rpcLoopback  Boolean         @default(true)
+    createdAt    DateTime        @default(now())
+
+    stocks     Stock[]
+    operations OnchainOperation[]
+    receipts   RewardReceipt[]
+    actions    StockAction[]
+
+    @@map("onchain_networks")
+}
+
+model CustodyProfile {
+    id                String           @id @default(cuid())
+    kind              CustodyKind
+    label             String
+    walletId          String?
+    externalProfileId String?
+    createdAt         DateTime         @default(now())
+
+    operations OnchainOperation[]
+
+    @@unique([kind, walletId])
+    @@map("custody_profiles")
+}
+
+model InvestmentAuthorization {
+    id            String    @id @default(cuid())
+    userId        String
+    key           String    @unique
+    scope         AuthScope
+    stockId       String?
+    strategyId    String?
+    maxSpendUsdc  Decimal   @db.Decimal(78, 0)
+    expiresAt     DateTime
+    revokedAt     DateTime?
+    epoch         Int       @default(0)
+    policyVersion String
+    requestHash   String
+    createdAt     DateTime  @default(now())
+
+    investments    Investment[]
+    strategyQuotes StrategyQuote[]
+
+    @@index([userId])
+    @@map("investment_authorizations")
+}
+
+model InvestmentQuote {
+    id                String    @id @default(cuid())
+    userId            String
+    stockId           String
+    side              TradeSide
+    inputAsset        String
+    inputRaw          Decimal   @db.Decimal(78, 0)
+    outputAsset       String
+    expectedOutputRaw Decimal   @db.Decimal(78, 0)
+    minOutputRaw      Decimal   @db.Decimal(78, 0)
+    budgetNgn         BigInt?
+    feeUsdc           Decimal   @db.Decimal(78, 0)
+    fxFeeUsdc         Decimal   @db.Decimal(78, 0) @default(0)
+    venueFeeUsdc      Decimal   @db.Decimal(78, 0) @default(0)
+    priceImpactBps    Int
+    providerId        String
+    providerVersion   String
+    context           Json
+    expiresAt         DateTime
+    consumedAt        DateTime?
+    sourceBlock       Decimal   @db.Decimal(78, 0)
+    routeFingerprint  String
+    createdAt         DateTime  @default(now())
+
+    investment Investment?
+
+    @@index([userId])
+    @@map("investment_quotes")
+}
+
+model Investment {
+    id              String               @id @default(cuid())
+    key             String               @unique
+    requestHash     String
+    userId          String
+    quoteId         String?              @unique
+    quote           InvestmentQuote?     @relation(fields: [quoteId], references: [id])
+    authorizationId String?
+    authorization   InvestmentAuthorization? @relation(fields: [authorizationId], references: [id])
+    stockId         String
+    side            TradeSide
+    purpose         TradePurpose         @default(deposit_buy)
+    orderId         String?
+    status          InvestmentStatus     @default(quoted)
+    operationId     String?              @unique
+    operation       OnchainOperation?    @relation(fields: [operationId], references: [id])
+    trade           TradeOrder?
+    amountIn        Decimal              @db.Decimal(78, 0)
+    amountOut       Decimal?             @db.Decimal(78, 0)
+    minAmountOut    Decimal?             @db.Decimal(78, 0)
+    failureReason   String?
+    holdReason      String?
+    createdAt       DateTime             @default(now())
+    updatedAt       DateTime             @updatedAt
+
+    @@index([userId])
+    @@index([status])
+    @@map("investments")
+}
+
+model OnchainOperation {
+    id                    String         @id @default(cuid())
+    key                   String         @unique
+    requestHash           String
+    kind                  OperationKind
+    userId                String
+    walletId              String
+    custodyProfileId      String
+    custodyProfile        CustodyProfile @relation(fields: [custodyProfileId], references: [id])
+    networkId             String
+    network               OnchainNetwork @relation(fields: [networkId], references: [id])
+    providerId            String
+    quoteId               String?
+    authorizationId       String?
+    status                OperationStatus @default(pending)
+    nonce                 Int?
+    signedPayloadHash     String?
+    txHash                String?
+    blockHash             String?
+    blockNumber           Decimal?       @db.Decimal(78, 0)
+    requiredConfirmations Int            @default(2)
+    fingerprint           String
+    expected              Json?
+    actual                Json?
+    errorReason           String?
+    createdAt             DateTime       @default(now())
+    updatedAt             DateTime       @updatedAt
+
+    steps        OnchainStep[]
+    observations ChainObservation[]
+    investment   Investment?
+    position     StrategyPosition?
+
+    @@index([userId])
+    @@index([status])
+    @@map("onchain_operations")
+}
+
+model OnchainStep {
+    id          String         @id @default(cuid())
+    operationId String
+    operation   OnchainOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+    index       Int
+    to          String
+    callHash    String
+    status      StepStatus     @default(pending)
+    txHash      String?
+    createdAt   DateTime       @default(now())
+
+    @@unique([operationId, index])
+    @@map("onchain_steps")
+}
+
+model ChainObservation {
+    id           String          @id @default(cuid())
+    operationId  String
+    operation    OnchainOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+    txHash       String?
+    blockHash    String?
+    blockNumber  Decimal?        @db.Decimal(78, 0)
+    state        ObsState
+    gasCostWei   Decimal?        @db.Decimal(78, 0)
+    actualInput  Json?
+    actualOutput Json?
+    observedAt   DateTime        @default(now())
+
+    @@index([operationId])
+    @@map("chain_observations")
+}
+
+model StockAction {
+    id            String          @id @default(cuid())
+    networkId     String
+    network       OnchainNetwork  @relation(fields: [networkId], references: [id])
+    stockId       String
+    kind          String
+    txHash        String
+    logIndex      Int
+    multiplierWad Decimal?        @db.Decimal(78, 0)
+    effectiveAt   DateTime?
+    cancelledAt   DateTime?
+    payload       Json?
+    createdAt     DateTime        @default(now())
+
+    @@unique([networkId, txHash, logIndex])
+    @@index([stockId])
+    @@map("stock_actions")
+}
+
+model PositionLot {
+    id         String    @id @default(cuid())
+    userId     String
+    stockId    String
+    asset      String
+    operationId String?
+    quantity   Decimal   @db.Decimal(78, 0)
+    costUsdc   Decimal   @db.Decimal(78, 0)
+    fxRateKobo BigInt?
+    source     String
+    openedAt   DateTime  @default(now())
+    closedAt   DateTime?
+
+    @@index([userId, stockId])
+    @@map("position_lots")
+}
+
+model Strategy {
+    id                String   @id @default(cuid())
+    providerId        String
+    key               String   @unique
+    name              String
+    version           String
+    disclosureVersion String
+    inputAssets       Json
+    receiptAsset      String
+    rewardAssets      Json
+    separateClaim     Boolean  @default(false)
+    permanentLock     Boolean  @default(false)
+    capBps            Int      @default(2000)
+    maxUsdEquivalent  Decimal  @db.Decimal(78, 0)
+    enabled           Boolean  @default(true)
+    experimental      Boolean  @default(false)
+    provenance        Json
+    createdAt         DateTime @default(now())
+
+    positions StrategyPosition[]
+    quotes    StrategyQuote[]
+
+    @@map("strategies")
+}
+
+model StrategyPosition {
+    id            String                 @id @default(cuid())
+    userId        String
+    strategyId    String
+    strategy      Strategy               @relation(fields: [strategyId], references: [id])
+    operationId   String?                @unique
+    operation     OnchainOperation?      @relation(fields: [operationId], references: [id])
+    state         StrategyPositionState  @default(reserved)
+    receiptRaw    Decimal                @db.Decimal(78, 0) @default(0)
+    principalUsdc Decimal                @db.Decimal(78, 0) @default(0)
+    valueUsdc     Decimal?               @db.Decimal(78, 0)
+    createdAt     DateTime               @default(now())
+    updatedAt     DateTime               @updatedAt
+
+    @@index([userId])
+    @@map("strategy_positions")
+}
+
+model StrategyQuote {
+    id                String                 @id @default(cuid())
+    userId            String
+    strategyId        String
+    strategy          Strategy               @relation(fields: [strategyId], references: [id])
+    positionId        String?
+    action            String
+    maximumInputs     Json
+    minimumOutputs    Json
+    userFeeUsdc       Decimal                @db.Decimal(78, 0) @default(0)
+    expiresAt         DateTime
+    consumedAt        DateTime?
+    strategyVersion   String
+    disclosureVersion String
+    fingerprint       String
+    authorizationId   String?
+    authorization     InvestmentAuthorization? @relation(fields: [authorizationId], references: [id])
+    createdAt         DateTime               @default(now())
+
+    @@index([userId])
+    @@map("strategy_quotes")
+}
+
+model RewardReceipt {
+    id                    String          @id @default(cuid())
+    networkId             String
+    network               OnchainNetwork  @relation(fields: [networkId], references: [id])
+    source                RewardSource
+    sourceRef             String?
+    txHash                String?
+    logIndex              Int?
+    beneficiary           String
+    asset                 String
+    amountRaw             Decimal         @db.Decimal(78, 0)
+    accrualPeriod         String?
+    week                  String?
+    state                 ReceiptState    @default(estimated)
+    conversionOperationId String?
+    payoutOrderId         String?
+    reinvestTradeId       String?
+    createdAt             DateTime        @default(now())
+    updatedAt             DateTime        @updatedAt
+
+    allocation EarningAllocation?
+
+    @@unique([networkId, source, txHash, logIndex, beneficiary])
+    @@index([beneficiary])
+    @@map("reward_receipts")
+}
+
+model EarningAllocation {
+    id              String          @id @default(cuid())
+    receiptId       String          @unique
+    receipt         RewardReceipt   @relation(fields: [receiptId], references: [id])
+    week            String
+    userId          String
+    amountUsdc      Decimal         @db.Decimal(78, 0)
+    state           AllocationState @default(reserved)
+    payoutOrderId   String?
+    reinvestTradeId String?
+    createdAt       DateTime        @default(now())
+
+    @@index([userId, week])
+    @@map("earning_allocations")
+}
+
+model SponsorBudget {
+    id          String   @id @default(cuid())
+    scope       String   @unique
+    windowStart DateTime
+    spentWei    Decimal  @db.Decimal(78, 0) @default(0)
+    capWei      Decimal  @db.Decimal(78, 0)
+
+    @@map("sponsor_budgets")
 }

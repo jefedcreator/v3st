@@ -1,8 +1,8 @@
 import type { Prisma, Stock } from "@/server/prisma";
 import { db } from "@/server/db";
 import type { StockDto } from "@/types/dto";
+import { BadRequestException, UnprocessableEntityException } from "@/utils/exceptions";
 import { formatMinor } from "@/utils/money";
-import { UnprocessableEntityException } from "@/utils/exceptions";
 
 function toDto(stock: Stock): StockDto {
   return {
@@ -35,8 +35,11 @@ class StockService {
 
   async upsertCatalog(stocks: Prisma.StockCreateInput[]): Promise<void> {
     for (const stock of stocks) {
+      if (!stock.assetKey) {
+        throw new BadRequestException("Catalog rows require an assetKey");
+      }
       await db.stock.upsert({
-        where: { symbol: stock.symbol },
+        where: { assetKey: stock.assetKey },
         create: stock,
         update: stock,
       });

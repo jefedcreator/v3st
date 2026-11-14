@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   await stockService.upsertCatalog([
     {
       symbol: "TSTA",
+      assetKey: `sim:base:${seedTokenAddress("TSTA").toLowerCase()}`,
       name: "Test Stock A (simulated)",
       chain: "base",
       tokenAddress: seedTokenAddress("TSTA"),
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
     },
     {
       symbol: "TSTB",
+      assetKey: `sim:base:${seedTokenAddress("TSTB").toLowerCase()}`,
       name: "Test Stock B (simulated)",
       chain: "base",
       tokenAddress: seedTokenAddress("TSTB"),

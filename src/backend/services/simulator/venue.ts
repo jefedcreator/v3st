@@ -4,6 +4,7 @@ import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import type { Venue } from "@/backend/services/trades/venue";
 import { sha256Hex } from "@/utils";
+import { fromDbRawNullable, toDbRaw } from "@/utils/asset-units";
 
 function ceilDiv(a: bigint, b: bigint): bigint {
   return (a + b - 1n) / b;
@@ -55,9 +56,9 @@ const venue: Venue = {
         venueId: venue.id,
         stockId: i.stock.id,
         side: i.side,
-        amountIn: i.amountIn,
-        minAmountOut: i.minAmountOut,
-        amountOut,
+        amountIn: toDbRaw(i.amountIn),
+        minAmountOut: toDbRaw(i.minAmountOut),
+        amountOut: toDbRaw(amountOut),
         status: "pending",
         settleAt: new Date(now().getTime() + policy.sim.yellowcard.settleSeconds * 1_000),
       },
@@ -68,26 +69,28 @@ const venue: Venue = {
   async getSwap(key) {
     const row = await db.simSwap.findUnique({ where: { key } });
     if (!row) return null;
+    const amountOut = fromDbRawNullable(row.amountOut);
+    const minAmountOut = fromDbRawNullable(row.minAmountOut) ?? 0n;
     if (await hasFault("swap", key)) {
       return {
         status: "failed",
-        amountOut: row.amountOut,
+        amountOut,
         failureReason: "REVERTED",
         ref: row.id,
       };
     }
     if (now() < row.settleAt) {
-      return { status: "pending", amountOut: row.amountOut, failureReason: null, ref: row.id };
+      return { status: "pending", amountOut, failureReason: null, ref: row.id };
     }
-    if (row.amountOut !== null && row.amountOut < row.minAmountOut) {
+    if (amountOut !== null && amountOut < minAmountOut) {
       return {
         status: "failed",
-        amountOut: row.amountOut,
+        amountOut,
         failureReason: "REVERTED",
         ref: row.id,
       };
     }
-    return { status: "filled", amountOut: row.amountOut, failureReason: null, ref: row.id };
+    return { status: "filled", amountOut, failureReason: null, ref: row.id };
   },
 };
 

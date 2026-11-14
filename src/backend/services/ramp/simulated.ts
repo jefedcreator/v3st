@@ -6,6 +6,7 @@ import { simChain } from "@/backend/services/simulator/chain";
 import { CHAINS } from "@/backend/services/wallets/chains";
 import { ngnToUsd, rateFromNgnPerUsd, type Rate } from "@/utils/money";
 import { sha256Hex } from "@/utils";
+import { toDbRaw } from "@/utils/asset-units";
 
 import { ProviderError } from "./errors";
 import { PAYOUT_FEE_KOBO, payInFeeKobo } from "./fees";
@@ -149,7 +150,7 @@ export function createSimulatedRampProvider(id: ProviderId): RampProvider {
               chain,
               toAddress: current.fundingAddress,
               token: CHAINS[chain].usdc,
-              amount: { gte: current.usdAmount },
+              amount: { gte: toDbRaw(current.usdAmount) },
             },
           });
           if (incoming) {

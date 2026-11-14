@@ -13,6 +13,7 @@ import type { PaginationQuerySchema } from "@/backend/validators/index.validator
 import type { EarningsPreferenceDto, EarningsWeekDto } from "@/types/dto";
 import { UnprocessableEntityException } from "@/utils/exceptions";
 import { formatMinor, usdToNgn } from "@/utils/money";
+import { fromDbRaw } from "@/utils/asset-units";
 
 import { simulatedEarningsSource } from "./source";
 
@@ -172,7 +173,7 @@ class EarningsService {
           key,
           userId,
           chain,
-          amount: (await tx.tradeOrder.findUniqueOrThrow({ where: { id: tradeId } })).amountIn,
+          amount: fromDbRaw((await tx.tradeOrder.findUniqueOrThrow({ where: { id: tradeId } })).amountIn),
           to: "earnings",
         }),
       );

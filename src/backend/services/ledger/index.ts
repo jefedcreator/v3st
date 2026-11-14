@@ -1,6 +1,7 @@
 import { type Prisma } from "@/server/prisma";
 import { type DbClient, db, lockRows, type Tx } from "@/server/db";
 import { canonicalJson, newCuid, sha256Hex } from "@/utils";
+import { toDbRaw } from "@/utils/asset-units";
 import { BadRequestException, ConflictException } from "@/utils/exceptions";
 
 import type { AccountSpec } from "./accounts";
@@ -126,7 +127,7 @@ class LedgerService {
         debitAccountId: accountIds.get(entry.debit.code)!,
         creditAccountId: accountIds.get(entry.credit.code)!,
         asset: entry.debit.asset,
-        amount: entry.amount,
+        amount: toDbRaw(entry.amount),
       };
       await tx.ledgerEntry.create({ data: entryData });
     }
