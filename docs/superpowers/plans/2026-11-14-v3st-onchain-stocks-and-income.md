@@ -42,9 +42,11 @@
 - [x] Inspect the current catalog, wallets, router, trades, ledger, earnings, jobs, API routes and tests.
 - [x] Research official provider documentation and distinguish observed capabilities from unverified contracts/testnets.
 - [x] Incorporate the user's backend-only and local-testnet-replica decisions.
-- [ ] Complete consistency/coverage review and commit this documentation task.
+- [x] Complete consistency/coverage review and prepare this documentation task for its focused commit.
 
 Planning used installed Superpowers `writing-plans` 7.0.2. Application verification is not run for this documentation-only task. Source baseline inspected: `2459d65` (`fix: type path parameters and null API input slots`). Recheck changed interfaces at implementation start.
+
+Self-review covered spec requirements, task dependencies, shared types, provider provenance and each Review Focus condition. It incorporated architecture-review findings on dual nonces, durable local keys, once-only funding, deadline recovery and income entitlement. Documentation checks verified local links, balanced code fences and 15 ordered tasks; no application or contract test result is implied. All implementation tasks below remain unstarted.
 
 | Observed code | Required adaptation |
 | --- | --- |
@@ -102,6 +104,7 @@ type BetaContext = {
   providerId: StockProviderId; providerVersion: string; custodyProfileId: string;
 };
 type AssetAmount = { asset: AssetKey; raw: bigint };
+type AssetDelta = { account: Address; asset: AssetKey; signedRaw: bigint };
 type EvidenceId = string;
 type ProviderCapabilities = {
   id: StockProviderId; kind: IntegrationKind; evidenceId: EvidenceId;
@@ -116,8 +119,10 @@ type QuoteRequest = {
 };
 type ExecutionQuote = {
   id: string; userId: string; walletId: string; stockId: string;
+  side: 'buy' | 'sell';
   context: BetaContext; input: AssetAmount; expectedOutput: AssetAmount;
   minOutput: AssetAmount; userFeeUsdc: bigint; sponsorCostWei: bigint;
+  allowPartialFill: boolean;
   priceImpactBps: number; expiresAt: Date; sourceBlock: bigint;
   routeFingerprint: string;
 };
@@ -132,6 +137,7 @@ type ExecutionObservation = {
   state: 'pending' | 'confirmed' | 'reverted' | 'unknown' | 'reorged';
   txHash: Hex | null; blockHash: Hex | null; blockNumber: bigint | null;
   actualInput: AssetAmount | null; actualOutput: AssetAmount | null;
+  deltas: AssetDelta[]; // transaction-local, attributed to this account and operation
   gasCostWei: bigint | null;
 };
 interface SpotAdapter {
@@ -162,7 +168,7 @@ interface StrategyAdapter {
 }
 ```
 
-`executionService.prepare(operationId)` obtains the appropriate plan from the persisted quote; `submit(operationId)` signs/relays it; `observe(operationId)` returns `ExecutionObservation`; `finalize(operationId)` atomically posts verified effects and durable follow-up work. A strategy operation can have multiple assets; persist its observed delta vector separately rather than squeezing it into a spot input/output pair.
+`executionService.prepare(operationId)` obtains the appropriate plan from the persisted quote; `submit(operationId)` signs/relays it; `observe(operationId)` returns `ExecutionObservation`; `finalize(operationId)` atomically posts verified effects and durable follow-up work. A strategy operation uses the persisted `deltas` vector; its single-asset `actualInput`/`actualOutput` fields remain null. Signed deltas are bounded differences of validated uint256 balances; the nonnegative `parseRaw` helper must not parse them.
 
 `onchainRegistry.spot(id, context): SpotAdapter` and `.strategy(id, context): StrategyAdapter` throw a typed unsupported/unverified error when the capability is absent. A Bankr managed-wallet adapter supplies a local gateway transport with the same operation identity; it does not borrow another custody profile's signer.
 
@@ -176,7 +182,7 @@ All paths below are under `/api/v1`; preserve existing aliases. Money is integer
 | `POST /investments/quote` | Strict union: buy `{ stock_id, side:'buy', budget_ngn }`; sell `{ stock_id, side:'sell', quantity_raw }`. Return persisted quote, expiry, fee breakdown, share estimate and minimum. |
 | `POST /investments` | `{ quote_id, authorization_id }` + Idempotency-Key → 202 investment/status resource; repeated identical request returns it |
 | `GET /investments/:id` | Owner-scoped status, accepted terms, confirmed fill and friendly hold reason |
-| `GET/POST /investment-authorizations` | Read/create scoped approval: maximum spend, stock/strategy scope, duration and policy version; expiry ≤30 days for standing actions |
+| `GET/POST /investment-authorizations` | Read/create scoped approval using Task 4's one-time/standing union; expiry ≤30 days for standing actions |
 | `DELETE /investment-authorizations/:id` | Revoke new activity; preserve accepted/broadcast work for reconciliation |
 | `GET /strategies`, `GET /strategies/:id` | Versioned mechanism, input/receipt/reward assets, liquidity/lock/claim restrictions and test provenance |
 | `POST /strategy-quotes` | `{ strategy_id, action:'enter', budget_ngn }` or `{ position_id, action:'exit'|'claim' }`; returns multi-asset limits and disclosures |
@@ -230,6 +236,7 @@ Expired/changed quotes or inadequate available balances: 409. Unsupported capabi
 - [ ] Widen `LedgerEntry.amount`, trade raw amount fields, transfer raw amounts/gas and simulator raw fields to numeric(78,0); preserve same-asset positive journal constraints and immutability. Cash-only amounts can remain BigInt. Explicitly convert at Prisma boundaries; never introduce floating-point Decimal arithmetic or a global JSON serializer.
 - [ ] Add `Stock.assetKey` uniqueness and instrument/provenance fields; drop symbol uniqueness only after stable IDs are retained. Add multiplier and reference basis/time. Keep legacy `sim-*` assets in a separate deployment namespace; seed new testnet stock rows without rewriting old holdings.
 - [ ] Persist immutable quote/consent/provider/custody/network snapshots; unique operation key + request hash; serialized signed-payload reference/hash, nonce, tx hash, step status, block identity and finality. Signed payload storage is private and redacted. Persist per-source reward identity and original accrual period separately from payout week. Add foreign keys/indexes and unique receipt `(network, source, txHash, logIndex, beneficiary)` plus provider entitlement identity where appropriate.
+- [ ] Document posting templates against existing `depositReceived`, `transferReserved`, `userFunded`, `cashReserved`, `tradeFilled` and `cashReleased`: the pending claim becomes available cash only once, at confirmed account funding. Custody observations are backing evidence, not a second customer credit. After funding 10,000,000 micro-USDC, a 7,000,000 reservation leaves cash 3,000,000; cancellation restores cash to 10,000,000, with pending and reserved both zero. Namespace cash/reservation accounts by deployment and custody profile; preserve legacy account codes through explicit migration mapping.
 - [ ] Add historical migration handling: existing earnings remain `legacy_fixture`, and already-posted journals are not reinterpreted. New accrual never uses `simWeeklyEarningMicroPerShare`. Link new proceeds through receipts/allocations while retaining compatibility for old rows.
 - [ ] Write `roundTrips18DecimalInventory` using `expect(fromDbRaw(toDbRaw(100n * 10n ** 18n))).toBe(100n * 10n ** 18n)`; reject `2^256`, fractional values and negative raw quantities. Add migration preservation, duplicate receipt, cross-currency posting, immutable journal and changed-payload key tests.
 - [ ] Review migration and conversion call sites, generate Prisma as needed, commit `feat: persist exact onchain quantities and operation evidence`.
@@ -238,11 +245,12 @@ Expired/changed quotes or inadequate available balances: 409. Unsupported capabi
 
 **Depends on:** 1–2.
 
-**Files:** Create `contracts/testnet/TestSettlementToken.sol`, `contracts/testnet/TestStockToken.sol`, `contracts/testnet/TestStockRegistry.sol`, `contracts/test/StockActions.t.sol`, `scripts/testnet-start.ts`, `scripts/testnet-deploy.ts`, `tests/helpers/testnet.ts`, `tests/contracts/onchain/base-reference.test.ts`, `tests/contracts/fixtures/onchain/base-stocks.json`, `src/backend/services/stocks/reference.ts`, `src/backend/services/stocks/corporate-actions.ts`, `tests/integration/stock-actions.test.ts`. Modify `src/backend/services/stocks/index.ts`, `scripts/seed-beta.ts`, `tests/global-setup.ts`.
+**Files:** Create `contracts/testnet/TestSettlementToken.sol`, `contracts/testnet/TestStockToken.sol`, `contracts/testnet/TestStockRegistry.sol`, `contracts/test/StockActions.t.sol`, `scripts/testnet-start.ts`, `scripts/testnet-deploy.ts`, `tests/helpers/testnet.ts`, `tests/contracts/onchain/base-reference.test.ts`, `tests/contracts/fixtures/onchain/base-stocks.json`, `src/backend/services/onchain/testnet.ts`, `src/backend/services/stocks/reference.ts`, `src/backend/services/stocks/corporate-actions.ts`, `tests/integration/stock-actions.test.ts`. Modify `src/backend/services/stocks/index.ts`, `scripts/seed-beta.ts`, `tests/global-setup.ts`.
 
 **Interfaces:** `testnetService.deploy(): Promise<TestnetManifest>` lives in new `src/backend/services/onchain/testnet.ts`; manifest contains chain/genesis/deployment IDs, ABI hashes and contract addresses, no keys. `stockReference.parse(input: unknown): ReferenceStock[]`; `stockActionService.ingest(networkId: string, throughBlock: bigint): Promise<void>`; `effectiveMultiplier(stockId: string, at: Date): Promise<bigint>`.
 
 - [ ] Start Anvil on loopback without `--fork-url`; isolate process/DB/deployment per test run. Generate ephemeral test-only signer material outside Git, fund it using local-node facilities, deploy six-decimal settlement and 18-decimal stock fixtures. Reject remote/public RPC use of local fixture signers. Persist generated manifests outside source control.
+- [ ] For a persistent development deployment, retain test keys in a restricted local keystore for that deployment's lifetime; do not rely on process memory. Key loss holds the affected deployment, never silently assigns a new account owner. Disposable CI deployments destroy keys, chain state and test database together. Bind wallets, authorization, quotes, event cursors and operations to the deployment ID, contract addresses and expected code hashes.
 - [ ] Implement a clearly labelled B20-behavior mock: raw ERC-20 quantities, WAD multiplier, scheduled effective times/cancellation, policy/pausing fixtures and action events. It is not the native B20 precompile. Do not require `getCode` to be nonempty for a future verified native precompile; verification for native assets needs registry evidence and semantic probes instead.
 - [ ] Parse Base's documented reference schema from hand-authored fixtures with pagination, omitted fields, decimals and price basis. No runtime API call. Require approved issuer/rights/eligibility plus a usable route before buying. Unknown metadata is not proof of tradability.
 - [ ] Write `splitPreservesRawQuantityAndValue`: two raw tokens, multiplier 1→2, underlying share price 100→50 gives four share equivalents and unchanged value 200. Assert `cashJournals.length === 0`. Test cancelled scheduled updates, duplicate logs, reorg rollback before finality and missing/stale NAV.
@@ -252,15 +260,17 @@ Expired/changed quotes or inadequate available balances: 409. Unsupported capabi
 
 **Depends on:** 2–3.
 
-**Files:** Create `contracts/testnet/TestExecutionAccount.sol`, `contracts/test/ExecutionPolicy.t.sol`, `src/backend/services/execution/index.ts`, `src/backend/services/execution/policy.ts`, `src/backend/services/execution/nonce.ts`, `src/backend/services/execution/receipts.ts`, `src/backend/services/wallets/testnet.ts`, `src/backend/services/authorizations/index.ts`, `tests/integration/testnet-execution.test.ts`. Modify `wallets/provider.ts`, `wallets/index.ts`, `wallets/policy.ts`, `wallets/chains.ts`, `jobs/types.ts`, `workers/handlers.ts`.
+**Files:** Create `contracts/testnet/TestExecutionAccount.sol`, `contracts/test/ExecutionPolicy.t.sol`, `src/backend/services/execution/index.ts`, `src/backend/services/execution/policy.ts`, `src/backend/services/execution/nonce.ts`, `src/backend/services/execution/receipts.ts`, `src/backend/services/wallets/testnet.ts`, `src/backend/services/authorizations/index.ts`, `src/backend/validators/authorization.validator.ts`, `tests/integration/testnet-execution.test.ts`. Modify `src/types/dto.ts`, `wallets/provider.ts`, `wallets/index.ts`, `wallets/policy.ts`, `wallets/chains.ts`, `jobs/types.ts`, `workers/handlers.ts`.
 
-**Interfaces:** `authorizationService.create(userId, input: AuthorizationInput): Promise<AuthorizationDto>` and `.revoke(userId, id): Promise<void>`; `executionService.prepare/submit/finalize(operationId: string): Promise<void>`; `.observe(operationId: string): Promise<ExecutionObservation>`; `assertExecutionPlan(plan: ExecutionPlan | StrategyPlan): Promise<void>`.
+**Interfaces:** `authorizationService.create(userId, input: AuthorizationInput): Promise<AuthorizationDto>`, `.list(userId): Promise<AuthorizationDto[]>` and `.revoke(userId, id): Promise<void>`; `executionService.prepare/submit/finalize(operationId: string): Promise<void>`; `.observe(operationId: string): Promise<ExecutionObservation>`; `assertExecutionPlan(plan: ExecutionPlan | StrategyPlan): Promise<void>`. Export `AuthorizationInput` inferred from the strict validator; `AuthorizationDto` contains ID, accepted scope/limits/versions, expiry, revoked time and beta context, with no signing material.
 
+- [ ] Define `AuthorizationInput` as a strict union. One-time: `{ kind:'one_time', quote_kind:'investment'|'strategy', quote_id, policy_version, disclosure_version }`, resolving all limits from the owned persisted quote. Standing: `{ kind:'standing', stock_ids, strategy_ids, actions, max_action_ngn, max_total_ngn, max_fee_bps, max_slippage_bps, expires_at, policy_version, disclosure_version }`. IDs are CUIDs, naira caps are positive integer-string kobo, expiry is a future ISO timestamp at most 30 days away, and slippage is at most 100 bps. Standing actions are only `claim`, `reward_conversion`, `reinvest`, `withdrawal_sale`; strategy entry requires one-time consent. Empty/wildcard asset scopes are rejected. Reserve cumulative value against caps atomically using the accepted quote's FX/value basis; reject missing valuation. Revocation prevents new signing without relabelling uncertain work as cancelled.
 - [ ] Add a local test account holding each user's assets and a relayer paying test gas. Separate owner/delegated signer/account addresses and Bankr-managed profiles. The account verifies operation nonce, deadline, authorization epoch and approved call hashes; it is test scaffolding, not a new production wallet protocol.
 - [ ] Validate decoded nested call data against persisted quote and authorization: chain, allowed contract version/function, recipient, assets, exact bounded allowances, input caps, minimum output, deadline and native value. Reject unknown hooks and oversized approvals. Use execution simulation before broadcast, then independently validate receipt/balance deltas; simulation success is not finality.
-- [ ] Persist operation and reservation before external work. Allocate signer nonce under lock; persist private signed payload/tx hash before broadcast. A crash retries the same signed bytes or looks up the same hash/nonce; do not create a replacement economic action. Start with two mined confirmations on local Anvil, configurable by verified network manifest. Reorged or unknown operations retain holds.
+- [ ] Persist operation and reservation before external work. Allocate the execution-account operation nonce and shared relayer transaction nonce under separate concurrency controls; persist both and the exact private signed payload/tx hash before broadcast. A crash retries the same signed bytes or looks up the same hash/nonces. A fee replacement belongs to the same logical operation and preserves authorized call parameters; never create a replacement economic action. Start with two mined confirmations on local Anvil, configurable by verified network manifest. Reorged or unknown operations retain holds.
+- [ ] Add bounded block advancement to the local scenario/test helper so two-confirmation settlement completes even when no later transactions arrive. It may mine local blocks only; normal finalization still reads canonical receipts and observes the configured depth. Include concurrent operations from two accounts sharing one relayer and a process restart using the same deployment keystore in recovery tests.
 - [ ] Sponsor deployment, approvals, swap and claim/exit steps from the test relayer with per-operation/daily budgets. Revocation blocks new signing and increments the authorization epoch; already-broadcast actions reconcile. Sponsor failure returns `SPONSOR_UNAVAILABLE`, never a user-paid fallback.
-- [ ] Write `broadcastCrashHasOneEffect`, `rejectsChangedRecipientAndUnlimitedApproval`, `revocationStopsUnsubmittedWork`, `sponsorShortageNeverDebitsUserGas` and `reorgBeforeFinalityCreditsNothing`. Assert one successful local operation event after replay, zero cash credit before two confirmations, and identical user native balance before/after execution.
+- [ ] Write `broadcastCrashHasOneEffect`, `sharedRelayerAllocatesUniqueNonces`, `restartRetainsAccountOwner`, `rejectsChangedRecipientAndUnlimitedApproval`, `revocationStopsUnsubmittedWork`, `standingCapCannotBeOverspent`, `sponsorShortageNeverDebitsUserGas` and `reorgBeforeFinalityCreditsNothing`. Assert one successful local operation event after replay, distinct relayer nonces for concurrent accounts, zero cash credit before two confirmations, and identical user native balance before/after execution.
 - [ ] Commit `feat: add policy-limited testnet execution and recovery` after diff review.
 
 ### Task 5: Implement o1 unsigned-transaction integration through a replica
@@ -330,9 +340,11 @@ Expired/changed quotes or inadequate available balances: 409. Unsupported capabi
 
 - [ ] Filter routes by correct asset/custody/network, evidence/capability, fresh quote, price impact and operational controls. Choose highest net output at the same input and disclosed fee basis; deterministic provider-ID tie break. Timeout an individual quote without hiding healthy alternatives. No unknown-ID fallback. Separate 100-bps maximum slippage from 100-bps maximum fixture price impact; unknown impact is unavailable.
 - [ ] Bind naira budget to a fresh rational rate and exact settlement input; expose FX and venue fees independently. Set expiry to min(provider expiry, now +30 seconds). Confirm and reserve atomically with payload hash and quote single-use protection. Revalidate consent and terms before signing; a worsened quote needs reconfirmation.
+- [ ] Treat quote expiry as the latest permitted acceptance and broadcast time and copy that bound into the contract deadline. Never extend it silently. Inclusion after the deadline must revert; a possible earlier broadcast remains under reconciliation. For a multistep operation that expires after an intermediate fill, retain observed inventory and require a new recovery quote/authorization before another market action.
 - [ ] Replace external calls inside `withTx` with the execution worker. Persist trade settlement event and follow-up job alongside ledger/quantity finalization. Use actual input/output and remaining reservation for partial fills; never rerun full original size.
-- [ ] Deposit completion funds the correct test account through a real local transfer once. Expired stock consent leaves cash and `needs_confirmation`. Legacy `stock_id` alone cannot authorize a fresh unbounded buy; add optional accepted investment intent reference and expose a quote/confirm path. Withdrawal sales/reinvest also reuse the same execution rules, with explicit background consent.
-- [ ] Write `twoRequestsReserveOnce`, `noProviderFallbackAfterBroadcast`, `expiredDepositQuoteLeavesCash`, `partialFillReleasesOnlyUnusedInput` and `tradeCommitSurvivesCallbackCrash`. Use a 10,000,000 cash balance and two concurrent 7,000,000 buys: exactly one succeeds and available cash is 3,000,000 before fill.
+- [ ] Persist and expose `allowPartialFill` in the accepted quote. If false, a smaller input fill cannot finalize successfully. If true, require `0 < actualInput <= quotedInput` and `actualOutput >= ceil(minOutput * actualInput / quotedInput)` in matching raw units, plus the accepted total fee ceiling. The replica contract enforces these limits; a violation in observation causes a reconciliation hold, not a successful credit. For quoted input 10,000,000 and minimum output 100 raw units, a 4,000,000 input fill requires at least 40 output units. Release only the remaining 6,000,000 input reservation.
+- [ ] Deposit completion funds the correct test account through a real local transfer once, using Task 2's once-only posting templates. Do not credit cash both at the bank webhook and account transfer. Expired stock consent leaves one cash entitlement and `needs_confirmation`; it does not undo confirmed custody funding. Legacy `stock_id` alone cannot authorize a fresh unbounded buy; add optional accepted investment intent reference and expose a quote/confirm path. Withdrawal sales/reinvest also reuse the same execution rules, with explicit background consent.
+- [ ] Write `twoRequestsReserveOnce`, `noProviderFallbackAfterBroadcast`, `expiredDepositQuoteLeavesCash`, `fundingReceiptCannotCreditCashTwice`, `contractDeadlineCannotBeExtended`, `partialFillReleasesOnlyUnusedInput` and `tradeCommitSurvivesCallbackCrash`. Use a 10,000,000 cash balance and two concurrent 7,000,000 buys: exactly one succeeds and available cash is 3,000,000 before fill. Replaying the bank webhook and confirmed funding receipt leaves total cash entitlement at 10,000,000 before investment, not 20,000,000.
 - [ ] Commit `feat: route consent-bound investments through testnet execution`.
 
 ### Task 10: Expose accurate positions, cost basis and performance
@@ -359,9 +371,9 @@ Expired/changed quotes or inadequate available balances: 409. Unsupported capabi
 
 - [ ] Persist immutable strategy/disclosure version and explicit consent. Enforce the spec's 20% exposure/$100-equivalent fixture ceiling across active and pending allocations under locks. Direct stock purchases do not select a strategy. Experimental launch-provider profiles require explicit demo scope.
 - [ ] Entry reserves all required assets and executes preparatory swaps plus pool deposit with operation-per-step recovery; prefer a validated atomic batch where possible. On failed later steps retain actual received assets as visible inventory, not fictional reversal. Exit burns/redeems only owned receipts and separates principal, fees and reward tokens.
-- [ ] Capture eligibility at the source's event/epoch boundary, not harvest-time holdings. Recognize only actual transfers or fee realization proved by logs/deltas. For embedded fees, realization happens on exit; `claim` is unsupported. For distributions, preserve asset/receipt until conversion finalizes.
+- [ ] Capture eligibility at the source's event/epoch boundary, not harvest-time holdings. Require both source entitlement and transaction-local, account-specific logs/deltas; wallet balance growth alone cannot prove income. Donations, treasury funding and returned principal never become reward receipts. For embedded fees, realization happens on exit; `claim` is unsupported. For distributions, preserve asset/receipt until conversion finalizes.
 - [ ] Persist states `quoted → reserved → executing → active` for entry and `exit_pending → exited` for exit; unresolved steps use `unknown/needs_review`. Revocation pauses new actions; exit can proceed with a new explicit authorization. Principal is never used to manufacture a weekly reward.
-- [ ] Write `concurrentSaleAndEntryCannotSpendSameStock`, `claimWithoutEntitlementIsZero`, `embeddedFeesRequireExit`, `entryFailureRetainsIntermediateAssets` and `negativeReturnDoesNotEraseFeesOrInventIncome`. Two 1,000,000 fee claims for the same event yield one receipt and one credit.
+- [ ] Write `concurrentSaleAndEntryCannotSpendSameStock`, `claimWithoutEntitlementIsZero`, `donationIsNotIncome`, `embeddedFeesRequireExit`, `entryFailureRetainsIntermediateAssets`, `expiredIntermediateStepNeedsNewAuthorization` and `negativeReturnDoesNotEraseFeesOrInventIncome`. Two 1,000,000 fee claims for the same event yield one receipt and one credit; a 1,000,000 unsolicited transfer creates no reward receipt or payable earnings.
 - [ ] Commit `feat: add explicit strategy allocation and confirmed reward receipts`.
 
 ### Task 12: Replace fixed weekly yield with receipt-backed proceeds
@@ -383,7 +395,7 @@ Expired/changed quotes or inadequate available balances: 409. Unsupported capabi
 
 **Depends on:** 9–12.
 
-**Files:** Create the route files corresponding to every new path in the API table; create `src/backend/validators/authorization.validator.ts`, `onchain-scenario.validator.ts`, `src/types/onchain.ts`, `src/types/contract.ts`, `tests/api/onchain-journey.test.ts`, `tests/api/onchain-errors.test.ts`, `docs/api/onchain-investments.md`. Modify existing stock, portfolio, earnings, deposit and trade-retry handlers/DTOs; extend `middleware/types.ts`, `src/types/index.ts`, `scenarios/index.ts`, `events/index.ts`, `src/app/api/v1/events/route.ts`.
+**Files:** Create the route files corresponding to every new path in the API table; create `src/backend/validators/onchain-scenario.validator.ts`, `src/types/onchain.ts`, `src/types/contract.ts`, `tests/api/onchain-journey.test.ts`, `tests/api/onchain-errors.test.ts`, `docs/api/onchain-investments.md`. Modify existing stock, portfolio, earnings, deposit and trade-retry handlers/DTOs; extend `middleware/types.ts`, `src/types/index.ts`, `scenarios/index.ts`, `events/index.ts`, `src/app/api/v1/events/route.ts`. Reuse Task 4's authorization validator and DTO.
 
 **Interfaces:** Wire the service methods above. `scenarioService.runOnchain(userId, input: OnchainScenarioInput, key): Promise<{ operationId: string }>` accepts local-owned operation ID and an enum; scenarios include delayed confirmation, revert, partial fill, sponsor shortage and zero rewards. Operator-owned fixtures cover global chain reorg/split/reset.
 
