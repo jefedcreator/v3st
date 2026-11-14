@@ -25,4 +25,6 @@ export const paginationQuerySchema = z
   })
   .strict();
 
+export type PaginationQuerySchema = z.infer<typeof paginationQuerySchema>;
+
 export const idParamSchema = z.object({ id: cuidSchema }).strict();

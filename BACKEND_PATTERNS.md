@@ -165,6 +165,10 @@ Every route handler receives an `AuthRequest` instead of a plain `NextRequest`. 
 ```typescript
 import type { Session, User } from '../../generated/prisma';
 import { type NextRequest } from 'next/server';
+import type { PaginationQuerySchema } from '@/backend/validators/index.validator';
+
+// Concrete query validator outputs; add other query schema types as union members.
+export type QueryParameters = PaginationQuerySchema;
 
 // The full user object attached to every authenticated request
 export type AuthenticatedUser = User & { session: Session };
@@ -192,6 +196,12 @@ export type MiddlewareFunction<B = unknown, Q = QueryParameters> = (
   req: AuthRequest<B, Q>
 ) => Promise<MiddlewareResponse>;
 ```
+
+`QueryParameters` contains the inferred outputs of the application's query validators.
+Pagination is currently the only query schema, so it is the sole member. Add new
+query schema types to this union as they are introduced; do not use an arbitrary
+`Record` fallback. Routes that read query parameters must run the corresponding
+`queryValidatorMiddleware` first so coercion and defaults match their declared types.
 
 ### API Response Shapes
 
@@ -303,6 +313,8 @@ export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(100).default(20),
 }).strict();
+
+export type PaginationQuerySchema = z.infer<typeof paginationQuerySchema>;
 
 export const idParamSchema = z.object({ id: cuidSchema }).strict();
 ```

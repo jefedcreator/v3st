@@ -1,11 +1,12 @@
 import type { NextRequest } from "next/server";
 
+import type { PaginationQuerySchema } from "@/backend/validators/index.validator";
 import type { ErrorCode } from "@/types";
 import type { Session, User } from "../../../generated/prisma";
 
 export type AuthenticatedUser = User & { session: Session };
 
-export type QueryParameters = Record<string, string>;
+export type QueryParameters = PaginationQuerySchema;
 
 export interface AuthRequest<B = unknown, Q = QueryParameters> extends NextRequest {
   parsedBody?: B;

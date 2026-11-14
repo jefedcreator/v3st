@@ -9,6 +9,7 @@ import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
 import { ratesService } from "@/backend/services/rates";
 import { stockService } from "@/backend/services/stocks";
+import type { PaginationQuerySchema } from "@/backend/validators/index.validator";
 import type { EarningsPreferenceDto, EarningsWeekDto } from "@/types/dto";
 import { UnprocessableEntityException } from "@/utils/exceptions";
 import { formatMinor, usdToNgn } from "@/utils/money";
@@ -68,7 +69,7 @@ class EarningsService {
 
   async list(
     userId: string,
-    query: { page: number; size: number },
+    query: PaginationQuerySchema,
   ): Promise<{ data: EarningsWeekDto[]; total: number; page: number; size: number }> {
     const rows = await db.earning.findMany({
       where: { userId },
