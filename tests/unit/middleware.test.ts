@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 
 import {
@@ -6,6 +6,7 @@ import {
   idempotencyKeyMiddleware,
   originMiddleware,
   pathParamValidatorMiddleware,
+  queryValidatorMiddleware,
   withMiddleware,
 } from "@/backend/middleware";
 import type {
@@ -13,7 +14,15 @@ import type {
   MiddlewareResponse,
   QueryParameters,
 } from "@/backend/middleware/types";
-import { idParamSchema } from "@/backend/validators/index.validator";
+import {
+  depositBodySchema,
+  type DepositBodySchema,
+} from "@/backend/validators/deposit.validator";
+import {
+  idParamSchema,
+  paginationQuerySchema,
+  type PaginationQuerySchema,
+} from "@/backend/validators/index.validator";
 import { ok } from "@/utils/response";
 import { redact } from "@/utils";
 
@@ -35,7 +44,8 @@ it("returns 400 MALFORMED_JSON for an unparseable body", async () => {
 });
 
 it("returns 422 VALIDATION_FAILED for unknown keys", async () => {
-  const route = withMiddleware(async () => ok({}, "ok"), [
+  const handler = vi.fn(async () => ok({}, "ok"));
+  const route = withMiddleware(handler, [
     bodyValidatorMiddleware(z.object({ a: z.string() }).strict()),
   ]);
   const res = await callRoute(route, {
@@ -45,6 +55,44 @@ it("returns 422 VALIDATION_FAILED for unknown keys", async () => {
   });
   expect(res.status).toBe(422);
   expect(res.json).toMatchObject({ code: "VALIDATION_FAILED", data: null });
+  expect(handler).not.toHaveBeenCalled();
+});
+
+it("carries the validated body type and transformed values into the handler", async () => {
+  const route = withMiddleware<DepositBodySchema>(
+    async (request) => {
+      expectTypeOf(request.validatedData).toEqualTypeOf<DepositBodySchema | undefined>();
+      const body = request.validatedData!;
+      expectTypeOf(body.ngn_amount).toEqualTypeOf<bigint>();
+      return ok({ ngn_amount: (body.ngn_amount + 1n).toString() }, "ok");
+    },
+    [bodyValidatorMiddleware(depositBodySchema)],
+  );
+  const res = await callRoute(route, {
+    method: "POST",
+    url: "/api/v1/deposits",
+    body: { ngn_amount: "9007199254740993" },
+  });
+  expect(res.status).toBe(200);
+  expect(res.json).toMatchObject({ data: { ngn_amount: "9007199254740994" } });
+});
+
+it("carries validated query types, coercion and defaults into the handler", async () => {
+  const route = withMiddleware<unknown, PaginationQuerySchema>(
+    async (request) => {
+      expectTypeOf(request.query).toEqualTypeOf<PaginationQuerySchema | undefined>();
+      const query = request.query!;
+      expectTypeOf(query.page).toEqualTypeOf<number>();
+      return ok(query, "ok");
+    },
+    [queryValidatorMiddleware(paginationQuerySchema)],
+  );
+  const res = await callRoute(route, {
+    method: "GET",
+    url: "/api/v1/earnings?page=2",
+  });
+  expect(res.status).toBe(200);
+  expect(res.json).toMatchObject({ data: { page: 2, size: 20 } });
 });
 
 it("hides the detail of unexpected errors", async () => {

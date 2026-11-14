@@ -5,7 +5,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<SessionValidatorSchema>(
   async (request) => {
-    const { identity_token } = request.validatedData as SessionValidatorSchema;
+    const { identity_token } = request.validatedData!;
     const result = await authService.signIn(identity_token);
     const res = ok(
       {

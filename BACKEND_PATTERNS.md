@@ -177,7 +177,7 @@ export interface AuthRequest<B = unknown, Q = QueryParameters> extends NextReque
   parsedBody?: B;
   query?: Q;
   params?: Record<string, string>;
-  validatedData?: unknown;
+  validatedData?: B;
   user: AuthenticatedUser | null;
   rawBody?: Uint8Array;                    // bodyMode: 'raw' (webhook signatures cover raw bytes)
   idempotencyKey?: string;                 // from the Idempotency-Key header
@@ -269,6 +269,13 @@ Reads the session token from the `sara-session` httpOnly cookie (or falls back t
 
 Validate `parsedBody` / `query` / `params` against a Zod schema. On failure they short-circuit with `422` and code `VALIDATION_FAILED`, reporting the first issue as `<path>: <message>`; on success the body result is attached to `request.validatedData`.
 
+Middleware is the source of truth for request types. `withMiddleware<B, Q>` carries
+the validator's inferred output types through `AuthRequest<B, Q>`:
+`validatedData?: B` and `query?: Q`. After the matching validator runs, handlers
+read `request.validatedData!` or `request.query!` directly. Never cast request data
+inside an API route; preserve schema transforms such as integer strings to `bigint`
+through the shared middleware types.
+
 ### `idempotencyKeyMiddleware`
 
 Requires an `Idempotency-Key` header matching `^[A-Za-z0-9_-]{8,128}$` — missing is `400 IDEMPOTENCY_KEY_REQUIRED`, malformed is `400 BAD_REQUEST`. The key is attached to `request.idempotencyKey`.
@@ -330,19 +337,19 @@ Every handler follows this exact structure and **calls services only** — never
 
 ```typescript
 import { authMiddleware, bodyValidatorMiddleware, idempotencyKeyMiddleware, withMiddleware } from '@/backend/middleware';
-import { depositValidatorSchema, type DepositValidatorSchema } from '@/backend/validators/deposit.validator';
+import { depositBodySchema, type DepositBodySchema } from '@/backend/validators/deposit.validator';
 import { depositService } from '@/backend/services/deposits';
 import { created } from '@/utils/response';
 
 // POST /api/v1/deposits — requires auth, body validation and an Idempotency-Key
-export const POST = withMiddleware<DepositValidatorSchema>(
+export const POST = withMiddleware<DepositBodySchema>(
   async (request) => {
-    const payload = request.validatedData as DepositValidatorSchema;
+    const payload = request.validatedData!;
     const user = request.user!;
     const order = await depositService.create(user, payload, request.idempotencyKey!);
     return created(order, 'Deposit created');
   },
-  [authMiddleware, bodyValidatorMiddleware(depositValidatorSchema), idempotencyKeyMiddleware]
+  [authMiddleware, bodyValidatorMiddleware(depositBodySchema), idempotencyKeyMiddleware]
 );
 ```
 

@@ -172,8 +172,8 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
 };
 
 export const bodyValidatorMiddleware =
-  <B extends z.ZodTypeAny>(schema: B) =>
-  async (request: AuthRequest<z.infer<B>, unknown>): Promise<MiddlewareResponse> => {
+  <B>(schema: z.ZodType<B, z.ZodTypeDef, unknown>) =>
+  async (request: AuthRequest<B, unknown>): Promise<MiddlewareResponse> => {
     const result = schema.safeParse(request.parsedBody ?? {});
     if (!result.success) {
       const first = result.error.issues[0];
@@ -190,8 +190,8 @@ export const bodyValidatorMiddleware =
   };
 
 export const queryValidatorMiddleware =
-  <Q extends z.ZodTypeAny>(schema: Q) =>
-  async (request: AuthRequest<unknown, z.infer<Q>>): Promise<MiddlewareResponse> => {
+  <Q>(schema: z.ZodType<Q, z.ZodTypeDef, unknown>) =>
+  async (request: AuthRequest<unknown, Q>): Promise<MiddlewareResponse> => {
     const result = schema.safeParse(request.query ?? {});
     if (!result.success) {
       const first = result.error.issues[0];
@@ -203,7 +203,7 @@ export const queryValidatorMiddleware =
         code: "VALIDATION_FAILED",
       };
     }
-    request.query = result.data as z.infer<Q>;
+    request.query = result.data;
     return { message: "", statusCode: 200, next: true };
   };
 

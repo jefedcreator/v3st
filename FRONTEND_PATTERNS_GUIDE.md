@@ -468,6 +468,7 @@ Filters, tabs, and pagination that should survive a refresh/share live in the UR
 - **Zod is the single source of truth** for server validation and payload contracts.
 - **Compile-time contract proof (`src/types/contract.ts`):** Asserts type equality between service response types and documented API DTOs.
 - Route Handlers are composed with `withMiddleware(handler, [authMiddleware, bodyValidatorMiddleware(schema), ...])`.
+- Middleware carries the validators' inferred output types through `withMiddleware<B, Q>`; handlers read `request.validatedData!` and `request.query!` without casting request data inside API routes.
 
 ### What the client must expect from the API
 

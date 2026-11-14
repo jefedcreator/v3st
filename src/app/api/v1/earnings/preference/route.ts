@@ -13,7 +13,7 @@ import { ok } from "@/utils/response";
 
 export const PUT = withMiddleware<EarningsPreferenceSchema>(
   async (request) => {
-    const body = request.validatedData as EarningsPreferenceSchema;
+    const body = request.validatedData!;
     const preference = await earningsService.setPreference(request.user!.id, {
       mode: body.mode,
       stock_id: body.stock_id,

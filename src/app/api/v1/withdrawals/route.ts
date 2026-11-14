@@ -14,7 +14,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<WithdrawalBodySchema>(
   async (request) => {
-    const { quote_id } = request.validatedData as WithdrawalBodySchema;
+    const { quote_id } = request.validatedData!;
     const { withdrawal, created } = await withdrawalService.confirm(
       request.user!.id,
       quote_id,

@@ -11,7 +11,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<ControlSchema>(
   async (request) => {
-    const body = request.validatedData as ControlSchema;
+    const body = request.validatedData!;
     const control = await operationsService.setControl(request.user!.id, body);
     return ok(control, "Control updated");
   },

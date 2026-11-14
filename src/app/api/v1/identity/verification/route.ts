@@ -13,7 +13,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<PersonaValidatorSchema>(
   async (request) => {
-    const { persona } = request.validatedData as PersonaValidatorSchema;
+    const { persona } = request.validatedData!;
     const kyc = await kycService.verify(request.user!.id, { persona });
     return ok(kyc, "Identity verification recorded (simulated)");
   },

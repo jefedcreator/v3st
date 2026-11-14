@@ -21,8 +21,7 @@ export const GET = withMiddleware<unknown, QueryParameters>(
 
 export const POST = withMiddleware<BankAccountValidatorSchema>(
   async (request) => {
-    const { bank_code, account_number } =
-      request.validatedData as BankAccountValidatorSchema;
+    const { bank_code, account_number } = request.validatedData!;
     const account = await bankAccountService.add(request.user!.id, {
       bank_code,
       account_number,

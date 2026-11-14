@@ -14,7 +14,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<DepositBodySchema>(
   async (request) => {
-    const body = request.validatedData as DepositBodySchema;
+    const body = request.validatedData!;
     const { deposit, created } = await depositService.create(
       request.user!.id,
       { ngn_amount: body.ngn_amount, stock_id: body.stock_id },

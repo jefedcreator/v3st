@@ -13,7 +13,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<ScenarioBodySchema>(
   async (request) => {
-    const body = request.validatedData as ScenarioBodySchema;
+    const body = request.validatedData!;
     const result = await scenarioService.run(request.user!.id, body);
     return ok(result, "Scenario applied");
   },

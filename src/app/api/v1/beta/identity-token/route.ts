@@ -5,7 +5,7 @@ import { ok } from "@/utils/response";
 
 export const POST = withMiddleware<IdentityTokenValidatorSchema>(
   async (request) => {
-    const { phone } = request.validatedData as IdentityTokenValidatorSchema;
+    const { phone } = request.validatedData!;
     const { token, expiresAt } = authService.issueBetaIdentityToken(phone);
     return ok(
       {

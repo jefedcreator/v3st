@@ -12,7 +12,7 @@ export interface AuthRequest<B = unknown, Q = QueryParameters> extends NextReque
   parsedBody?: B;
   query?: Q;
   params?: Record<string, string>;
-  validatedData?: unknown;
+  validatedData?: B;
   user: AuthenticatedUser | null;
   rawBody?: Uint8Array;
   idempotencyKey?: string;
