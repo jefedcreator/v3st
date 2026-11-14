@@ -1,0 +1,49 @@
+{
+  "data": [
+    {
+      "chain_id": 8453,
+      "address": "0x1111111111111111111111111111111111111111",
+      "symbol": "TSTA",
+      "name": "Test Stock A",
+      "decimals": 18,
+      "multiplier": "1000000000000000000",
+      "instrument": {
+        "kind": "stock",
+        "issuer": "V3ST fixture issuer",
+        "rights": "tokenized stock exposure; no voting or direct redemption rights"
+      },
+      "price": {
+        "micro_usd": "100000000",
+        "basis": "share_price",
+        "as_of": "2026-11-14T12:00:00Z"
+      }
+    },
+    {
+      "chain_id": 8453,
+      "address": "0x2222222222222222222222222222222222222222",
+      "symbol": "TSTB",
+      "name": "Test Stock B",
+      "decimals": 18,
+      "instrument": {
+        "kind": "stock",
+        "issuer": "V3ST fixture issuer",
+        "rights": "tokenized stock exposure"
+      },
+      "price": {
+        "micro_usd": "250000000",
+        "basis": "token_nav",
+        "as_of": "2026-11-14T12:00:00Z"
+      }
+    },
+    {
+      "chain_id": 8453,
+      "address": "0x3333333333333333333333333333333333333333",
+      "symbol": "UNKN",
+      "name": "Unknown metadata instrument",
+      "decimals": 8
+    }
+  ],
+  "page": {
+    "next": "page-2"
+  }
+}

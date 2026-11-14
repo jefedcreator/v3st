@@ -1,5 +1,3 @@
-import { env } from "@/env";
-
 import type { BetaContext, IntegrationKind, StockProviderId } from "@/backend/services/onchain/types";
 
 import { getProviderEvidence, type ProviderEvidence } from "./provider-evidence";
@@ -47,7 +45,7 @@ export function isLoopbackRpcUrl(url: string): boolean {
 }
 
 export function assertBetaStage(): void {
-  if (env.APP_STAGE !== "beta") {
+  if (process.env.APP_STAGE !== "beta") {
     throw new OnchainPolicyError("Onchain integrations require APP_STAGE=beta");
   }
 }

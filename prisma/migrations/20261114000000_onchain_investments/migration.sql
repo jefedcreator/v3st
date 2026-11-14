@@ -65,6 +65,7 @@ CREATE TABLE "onchain_networks" (
     "deploymentId" TEXT NOT NULL,
     "label" TEXT NOT NULL,
     "rpcLoopback" BOOLEAN NOT NULL DEFAULT true,
+    "finalizedBlock" numeric(78,0),
     "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "onchain_networks_pkey" PRIMARY KEY ("id")
 );
@@ -222,6 +223,7 @@ CREATE TABLE "stock_actions" (
     "kind" TEXT NOT NULL,
     "txHash" TEXT NOT NULL,
     "logIndex" INTEGER NOT NULL,
+    "blockNumber" numeric(78,0) NOT NULL,
     "multiplierWad" numeric(78,0),
     "effectiveAt" TIMESTAMPTZ(6),
     "cancelledAt" TIMESTAMPTZ(6),

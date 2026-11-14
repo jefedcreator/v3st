@@ -23,6 +23,23 @@ export const policy = {
   trading: {
     maxSlippageBps: 100,
   },
+  onchain: {
+    chainId: 31337,
+    networkNamespace: "testnet",
+    requiredConfirmations: 2,
+    quoteTtlSeconds: 30,
+    referenceMaxAgeSeconds: 60,
+    maxPriceImpactBps: 100,
+    authorizationMaxDays: 30,
+    strategy: {
+      capBps: 2000,
+      maxUsdEquivalentMicroUsd: 100_000_000n,
+    },
+    sponsor: {
+      dailyCapWei: 10n ** 21n,
+      perOperationCapWei: 10n ** 19n,
+    },
+  },
   rates: {
     displayCacheSeconds: 5,
   },

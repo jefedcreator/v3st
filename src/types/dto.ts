@@ -56,6 +56,16 @@ export type StockDto = {
   decimals: number;
   price_usdc: string | null;
   simulated: true;
+  asset_key: string | null;
+  kind: string;
+  rights: string | null;
+  paused: boolean;
+  delisted: boolean;
+  multiplier_wad: string;
+  reference_price_usdc: string | null;
+  reference_basis: string | null;
+  reference_as_of: string | null;
+  provenance: unknown;
 };
 
 export type TradeDto = {

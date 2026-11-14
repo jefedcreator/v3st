@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { loadEnv } from "vite";
 
-export default function globalSetup(): void {
+export default async function globalSetup(): Promise<() => void> {
   const fileEnv = loadEnv("", process.cwd(), "");
   const testUrl = process.env.TEST_DATABASE_URL ?? fileEnv.TEST_DATABASE_URL;
   const devUrl = process.env.DATABASE_URL ?? fileEnv.DATABASE_URL;
@@ -25,4 +25,35 @@ export default function globalSetup(): void {
       env: { ...process.env, DATABASE_URL: testUrl },
     },
   );
+
+  // Start an isolated loopback Anvil (chain 31337, no fork) and deploy the labelled
+  // test contracts once per run. Ephemeral test-only signer material is generated
+  // here and never written to git.
+  const port = process.env.TESTNET_PORT ?? "8599";
+  const url = `http://127.0.0.1:${port}`;
+  const { startAnvil, waitForRpc, testnetService, relayerAccount } = await import(
+    "../src/backend/services/onchain/testnet"
+  );
+  const { generatePrivateKey } = await import("viem/accounts");
+  process.env.TESTNET_RPC_URL = url;
+  process.env.TESTNET_SIGNER_PRIVATE_KEY = generatePrivateKey();
+  const child = startAnvil({ rpcUrl: url });
+  await waitForRpc(url);
+  await testnetService.fundEphemeral(relayerAccount(), url);
+  execFileSync("forge", ["build"], { stdio: "inherit" });
+  const manifest = await testnetService.deploy(
+    [
+      { name: "TestSettlementToken", artifact: "TestSettlementToken", args: ["V3ST Test USDC", "tUSDC", 6] },
+      { name: "TestStockRegistry", artifact: "TestStockRegistry", args: [] },
+    ],
+    { url },
+  );
+  process.env.TESTNET_DEPLOYMENT_ID = manifest.deploymentId;
+  process.env.TESTNET_NETWORK_ID = manifest.networkId;
+  console.log(
+    `testnet ready: ${url} chain=${manifest.chainId} deployment=${manifest.deploymentId} contracts=${Object.keys(manifest.contracts).join(",")}`,
+  );
+  return () => {
+    child.kill("SIGTERM");
+  };
 }

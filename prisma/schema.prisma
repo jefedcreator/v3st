@@ -785,6 +785,7 @@ model OnchainNetwork {
     deploymentId String          @unique
     label        String
     rpcLoopback  Boolean         @default(true)
+    finalizedBlock Decimal?      @db.Decimal(78, 0)
     createdAt    DateTime        @default(now())
 
     stocks     Stock[]
@@ -969,6 +970,7 @@ model StockAction {
     kind          String
     txHash        String
     logIndex      Int
+    blockNumber   Decimal         @db.Decimal(78, 0)
     multiplierWad Decimal?        @db.Decimal(78, 0)
     effectiveAt   DateTime?
     cancelledAt   DateTime?
