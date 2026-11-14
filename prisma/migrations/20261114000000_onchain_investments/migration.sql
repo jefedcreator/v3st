@@ -13,7 +13,7 @@ CREATE TYPE "InvestmentStatus" AS ENUM ('quoted', 'reserved', 'executing', 'fill
 CREATE TYPE "StrategyPositionState" AS ENUM ('reserved', 'executing', 'active', 'exit_pending', 'exited', 'needs_review');
 CREATE TYPE "ReceiptState" AS ENUM ('estimated', 'received_asset', 'conversion_pending', 'available', 'reserved_for_payout', 'paid', 'reinvested');
 CREATE TYPE "RewardSource" AS ENUM ('hydrex_lp_fees', 'hydropump_creator_fees', 'stonks_distribution', 'basestonk_hook_fees', 'feel_distribution', 'cash_distribution', 'sale_gain', 'legacy_fixture');
-CREATE TYPE "AllocationState" AS ENUM ('reserved', 'paid', 'reinvested', 'released');
+CREATE TYPE "AllocationState" AS ENUM ('reserved', 'available', 'paid', 'reinvested', 'released');
 
 -- Widen raw-asset columns beyond BIGINT (exact unsigned 256-bit integers).
 ALTER TABLE "ledger_entries" ALTER COLUMN "amount" TYPE numeric(78,0) USING ("amount")::numeric(78,0);
@@ -394,3 +394,8 @@ ALTER TABLE "position_lots" ADD COLUMN "realizedUsdc" DECIMAL(78,0) NOT NULL DEF
 
 -- Snapshot the beta context and full strategy quote (plus any preparatory spot quote) at quote time.
 ALTER TABLE "strategy_quotes" ADD COLUMN "context" JSONB;
+
+-- Receipt-backed income: earnings may originate from a confirmed reward receipt
+-- (receiptId unique; legacy fixture rows keep NULL receiptId and stay payable).
+ALTER TABLE "earnings" ALTER COLUMN "stockId" DROP NOT NULL;
+CREATE UNIQUE INDEX "earnings_receiptId_key" ON "earnings"("receiptId");

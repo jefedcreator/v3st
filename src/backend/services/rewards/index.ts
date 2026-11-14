@@ -3,13 +3,18 @@ import { type Address, type Hex, type Log, parseEventLogs } from "viem";
 import { type Prisma, type RewardSource } from "@/server/prisma";
 import { db, withTx, type Tx } from "@/server/db";
 import { accountAddressFor, unpack } from "@/backend/services/execution";
+import { investmentService } from "@/backend/services/investments";
+import { jobService } from "@/backend/services/jobs";
+import { lagosWeek } from "@/backend/services/jobs/schedule";
+import { now } from "@/backend/clock";
 import { hookFeeAbi, hydrexPoolAbi, hydropumpLockerAbi, stockDistributionAbi } from "@/backend/services/onchain/abis";
 import { publicClientFor, readManifest, settlementAssetKey } from "@/backend/services/onchain/testnet";
 import type { StrategyQuote } from "@/backend/services/onchain/types";
 import { assetKey } from "@/backend/services/onchain/types";
 import { ledgerService } from "@/backend/services/ledger";
 import { rewardReceived } from "@/backend/services/ledger/postings";
-import { toDbRaw } from "@/utils/asset-units";
+import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
+import { ConflictException, NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 
 export type RewardReceiptDto = {
   id: string;
@@ -213,6 +218,29 @@ async function decodeRewardEvents(input: {
   return out;
 }
 
+// Maps a receipt beneficiary address back to its owning user through the user's
+// execution/managed accounts.
+export async function userIdForBeneficiary(
+  client: Pick<Tx, "wallet" | "custodyProfile" | "user">,
+  beneficiary: string,
+): Promise<string | null> {
+  const normalized = beneficiary.toLowerCase();
+  const wallets = await client.wallet.findMany({
+    where: { OR: [{ executionAddress: { equals: normalized, mode: "insensitive" } }] },
+  });
+  for (const w of wallets) {
+    if (w.executionAddress?.toLowerCase() === normalized && w.userId) return w.userId;
+  }
+  const profiles = await client.custodyProfile.findMany({ where: { kind: "provider_managed" } });
+  for (const p of profiles) {
+    if (p.managedAddress?.toLowerCase() === normalized && p.walletId) {
+      const wallet = await client.wallet.findUnique({ where: { id: p.walletId } });
+      if (wallet?.userId) return wallet.userId;
+    }
+  }
+  return null;
+}
+
 class RewardService {
   // Records finalized onchain reward/fee realizations as immutable receipts keyed
   // by (network, source, txHash, logIndex, beneficiary): replaying the same event
@@ -258,6 +286,7 @@ class RewardService {
           },
         });
         if (existing) continue;
+        const week = lagosWeek(now());
         const row = await client.rewardReceipt.create({
           data: {
             networkId: op.networkId,
@@ -268,6 +297,10 @@ class RewardService {
             beneficiary,
             asset: event.asset,
             amountRaw: toDbRaw(event.amountRaw),
+            // The accrual week is fixed at the source event; late recognition rolls
+            // forward to a later payout without changing it.
+            accrualPeriod: week,
+            week,
             state: "received_asset",
           },
         });
@@ -285,10 +318,86 @@ class RewardService {
             amount: event.amountRaw,
           }),
         );
+        if (stock) {
+          // A received reward asset opens a zero-cost lot, so a later consent-bound
+          // conversion sell has a tracked basis and its gain is classified as a
+          // sale gain, separate from the distribution receipt itself.
+          const existingLot = await client.positionLot.findFirst({
+            where: { userId: op.userId, stockId: stock.id, operationId: op.id, source: `reward:${source}` },
+          });
+          if (!existingLot) {
+            await client.positionLot.create({
+              data: {
+                userId: op.userId,
+                stockId: stock.id,
+                asset: event.asset,
+                operationId: op.id,
+                quantity: toDbRaw(event.amountRaw),
+                costUsdc: toDbRaw(0n),
+                source: `reward:${source}`,
+              },
+            });
+          }
+        }
       }
     };
     if (tx) return run(tx);
     return withTx((t) => run(t));
+  }
+
+  // Starts a consent-bound sell of a stock-asset receipt through the normal
+  // investment path. Returns the onchain operation ID; the receipt stays
+  // conversion_pending until the sale finalizes and earningsService.recognize
+  // records the proceeds once. Replaying returns the same operation.
+  async convert(receiptId: string, authorizationId: string): Promise<string> {
+    const receipt = await db.rewardReceipt.findUniqueOrThrow({ where: { id: receiptId } });
+    if (receipt.state === "conversion_pending" && receipt.conversionOperationId) {
+      return receipt.conversionOperationId;
+    }
+    if (receipt.state !== "received_asset") {
+      throw new ConflictException("Receipt is not awaiting conversion", "CONVERSION_PENDING");
+    }
+    const auth = await db.investmentAuthorization.findUniqueOrThrow({ where: { id: authorizationId } });
+    if (auth.revokedAt || auth.expiresAt <= now()) {
+      throw new ConflictException("Authorization is no longer active", "AUTHORIZATION_REVOKED");
+    }
+    const wallets = await db.wallet.findMany({ where: { userId: auth.userId } });
+    const addresses = new Set<string>();
+    for (const w of wallets) {
+      if (w.executionAddress) addresses.add(w.executionAddress.toLowerCase());
+    }
+    const profiles = await db.custodyProfile.findMany({
+      where: { walletId: { in: wallets.map((w) => w.id) }, kind: "provider_managed" },
+    });
+    for (const p of profiles) {
+      if (p.managedAddress) addresses.add(p.managedAddress.toLowerCase());
+    }
+    if (!addresses.has(receipt.beneficiary)) {
+      throw new NotFoundException("Receipt not found", "NOT_FOUND");
+    }
+    const stock = await db.stock.findFirst({ where: { assetKey: receipt.asset } });
+    if (!stock) {
+      throw new UnprocessableEntityException(
+        "Receipt asset is already the settlement asset; recognize it instead of converting",
+        "CAPABILITY_UNAVAILABLE",
+      );
+    }
+    const key = `convert:${receiptId}`;
+    const quote = await investmentService.quote(auth.userId, {
+      stockId: stock.id,
+      side: "sell",
+      inputRaw: fromDbRaw(receipt.amountRaw),
+    });
+    const investment = await investmentService.confirm(auth.userId, quote.id, authorizationId, key);
+    if (!investment.operation_id) {
+      throw new ConflictException("Conversion needs a fresh quote and confirmation", "NEEDS_CONFIRMATION");
+    }
+    await db.rewardReceipt.update({
+      where: { id: receiptId },
+      data: { state: "conversion_pending", conversionOperationId: investment.operation_id },
+    });
+    await jobService.enqueue(db, { kind: "operation.progress", subjectId: investment.operation_id });
+    return investment.operation_id;
   }
 
   // Owner-scoped receipt list: a receipt belongs to the user through their

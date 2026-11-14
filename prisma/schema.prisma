@@ -271,6 +271,7 @@ enum RewardSource {
 
 enum AllocationState {
     reserved
+    available
     paid
     reinvested
     released
@@ -568,7 +569,7 @@ model TradeOrder {
 model Earning {
     id              String   @id @default(cuid())
     userId          String
-    stockId         String
+    stockId         String?
     week            String
     chain           String
     amountUsdc      BigInt
@@ -580,6 +581,7 @@ model Earning {
     createdAt       DateTime @default(now())
 
     @@unique([userId, stockId, week])
+    @@unique([receiptId])
     @@index([userId, payoutOrderId])
     @@map("earnings")
 }

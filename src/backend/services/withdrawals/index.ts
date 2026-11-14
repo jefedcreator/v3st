@@ -6,6 +6,7 @@ import { alertService } from "@/backend/services/alerts";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { complianceService, customerFor } from "@/backend/services/compliance";
 import { controlsService } from "@/backend/services/controls";
+import { earningsService } from "@/backend/services/earnings";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import {
@@ -250,6 +251,7 @@ class WithdrawalService {
       earningIds: string[];
       amountUsdc: bigint;
       quote: Quote;
+      chain?: string;
     },
   ): Promise<RampOrder> {
     const key = `earnings:${i.userId}:${i.week}`;
@@ -258,7 +260,7 @@ class WithdrawalService {
     const bank = await tx.bankAccount.findFirstOrThrow({
       where: { userId: i.userId, status: "active" },
     });
-    const chain = policy.defaultChain;
+    const chain = (i.chain ?? policy.defaultChain) as typeof policy.defaultChain;
     const debitUsdc = ngnToUsd(i.quote.ngnAmount, i.quote.rate, "ceil");
     const order = await tx.rampOrder.create({
       data: {
@@ -622,6 +624,9 @@ class WithdrawalService {
                   ],
             actor: "system",
           });
+          if (order.kind === "earnings_payout") {
+            await earningsService.markPayoutFinal(order.id);
+          }
           return;
         }
         if (txState.state === "refunded" && order.settlementModel === "direct_chain") {

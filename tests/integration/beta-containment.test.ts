@@ -72,7 +72,9 @@ async function runFullScenarioSuite(): Promise<void> {
   setNow("2026-11-13T07:00:00Z"); // Friday 08:00 Lagos: payout batch
   await drainJobs();
   const weeks = await stepEarnings(token);
-  expect(weeks.length).toBeGreaterThan(0);
+  // Receipt-backed income: a static stock holding pays zero cash, so the week
+  // list is empty until a source receipt is confirmed and recognized.
+  expect(weeks.length).toBe(0);
 
   await controlsService.set(db, {
     scope: "provider:yellowcard",

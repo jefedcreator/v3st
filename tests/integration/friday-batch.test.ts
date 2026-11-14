@@ -73,7 +73,7 @@ describe("friday batch", () => {
     expect(r1.rolledOver).toBe(1);
     expect((await db.earning.findFirstOrThrow()).payoutOrderId).toBeNull();
     const earning = await db.earning.findFirstOrThrow();
-    await seedEarning(u.id, earning.stockId, "2026-11-16", 1n);
+    await seedEarning(u.id, earning.stockId!, "2026-11-16", 1n);
     const r2 = await earningsBatchService.runBatch("2026-11-16", now());
     expect(r2.paid).toBe(1);
     expect(await db.rampOrder.findMany({ where: { kind: "earnings_payout" } })).toEqual([
@@ -210,6 +210,22 @@ describe("friday batch", () => {
       payoutOrderId: null,
       reinvestTradeId: null,
     });
+  });
+
+  it("grossMinimumIs200000Kobo: 199,999 kobo rolls over and 200,000 qualifies", async () => {
+    setNow("2026-11-20T08:00:00Z");
+    await seedFloat("yellowcard", 1_000_000_000_000n);
+    await seedTreasury("base", 1_000_000_000_000n);
+    // At the 155,000 kobo/USD payout rate: 1,290,322 micro-USD floors to 199,999
+    // kobo (rolls over) and 1,290,323 floors to 200,000 kobo (qualifies).
+    await eligibleUser("2026-11-16", 1_290_322n);
+    const u2 = await eligibleUser("2026-11-16", 1_290_323n);
+    const r = await earningsBatchService.runBatch("2026-11-16", now());
+    expect(r.rolledOver).toBe(1);
+    expect(r.paid).toBe(1);
+    const orders = await db.rampOrder.findMany({ where: { kind: "earnings_payout" } });
+    expect(orders).toHaveLength(1);
+    expect(orders[0]).toMatchObject({ userId: u2.id, ngnAmount: 200_000n });
   });
 
   it("pays from the Friday 08:00 Lagos schedule", async () => {

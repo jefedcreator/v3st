@@ -480,6 +480,24 @@ export function rewardReceived(input: {
   };
 }
 
+// Recognized conversion proceeds move from spendable cash into earnings once the
+// consent-bound sell has finalized; the reward asset itself stays preserved until then.
+export function conversionProceedsRecognized(input: {
+  key: string;
+  userId: string;
+  chain: string;
+  amount: bigint;
+}): JournalInput {
+  return {
+    key: `${input.key}:recognized`,
+    kind: "conversionProceedsRecognized",
+    orderId: null,
+    entries: [
+      entry(acct.userCash(input.userId, input.chain), acct.userEarnings(input.userId, input.chain), input.amount),
+    ],
+  };
+}
+
 export function openingBalance(input: {
   account: AccountSpec;
   amount: bigint;

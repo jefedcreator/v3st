@@ -541,6 +541,15 @@ async function progressTrade(tradeId: string): Promise<void> {
           );
         }
         await tx.tradeOrder.update({ where: { id: t.id }, data: { status: "failed", failureReason: "QUOTE_EXPIRED" } });
+        await tx.earning.updateMany({ where: { reinvestTradeId: t.id }, data: { reinvestTradeId: null } });
+        await tx.earningAllocation.updateMany({
+          where: { reinvestTradeId: t.id },
+          data: { state: "available", reinvestTradeId: null },
+        });
+        await tx.rewardReceipt.updateMany({
+          where: { reinvestTradeId: t.id },
+          data: { state: "available", reinvestTradeId: null },
+        });
       });
       return;
     }
@@ -565,6 +574,15 @@ async function progressTrade(tradeId: string): Promise<void> {
         );
       }
       await tx.tradeOrder.update({ where: { id: t.id }, data: { status: "failed", failureReason: "NEEDS_CONFIRMATION" } });
+      await tx.earning.updateMany({ where: { reinvestTradeId: t.id }, data: { reinvestTradeId: null } });
+      await tx.earningAllocation.updateMany({
+        where: { reinvestTradeId: t.id },
+        data: { state: "available", reinvestTradeId: null },
+      });
+      await tx.rewardReceipt.updateMany({
+        where: { reinvestTradeId: t.id },
+        data: { state: "available", reinvestTradeId: null },
+      });
     });
     return;
   }
