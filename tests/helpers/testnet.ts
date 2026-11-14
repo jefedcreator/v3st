@@ -10,7 +10,7 @@ import {
   walletClientFor,
   type TestnetManifest,
 } from "@/backend/services/onchain/testnet";
-import { settlementTokenAbi, stockRegistryAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
+import { o1RouterAbi, settlementTokenAbi, stockRegistryAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 
 export type TestnetHandle = {
   url: string;
@@ -53,6 +53,10 @@ export type TestnetHandle = {
   }>;
   blockNumber(): Promise<bigint>;
   chainId(): Promise<number>;
+  o1Router: Address;
+  seedO1Pool(stock: Address, settlementAmount: bigint, stockAmount: bigint): Promise<Hex>;
+  setO1PartialFillBps(bps: bigint): Promise<Hex>;
+  o1SwapEvents(): Promise<{ amountIn: bigint; fee: bigint; amountOut: bigint; recipient: string }[]>;
 };
 
 let cached: TestnetHandle | null = null;
@@ -222,6 +226,50 @@ export async function testnet(): Promise<TestnetHandle> {
     },
     async chainId() {
       return Number(await publicClient.getChainId());
+    },
+    o1Router: manifest.contracts.O1RouterReplica!.address,
+    async seedO1Pool(stock, settlementAmount, stockAmount) {
+      const router = manifest.contracts.O1RouterReplica!.address;
+      const { encodeFunctionData } = await import("viem");
+      await this.mintSettlement(this.account.address, settlementAmount);
+      await this.sendTx({
+        to: stock,
+        data: encodeFunctionData({ abi: stockTokenAbi, functionName: "transfer", args: [this.account.address, stockAmount] }),
+      });
+      await this.sendTx({
+        to: settlement,
+        data: encodeFunctionData({ abi: settlementTokenAbi, functionName: "approve", args: [router, settlementAmount] }),
+      });
+      await this.sendTx({
+        to: stock,
+        data: encodeFunctionData({ abi: stockTokenAbi, functionName: "approve", args: [router, stockAmount] }),
+      });
+      return this.sendTx({
+        to: router,
+        data: encodeFunctionData({
+          abi: o1RouterAbi,
+          functionName: "seedPool",
+          args: [settlement, stock, settlementAmount, stockAmount],
+        }),
+      });
+    },
+    async setO1PartialFillBps(bps) {
+      const { encodeFunctionData } = await import("viem");
+      return this.sendTx({
+        to: manifest.contracts.O1RouterReplica!.address,
+        data: encodeFunctionData({ abi: o1RouterAbi, functionName: "setPartialFillBps", args: [bps] }),
+      });
+    },
+    async o1SwapEvents() {
+      const logs = await publicClient.getLogs({
+        address: manifest.contracts.O1RouterReplica!.address,
+        event: o1RouterAbi.find((item) => (item as { name?: string }).name === "SwapExecuted") as never,
+        fromBlock: 0n,
+      });
+      return logs.map((log) => {
+        const args = (log as unknown as { args: { amountIn: bigint; fee: bigint; amountOut: bigint; recipient: string } }).args;
+        return { amountIn: args.amountIn, fee: args.fee, amountOut: args.amountOut, recipient: args.recipient };
+      });
     },
   };
   cached = handle;

@@ -55,6 +55,20 @@ const callTuple = {
   ],
 } as const;
 
+export const o1RouterAbi = parseAbi([
+  "function owner() view returns (address)",
+  "function FEE_BPS() view returns (uint24)",
+  "function partialFillBps() view returns (uint256)",
+  "function pairKeyOf(address a, address b) view returns (bytes32)",
+  "function pools(bytes32 key) view returns (address settlement, address stock, uint256 reserveSettlement, uint256 reserveStock)",
+  "function seedPool(address settlement, address stock, uint256 settlementAmount, uint256 stockAmount)",
+  "function setPartialFillBps(uint256 bps)",
+  "function quoteOut(bytes32 key, uint256 amountInNet, bool settlementIn) view returns (uint256)",
+  "function swapExactIn(address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut, address recipient, uint64 deadline) returns (uint256 amountOut)",
+  "event PoolSeeded(bytes32 indexed pairKey, address indexed settlement, address indexed stock, uint256 settlementAmount, uint256 stockAmount)",
+  "event SwapExecuted(address indexed sender, bytes32 indexed pairKey, uint256 amountIn, uint256 fee, uint256 amountOut, address indexed recipient)",
+]);
+
 export const executionAccountAbi = [
   { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address", name: "" }] },
   { type: "function", name: "relayer", stateMutability: "view", inputs: [], outputs: [{ type: "address", name: "" }] },

@@ -29,7 +29,9 @@ export default async function globalSetup(): Promise<() => void> {
   // Start an isolated loopback Anvil (chain 31337, no fork) and deploy the labelled
   // test contracts once per run. Ephemeral test-only signer material is generated
   // here and never written to git.
-  const port = process.env.TESTNET_PORT ?? "8599";
+  // A fixed port lets a stale anvil from a timed-out run poison later runs (its
+  // advanced clock breaks onchain deadlines), so default to a random loopback port.
+  const port = process.env.TESTNET_PORT ?? String(20_000 + Math.floor(Math.random() * 20_000));
   const url = `http://127.0.0.1:${port}`;
   const { startAnvil, waitForRpc, testnetService, relayerAccount } = await import(
     "../src/backend/services/onchain/testnet"
@@ -45,6 +47,7 @@ export default async function globalSetup(): Promise<() => void> {
     [
       { name: "TestSettlementToken", artifact: "TestSettlementToken", args: ["V3ST Test USDC", "tUSDC", 6] },
       { name: "TestStockRegistry", artifact: "TestStockRegistry", args: [] },
+      { name: "O1RouterReplica", artifact: "O1RouterReplica", args: [] },
     ],
     { url },
   );

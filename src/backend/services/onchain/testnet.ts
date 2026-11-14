@@ -7,6 +7,7 @@ import path from "node:path";
 import { createPublicClient, createWalletClient, custom, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
+import { policy } from "@/backend/config/policy";
 import { assertChainIdAllowed, parseRpcEndpoint } from "@/backend/integrations/onchain-policy";
 import type { BetaContext, StockProviderId } from "@/backend/services/onchain/types";
 import { sha256Hex } from "@/utils";
@@ -92,6 +93,14 @@ export function publicClientFor(url: string = testnetRpcUrl()) {
       },
     }),
   });
+}
+
+// Onchain deadlines must be derived from the chain clock, not the wall clock: on the
+// local testnet rapid block mining can run block.timestamp ahead of wall time.
+export async function chainDeadlineFromNow(extraSeconds?: number): Promise<Date> {
+  const block = await publicClientFor().getBlock({ blockTag: "latest" });
+  const window = extraSeconds ?? policy.onchain.executionWindowSeconds;
+  return new Date((Number(block.timestamp) + window) * 1000);
 }
 
 export function relayerAccount(): ReturnType<typeof privateKeyToAccount> {

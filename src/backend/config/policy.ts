@@ -28,6 +28,7 @@ export const policy = {
     networkNamespace: "testnet",
     requiredConfirmations: 2,
     quoteTtlSeconds: 30,
+    executionWindowSeconds: 120,
     referenceMaxAgeSeconds: 60,
     maxPriceImpactBps: 100,
     authorizationMaxDays: 30,
