@@ -410,6 +410,7 @@ model RampOrder {
     payToAccountNumber  String?
     payToAccountName    String?
     payToReference      String?
+    onchainFundedAt     DateTime?
     destBankCode        String?
     destBankName        String?
     destAccountNumber   String?

@@ -20,6 +20,8 @@ import type { TradeDto } from "@/types/dto";
 import { fromDbRaw, fromDbRawNullable, toDbRaw } from "@/utils/asset-units";
 import { NotFoundException } from "@/utils/exceptions";
 
+import { progressTrade as investmentProgressTrade } from "@/backend/services/investments";
+
 import { tradeRouter } from "./router";
 
 export function tradeToDto(t: TradeOrder): TradeDto {
@@ -155,6 +157,12 @@ class TradeService {
           throw new RetryableError("TRADING_PAUSED", 600_000);
         }
         const stock = await stockService.get(t.stockId);
+        if (stock.networkId) {
+          // Testnet stocks route through the persisted investment/operation contracts.
+          await investmentProgressTrade(t.id);
+          const refreshed = await tx.tradeOrder.findUniqueOrThrow({ where: { id: tradeId } });
+          return { trade: refreshed, transitioned: refreshed.status !== "pending" };
+        }
         const routed = await tradeRouter.route({
           stock,
           side: t.side,

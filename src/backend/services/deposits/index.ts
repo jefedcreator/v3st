@@ -23,6 +23,7 @@ import { ratesService } from "@/backend/services/rates";
 import { RetryableError } from "@/backend/services/jobs/types";
 import { stockService } from "@/backend/services/stocks";
 import { tradeService } from "@/backend/services/trades";
+import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import { walletService } from "@/backend/services/wallets";
 import { canonicalJson, sha256Hex } from "@/utils";
@@ -331,6 +332,20 @@ class DepositService {
             patch: { holdReason: null },
             actor: "system",
           });
+          // Deposit completion funds the user's testnet execution account through a
+          // real local transfer, exactly once per order.
+          if (!current.onchainFundedAt) {
+            const fundedHash = await testnetWalletService.fundExecutionAccountOnce(
+              current.userId,
+              BigInt(settle.amount),
+            );
+            if (fundedHash) {
+              await tx.rampOrder.update({
+                where: { id: current.id },
+                data: { onchainFundedAt: now() },
+              });
+            }
+          }
           if (order.stockId) {
             await tradeService.createBuy(tx, {
               key: `deposit-buy:${order.id}`,

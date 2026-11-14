@@ -386,3 +386,6 @@ ALTER TABLE "strategy_quotes" ADD CONSTRAINT "strategy_quotes_strategyId_fkey" F
 ALTER TABLE "strategy_quotes" ADD CONSTRAINT "strategy_quotes_authorizationId_fkey" FOREIGN KEY ("authorizationId") REFERENCES "investment_authorizations"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "reward_receipts" ADD CONSTRAINT "reward_receipts_networkId_fkey" FOREIGN KEY ("networkId") REFERENCES "onchain_networks"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "earning_allocations" ADD CONSTRAINT "earning_allocations_receiptId_fkey" FOREIGN KEY ("receiptId") REFERENCES "reward_receipts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Track one-time local testnet funding of the user's execution account per ramp order.
+ALTER TABLE "ramp_orders" ADD COLUMN "onchainFundedAt" TIMESTAMPTZ(6);
