@@ -132,7 +132,7 @@ class O1ReplicaAdapter implements SpotAdapter {
       priceImpactBps: parsed.priceImpactBps,
       expiresAt: new Date(expiryMs),
       sourceBlock: await publicClientFor().getBlockNumber(),
-      routeFingerprint: keccak256(encodePacked(["string"], [parsed.route.join(">")])) as string,
+      routeFingerprint: keccak256(encodePacked(["string"], [parsed.route.join(">")])),
     };
   }
 

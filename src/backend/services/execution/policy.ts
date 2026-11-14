@@ -3,9 +3,10 @@ import { decodeFunctionData, type Address, type Hex, keccak256, toBytes } from "
 import { now } from "@/backend/clock";
 import { assertOnchainContext } from "@/backend/integrations/onchain-policy";
 import { settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
-import type { ExecutionPlan, PreparedCall, StrategyPlan } from "@/backend/services/onchain/types";
+import type { AssetAmount, ExecutionPlan, PreparedCall, StrategyPlan } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
 import { readManifest } from "@/backend/services/onchain/testnet";
+import { db } from "@/server/db";
 import { canonicalJson, sha256Hex } from "@/utils";
 
 export class ExecutionPlanRejected extends Error {
@@ -28,7 +29,9 @@ export function planFingerprint(plan: ExecutionPlan | StrategyPlan): string {
   );
 }
 
-function allowedTargets(plan: ExecutionPlan | StrategyPlan): Set<string> {
+// Approved call targets: manifest contracts, plan asset addresses, and pool
+// addresses recorded in stock/strategy provenance (pools are deployed per test).
+async function allowedTargets(plan: ExecutionPlan | StrategyPlan): Promise<Set<string>> {
   const manifest = readManifest();
   const targets = new Set<string>();
   for (const entry of Object.values(manifest.contracts)) {
@@ -45,6 +48,17 @@ function allowedTargets(plan: ExecutionPlan | StrategyPlan): Set<string> {
       targets.add(parseAssetKey(asset).address.toLowerCase());
     } catch {
       throw new ExecutionPlanRejected(`Plan references a malformed asset key ${asset}`);
+    }
+  }
+  const provenanced = await Promise.all([
+    db.stock.findMany({ select: { provenance: true } }),
+    db.strategy.findMany({ select: { provenance: true } }),
+  ]);
+  for (const row of provenanced.flat()) {
+    const pool = (row.provenance as { hydrexPool?: unknown; pool?: unknown } | null)?.hydrexPool ??
+      (row.provenance as { pool?: unknown } | null)?.pool;
+    if (typeof pool === "string" && /^0x[0-9a-fA-F]{40}$/.test(pool)) {
+      targets.add(pool.toLowerCase());
     }
   }
   return targets;
@@ -101,9 +115,17 @@ function assertCall(
     if (amount === MAX_UINT256) {
       throw new ExecutionPlanRejected("Unlimited approvals are rejected");
     }
-    const inputCap =
-      "expectedInput" in plan ? plan.expectedInput.raw : (plan.maximumInputs[0]?.raw ?? 0n);
-    if (amount > inputCap) {
+    // The cap is per asset: the approval on token X may not exceed X's bounded input.
+    const caps: AssetAmount[] = "expectedInput" in plan ? [plan.expectedInput] : plan.maximumInputs;
+    const cap =
+      caps.find((a) => {
+        try {
+          return parseAssetKey(a.asset).address.toLowerCase() === call.to.toLowerCase();
+        } catch {
+          return false;
+        }
+      })?.raw ?? 0n;
+    if (amount > cap) {
       throw new ExecutionPlanRejected("Approval exceeds the bounded input cap");
     }
     return;
@@ -126,7 +148,7 @@ export async function assertExecutionPlan(plan: ExecutionPlan | StrategyPlan): P
   if (plan.calls.length === 0 || plan.calls.length > 8) {
     throw new ExecutionPlanRejected("Plan must contain between 1 and 8 calls");
   }
-  const targets = allowedTargets(plan);
+  const targets = await allowedTargets(plan);
   for (const call of plan.calls) {
     assertCall(call, plan, targets);
   }

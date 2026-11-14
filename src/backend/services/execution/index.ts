@@ -186,7 +186,7 @@ class ExecutionService {
     const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
     if (["prepared", "signed", "broadcast", "confirmed", "finalized"].includes(op.status)) return;
     const quote = this.quoteOf(op);
-    const context = (quote as ExecutionQuote).context as BetaContext;
+    const context = ((quote as ExecutionQuote).context ?? (quote as StrategyQuote).request?.context) as BetaContext;
     let plan: ExecutionPlan | StrategyPlan;
     if (op.kind === "spot") {
       const adapter = onchainRegistry.spot(op.providerId as StockProviderId, context);

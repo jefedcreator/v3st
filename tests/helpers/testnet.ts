@@ -54,6 +54,8 @@ export type TestnetHandle = {
   blockNumber(): Promise<bigint>;
   chainId(): Promise<number>;
   o1Router: Address;
+  hydropumpLocker: Address;
+  deployHydrexPool(stock: Address): Promise<Address>;
   seedO1Pool(stock: Address, settlementAmount: bigint, stockAmount: bigint): Promise<Hex>;
   setO1PartialFillBps(bps: bigint): Promise<Hex>;
   o1SwapEvents(fromBlock?: bigint): Promise<{ amountIn: bigint; fee: bigint; amountOut: bigint; recipient: string }[]>;
@@ -228,6 +230,23 @@ export async function testnet(): Promise<TestnetHandle> {
       return Number(await publicClient.getChainId());
     },
     o1Router: manifest.contracts.O1RouterReplica!.address,
+    hydropumpLocker: manifest.contracts.HydropumpLockerReplica!.address,
+    async deployHydrexPool(stock) {
+      const artifact = JSON.parse(
+        (await import("node:fs")).readFileSync(
+          `${process.cwd()}/build/foundry/out/HydrexPoolReplica.sol/HydrexPoolReplica.json`,
+          "utf8",
+        ),
+      ) as { abi: unknown; bytecode: { object: string } };
+      const hash = await wallet.deployContract({
+        abi: artifact.abi as never,
+        bytecode: `0x${artifact.bytecode.object.replace(/^0x/, "")}` as Hex,
+        args: [settlement, stock],
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (!receipt.contractAddress) throw new Error("hydrex pool deployment failed");
+      return receipt.contractAddress;
+    },
     async seedO1Pool(stock, settlementAmount, stockAmount) {
       const router = manifest.contracts.O1RouterReplica!.address;
       const { encodeFunctionData } = await import("viem");

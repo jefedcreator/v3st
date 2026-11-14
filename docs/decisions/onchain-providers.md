@@ -57,3 +57,18 @@ timeout/ambiguous response stays unresolved with the original operation hash unt
 evidence is reconciled (no resend). A successful quote never grants stock eligibility or
 location clearance, and Bankr gas limits are not an unlimited sponsorship guarantee — the
 shared local sponsor budgets model exhaustion.
+
+## Hydrex liquidity and Hydropump fee mechanics (beta)
+
+The Hydrex replica is a local two-asset pool (`HydrexPoolReplica`) with deterministic
+constant-product reserves and a fixture fee in bps. Trading fees accrue to a per-share
+accumulator and are claimed manually (`separateClaim: true`); the distinct exit-realized
+variant (`separateClaim: false`) pays fees together with principal on `withdrawAndClaim`.
+LP ownership (pro-rata shares with deposit/withdraw), protocol-account incentives (a funded
+stock reward reserve that is NOT automatically USDC; settlement conversion pays only from a
+funded sink minus a conversion fee) and Hydropump creator fees are kept distinct. Zero
+trading activity produces zero fees; a deterministic loss fixture lets exits return less
+value than entry while fees stay separately claimable. This is not a full Algebra/Hydrex
+implementation. The Hydropump locker replica (`HydropumpLockerReplica`) declares permanently
+locked principal (any `withdraw` reverts) and beneficiary-only fee claims; it is registered
+only as provenance/eligibility evidence, never as a redeemable income strategy.

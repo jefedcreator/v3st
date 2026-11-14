@@ -1,6 +1,7 @@
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 
 import { bankrProviderDescriptor } from "./bankr";
+import { hydrexProviderDescriptor } from "./hydrex";
 import { o1ProviderDescriptor } from "./o1";
 
 // Registers every beta provider replica with the onchain registry. Actual provider
@@ -13,5 +14,10 @@ onchainRegistry.register("bankr", {
   spot: () => bankrProviderDescriptor.replica,
   actual: () => bankrProviderDescriptor.actualFactory(),
 });
+onchainRegistry.register("hydrex", {
+  spot: () => hydrexProviderDescriptor.replica,
+  strategy: () => hydrexProviderDescriptor.strategy,
+  actual: () => hydrexProviderDescriptor.actualFactory(),
+});
 
-export { bankrProviderDescriptor, o1ProviderDescriptor };
+export { bankrProviderDescriptor, hydrexProviderDescriptor, o1ProviderDescriptor };
