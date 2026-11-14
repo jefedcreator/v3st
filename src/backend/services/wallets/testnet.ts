@@ -103,12 +103,14 @@ class TestnetWalletService {
     if (targets.size === 0) return;
     const account = relayerAccount();
     const walletClient = walletClientFor(account);
+    const publicClient = publicClientFor();
     for (const address of targets) {
-      await walletClient.writeContract({
+      const hash = await walletClient.writeContract({
         address: address as Address,
         abi: executionAccountAbi,
         functionName: "bumpAuthorizationEpoch",
       });
+      await publicClient.waitForTransactionReceipt({ hash });
     }
   }
 }

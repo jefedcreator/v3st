@@ -72,3 +72,20 @@ value than entry while fees stay separately claimable. This is not a full Algebr
 implementation. The Hydropump locker replica (`HydropumpLockerReplica`) declares permanently
 locked principal (any `withdraw` reverts) and beneficiary-only fee claims; it is registered
 only as provenance/eligibility evidence, never as a redeemable income strategy.
+
+## Source-specific stock reward replicas (beta)
+
+Stonks, BaseStonk and Feel.cash ship distribution-only replicas: none declares general
+direct-stock spot execution (the registry rejects `spot()` for them explicitly) and all
+actual factories stay disabled. `StockDistributionReplica` provides chain-backed
+distribution epochs with a claimed bitmap and snapshot entitlements (set by the fixture
+owner; later balance changes do not alter them), a preserved reward asset, and funding
+only from the local fixture treasury — claims transfer only funded balances, duplicate
+claims revert, and zero-funds epochs revert. Stonks binds a router/locker generation per
+launch and rejects generation mismatches (one generation's coin is never sent to another
+generation's contracts). BaseStonk's `HookFeeReplica` freezes per-launch hook rules at
+registration, leaves the fee recipient changeable, pays only funded pending fees to the
+current recipient, and treats unknown hook versions/entitlements as unavailable; no public
+holder claim API is invented. Feel ties eligibility to an eligible launch-token holding
+snapshot — ordinary ownership of the paired stock does not qualify. All schema/ABI names
+are V3ST replica definitions.

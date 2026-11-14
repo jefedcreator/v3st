@@ -55,6 +55,8 @@ export type TestnetHandle = {
   chainId(): Promise<number>;
   o1Router: Address;
   hydropumpLocker: Address;
+  stockDistribution: Address;
+  hookFee: Address;
   deployHydrexPool(stock: Address): Promise<Address>;
   seedO1Pool(stock: Address, settlementAmount: bigint, stockAmount: bigint): Promise<Hex>;
   setO1PartialFillBps(bps: bigint): Promise<Hex>;
@@ -80,6 +82,14 @@ export async function testnet(): Promise<TestnetHandle> {
   const registry = manifest.contracts.TestStockRegistry?.address;
   if (!settlement || !registry) throw new Error("manifest missing core contracts");
 
+  // Anvil returns the tx hash before the automined block is visible to reads, so
+  // every write path must wait for its receipt before tests read state.
+  async function sendAndWait(hash: Promise<Hex> | Hex): Promise<Hex> {
+    const h = await hash;
+    await publicClient.waitForTransactionReceipt({ hash: h });
+    return h;
+  }
+
   const handle: TestnetHandle = {
     url,
     manifest,
@@ -103,13 +113,14 @@ export async function testnet(): Promise<TestnetHandle> {
       await rpcRequest(url, "anvil_setBalance", [address, `0x${wei.toString(16)}`]);
     },
     async mintSettlement(to, amount) {
-      const hash = await wallet.writeContract({
-        address: settlement,
-        abi: settlementTokenAbi,
-        functionName: "mint",
-        args: [to, amount],
-      });
-      return hash;
+      return sendAndWait(
+        wallet.writeContract({
+          address: settlement,
+          abi: settlementTokenAbi,
+          functionName: "mint",
+          args: [to, amount],
+        }),
+      );
     },
     async deployStockToken(name, symbol, supply) {
       const artifact = JSON.parse(
@@ -128,7 +139,7 @@ export async function testnet(): Promise<TestnetHandle> {
       return receipt.contractAddress;
     },
     async registerStock(input) {
-      return wallet.writeContract({
+      return sendAndWait(wallet.writeContract({
         address: registry,
         abi: stockRegistryAbi,
         functionName: "registerInstrument",
@@ -142,42 +153,50 @@ export async function testnet(): Promise<TestnetHandle> {
           input.issuer ?? "V3ST fixture issuer",
           input.rights ?? "tokenized stock exposure; no voting or redemption rights",
         ],
-      });
+      }));
     },
     async setReferencePrice(key, priceMicroUsd, basis, asOf) {
-      return wallet.writeContract({
-        address: registry,
-        abi: stockRegistryAbi,
-        functionName: "setReferencePrice",
-        args: [key, priceMicroUsd, basis, BigInt(asOf)],
-      });
+      return sendAndWait(
+        wallet.writeContract({
+          address: registry,
+          abi: stockRegistryAbi,
+          functionName: "setReferencePrice",
+          args: [key, priceMicroUsd, basis, BigInt(asOf)],
+        }),
+      );
     },
     async setTradingFlags(key, paused, delisted, enabled) {
-      return wallet.writeContract({
-        address: registry,
-        abi: stockRegistryAbi,
-        functionName: "setTradingFlags",
-        args: [key, paused, delisted, enabled],
-      });
+      return sendAndWait(
+        wallet.writeContract({
+          address: registry,
+          abi: stockRegistryAbi,
+          functionName: "setTradingFlags",
+          args: [key, paused, delisted, enabled],
+        }),
+      );
     },
     async scheduleMultiplier(token, toWad, effectiveAt) {
-      return wallet.writeContract({
-        address: token,
-        abi: stockTokenAbi,
-        functionName: "scheduleMultiplier",
-        args: [toWad, BigInt(effectiveAt)],
-      });
+      return sendAndWait(
+        wallet.writeContract({
+          address: token,
+          abi: stockTokenAbi,
+          functionName: "scheduleMultiplier",
+          args: [toWad, BigInt(effectiveAt)],
+        }),
+      );
     },
     async cancelAction(token, actionId) {
-      return wallet.writeContract({
-        address: token,
-        abi: stockTokenAbi,
-        functionName: "cancelAction",
-        args: [actionId],
-      });
+      return sendAndWait(
+        wallet.writeContract({
+          address: token,
+          abi: stockTokenAbi,
+          functionName: "cancelAction",
+          args: [actionId],
+        }),
+      );
     },
     async applyDueActions(token) {
-      return wallet.writeContract({ address: token, abi: stockTokenAbi, functionName: "applyDueActions" });
+      return sendAndWait(wallet.writeContract({ address: token, abi: stockTokenAbi, functionName: "applyDueActions" }));
     },
     async settlementBalance(address) {
       return publicClient.readContract({
@@ -211,7 +230,7 @@ export async function testnet(): Promise<TestnetHandle> {
       }) as Promise<bigint>;
     },
     async sendTx(input) {
-      return wallet.sendTransaction({ to: input.to, data: input.data, value: input.value ?? 0n });
+      return sendAndWait(wallet.sendTransaction({ to: input.to, data: input.data, value: input.value ?? 0n }));
     },
     async receipt(hash) {
       const r = await publicClient.getTransactionReceipt({ hash });
@@ -231,6 +250,8 @@ export async function testnet(): Promise<TestnetHandle> {
     },
     o1Router: manifest.contracts.O1RouterReplica!.address,
     hydropumpLocker: manifest.contracts.HydropumpLockerReplica!.address,
+    stockDistribution: manifest.contracts.StockDistributionReplica!.address,
+    hookFee: manifest.contracts.HookFeeReplica!.address,
     async deployHydrexPool(stock) {
       const artifact = JSON.parse(
         (await import("node:fs")).readFileSync(
@@ -279,6 +300,7 @@ export async function testnet(): Promise<TestnetHandle> {
         data: encodeFunctionData({ abi: o1RouterAbi, functionName: "setPartialFillBps", args: [bps] }),
       });
     },
+
     async o1SwapEvents(fromBlock = 0n) {
       const logs = await publicClient.getLogs({
         address: manifest.contracts.O1RouterReplica!.address,

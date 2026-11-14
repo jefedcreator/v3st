@@ -12,6 +12,8 @@ async function main(): Promise<void> {
     { name: "TestStockRegistry", artifact: "TestStockRegistry", args: [] },
     { name: "O1RouterReplica", artifact: "O1RouterReplica", args: [] },
     { name: "HydropumpLockerReplica", artifact: "HydropumpLockerReplica", args: [] },
+    { name: "StockDistributionReplica", artifact: "StockDistributionReplica", args: [] },
+    { name: "HookFeeReplica", artifact: "HookFeeReplica", args: [] },
     { name: "StockTokenTSTA", artifact: "TestStockToken", args: ["Test Stock A", "TSTA", 1000000000000000000000000n] },
     { name: "StockTokenTSTB", artifact: "TestStockToken", args: ["Test Stock B", "TSTB", 1000000000000000000000000n] },
   ]);

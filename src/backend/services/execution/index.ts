@@ -400,7 +400,10 @@ class ExecutionService {
         });
         throw new RetryableError("BROADCAST_INTERRUPTED", 1_000);
       }
-      await client.sendRawTransaction({ serializedTransaction: serialized });
+      const sentHash = await client.sendRawTransaction({ serializedTransaction: serialized });
+      // Wait for inclusion: anvil returns the hash before the block is visible to
+      // reads, and an immediate observe would otherwise report a false "unknown".
+      await client.waitForTransactionReceipt({ hash: sentHash });
       void url;
     }
     await db.onchainOperation.update({

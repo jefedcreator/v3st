@@ -49,6 +49,8 @@ export default async function globalSetup(): Promise<() => void> {
       { name: "TestStockRegistry", artifact: "TestStockRegistry", args: [] },
       { name: "O1RouterReplica", artifact: "O1RouterReplica", args: [] },
       { name: "HydropumpLockerReplica", artifact: "HydropumpLockerReplica", args: [] },
+      { name: "StockDistributionReplica", artifact: "StockDistributionReplica", args: [] },
+      { name: "HookFeeReplica", artifact: "HookFeeReplica", args: [] },
     ],
     { url },
   );
