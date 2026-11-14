@@ -1,0 +1,6 @@
+{
+  "_source": "docs.yellowcard.engineering — GET /business/networks?country=NG documented example (2026-11-13)",
+  "data": [
+    { "id": "044", "code": "044", "name": "Beta Test Bank A", "country": "NG" }
+  ]
+}

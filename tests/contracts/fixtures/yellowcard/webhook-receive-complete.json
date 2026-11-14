@@ -1,0 +1,9 @@
+{
+  "_source": "docs.yellowcard.engineering — webhook payload documented example (2026-11-13)",
+  "id": "8f0c4d2e",
+  "sequenceId": "dep_test_0001",
+  "status": "complete",
+  "apiKey": "test-key",
+  "event": "RECEIVE.COMPLETE",
+  "executedAt": 1763017200000
+}

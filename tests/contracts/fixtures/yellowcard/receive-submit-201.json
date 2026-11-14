@@ -1,0 +1,16 @@
+{
+  "_source": "docs.yellowcard.engineering — POST /business/receive documented 201 example (2026-11-13)",
+  "id": "8f0c4d2e",
+  "sequenceId": "dep_test_0001",
+  "status": "pending",
+  "localAmount": "20000.00",
+  "amount": "12.375",
+  "rate": "1600",
+  "expiresAt": 1763060400000,
+  "bankInfo": {
+    "bankName": "Beta Test Bank (sandbox)",
+    "accountNumber": "9900001234",
+    "accountName": "V3ST BETA TEST",
+    "reference": null
+  }
+}

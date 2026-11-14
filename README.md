@@ -31,7 +31,16 @@ After Task 1 wires and enforces the environment schema, keep `APP_STAGE=beta` an
 yarn dev
 ```
 
-The current page is the T3 starter. NextAuth/Discord must be replaced by the planned beta identity/session flow; no real OAuth application is needed to begin implementation. No application migrations are checked in yet; Task 3 creates them. Do not use `db:push` or migration commands against a live or shared database.
+The current page is the T3 starter. NextAuth/Discord must be replaced by the planned beta identity/session flow; no real OAuth application is needed to begin implementation. Do not use `db:push` or migration commands against a live or shared database.
+
+## Backend commands
+
+- `yarn dev` / `yarn start` — Next.js app serving `/api/v1/*` (rewrites also expose `/v1/*` and `/webhooks/*`).
+- `yarn worker` — background job worker (required for order progress, scheduled batches, reconciliation).
+- `yarn db:migrate` — apply migrations; `yarn db:generate` — create a dev migration; `yarn db:studio` — Prisma Studio.
+- `yarn seed:beta` — idempotent beta seed (treasury wallets, opening balances, TSTA/TSTB catalog); refuses to run outside `APP_STAGE=beta`.
+- `yarn test` / `yarn typecheck` / `yarn lint` / `yarn build` — the verification gate.
+- Runbook for schedules, ops endpoints and procedures: [docs/runbooks/backend-beta.md](docs/runbooks/backend-beta.md).
 
 ## Verification and handoff
 
