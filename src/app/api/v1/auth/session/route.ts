@@ -3,7 +3,7 @@ import { authService } from "@/backend/services/auth";
 import { sessionValidatorSchema, type SessionValidatorSchema } from "@/backend/validators/auth.validator";
 import { ok } from "@/utils/response";
 
-export const POST = withMiddleware<SessionValidatorSchema>(
+export const POST = withMiddleware<SessionValidatorSchema, null, null>(
   async (request) => {
     const { identity_token } = request.validatedData!;
     const result = await authService.signIn(identity_token);

@@ -1,17 +1,25 @@
 import type { NextRequest } from "next/server";
 
-import type { PaginationQuerySchema } from "@/backend/validators/index.validator";
+import type { EventsQuerySchema } from "@/backend/validators/events.validator";
+import type {
+  IdParamSchema,
+  PaginationQuerySchema,
+} from "@/backend/validators/index.validator";
 import type { ErrorCode } from "@/types";
 import type { Session, User } from "../../../generated/prisma";
 
 export type AuthenticatedUser = User & { session: Session };
 
-export type QueryParameters = PaginationQuerySchema;
+export type PathParameters = IdParamSchema;
 
-export interface AuthRequest<B = unknown, Q = QueryParameters> extends NextRequest {
-  parsedBody?: B;
+export type QueryParameters = PaginationQuerySchema | EventsQuerySchema;
+
+export interface AuthRequest<B = null, P = null, Q = null> extends NextRequest {
+  parsedBody?: unknown;
+  parsedParams?: Record<string, string>;
+  parsedQuery?: Record<string, string>;
   query?: Q;
-  params?: Record<string, string>;
+  params?: P;
   validatedData?: B;
   user: AuthenticatedUser | null;
   rawBody?: Uint8Array;
@@ -27,6 +35,6 @@ export type MiddlewareResponse = {
   code?: ErrorCode;
 };
 
-export type MiddlewareFunction<B = unknown, Q = QueryParameters> = (
-  req: AuthRequest<B, Q>,
+export type MiddlewareFunction<B = null, P = null, Q = null> = (
+  req: AuthRequest<B, P, Q>,
 ) => Promise<MiddlewareResponse>;

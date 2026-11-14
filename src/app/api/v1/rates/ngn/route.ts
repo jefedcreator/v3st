@@ -4,7 +4,7 @@ import { rateToDto } from "@/utils/money";
 import { HttpException, ServiceUnavailableException } from "@/utils/exceptions";
 import { ok } from "@/utils/response";
 
-export const GET = withMiddleware(async () => {
+export const GET = withMiddleware<null, null, null>(async () => {
   try {
     const r = await ratesService.display();
     return ok(

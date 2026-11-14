@@ -10,7 +10,7 @@ import {
 } from "@/backend/validators/index.validator";
 import { paginated } from "@/utils/response";
 
-export const GET = withMiddleware<unknown, PaginationQuerySchema>(
+export const GET = withMiddleware<null, null, PaginationQuerySchema>(
   async (request) => {
     const result = await earningsService.list(request.user!.id, request.query!);
     return paginated(result.data, "Earnings", result.page, result.size, result.total);

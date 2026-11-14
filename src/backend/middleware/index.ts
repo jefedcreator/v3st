@@ -22,14 +22,15 @@ import type {
   AuthRequest,
   MiddlewareFunction,
   MiddlewareResponse,
+  PathParameters,
   QueryParameters,
 } from "./types";
 
 const DEFAULT_MAX_BODY_BYTES = 65_536;
 
-type Handler<B, Q> = (
-  request: AuthRequest<B, Q>,
-  context: { params: Record<string, string> },
+type Handler<B, P, Q> = (
+  request: AuthRequest<B, P, Q>,
+  context: { params: P | undefined },
 ) => Promise<Response>;
 
 type WithMiddlewareOptions = {
@@ -61,9 +62,9 @@ function errorJson(
   });
 }
 
-export const withMiddleware = <B = unknown, Q = QueryParameters>(
-  handler: Handler<B, Q>,
-  middlewares: MiddlewareFunction<B, Q>[],
+export const withMiddleware = <B = null, P = null, Q = null>(
+  handler: Handler<B, P, Q>,
+  middlewares: MiddlewareFunction<B, P, Q>[],
   options?: WithMiddlewareOptions,
 ) => {
   const bodyMode = options?.bodyMode ?? "json";
@@ -73,18 +74,18 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
     req: unknown,
     context: { params?: Promise<Record<string, string>> } | undefined,
   ): Promise<Response> => {
-    const request = req as AuthRequest<B, Q>;
+    const request = req as AuthRequest<B, P, Q>;
     request.requestId = randomUUID();
     try {
       const resolvedParams = await (context?.params ?? Promise.resolve({}));
-      request.params = resolvedParams;
+      request.parsedParams = resolvedParams;
 
       const url = new URL(request.url);
       const query: Record<string, string> = {};
       url.searchParams.forEach((value, key) => {
         query[key] = value;
       });
-      request.query = query as Q;
+      request.parsedQuery = query;
 
       if (
         bodyMode !== "none" &&
@@ -106,11 +107,11 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
         if (bodyMode === "raw") {
           request.rawBody = bytes;
         } else if (bytes.length === 0) {
-          request.parsedBody = {} as B;
+          request.parsedBody = {};
         } else {
           const text = new TextDecoder().decode(bytes);
           try {
-            request.parsedBody = JSON.parse(text) as B;
+            request.parsedBody = JSON.parse(text);
           } catch {
             throw new BadRequestException("Malformed JSON body", "MALFORMED_JSON");
           }
@@ -129,7 +130,7 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
         }
       }
 
-      const response = await handler(request, { params: request.params ?? {} });
+      const response = await handler(request, { params: request.params });
       response.headers.set("X-Request-Id", request.requestId);
       return response;
     } catch (error) {
@@ -160,7 +161,7 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
     context: { params: Promise<Record<string, string>> },
   ): Promise<Response> => {
     const start = Date.now();
-    const request = req as AuthRequest<B, Q>;
+    const request = req as AuthRequest<B, P, Q>;
     const method = request.method;
     const parsed = new URL(request.url);
     const path = `${parsed.pathname}${parsed.search}`;
@@ -173,7 +174,9 @@ export const withMiddleware = <B = unknown, Q = QueryParameters>(
 
 export const bodyValidatorMiddleware =
   <B>(schema: z.ZodType<B, z.ZodTypeDef, unknown>) =>
-  async (request: AuthRequest<B, unknown>): Promise<MiddlewareResponse> => {
+  async (
+    request: Pick<AuthRequest<B>, "parsedBody" | "validatedData">,
+  ): Promise<MiddlewareResponse> => {
     const result = schema.safeParse(request.parsedBody ?? {});
     if (!result.success) {
       const first = result.error.issues[0];
@@ -191,8 +194,10 @@ export const bodyValidatorMiddleware =
 
 export const queryValidatorMiddleware =
   <Q>(schema: z.ZodType<Q, z.ZodTypeDef, unknown>) =>
-  async (request: AuthRequest<unknown, Q>): Promise<MiddlewareResponse> => {
-    const result = schema.safeParse(request.query ?? {});
+  async (
+    request: Pick<AuthRequest<null, null, Q>, "parsedQuery" | "query">,
+  ): Promise<MiddlewareResponse> => {
+    const result = schema.safeParse(request.parsedQuery ?? {});
     if (!result.success) {
       const first = result.error.issues[0];
       const path = first?.path.join(".");
@@ -208,9 +213,11 @@ export const queryValidatorMiddleware =
   };
 
 export const pathParamValidatorMiddleware =
-  <P extends z.ZodTypeAny>(schema: P) =>
-  async (request: AuthRequest<unknown, unknown>): Promise<MiddlewareResponse> => {
-    const result = schema.safeParse(request.params ?? {});
+  <P>(schema: z.ZodType<P, z.ZodTypeDef, unknown>) =>
+  async (
+    request: Pick<AuthRequest<null, P>, "parsedParams" | "params">,
+  ): Promise<MiddlewareResponse> => {
+    const result = schema.safeParse(request.parsedParams ?? {});
     if (!result.success) {
       const first = result.error.issues[0];
       const path = first?.path.join(".");
@@ -221,13 +228,14 @@ export const pathParamValidatorMiddleware =
         code: "VALIDATION_FAILED",
       };
     }
+    request.params = result.data;
     return { message: "", statusCode: 200, next: true };
   };
 
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
-export const idempotencyKeyMiddleware = async <B, Q>(
-  request: AuthRequest<B, Q>,
+export const idempotencyKeyMiddleware = async <B, P, Q>(
+  request: AuthRequest<B, P, Q>,
 ): Promise<MiddlewareResponse> => {
   const key = request.headers.get("idempotency-key");
   if (!key) {
@@ -250,8 +258,8 @@ export const idempotencyKeyMiddleware = async <B, Q>(
   return { message: "", statusCode: 200, next: true };
 };
 
-export const authMiddleware = async <B, Q>(
-  request: AuthRequest<B, Q>,
+export const authMiddleware = async <B, P, Q>(
+  request: AuthRequest<B, P, Q>,
 ): Promise<MiddlewareResponse> => {
   const cookieToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   let sessionToken: string | undefined;
@@ -278,8 +286,8 @@ export const authMiddleware = async <B, Q>(
   return { message: "", statusCode: 200, next: true };
 };
 
-export const optionalAuthMiddleware = async <B, Q>(
-  request: AuthRequest<B, Q>,
+export const optionalAuthMiddleware = async <B, P, Q>(
+  request: AuthRequest<B, P, Q>,
 ): Promise<MiddlewareResponse> => {
   const cookieToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   let sessionToken: string | undefined;
@@ -303,8 +311,8 @@ export const optionalAuthMiddleware = async <B, Q>(
   return { message: "", statusCode: 200, next: true };
 };
 
-export const operatorMiddleware = async <B, Q>(
-  request: AuthRequest<B, Q>,
+export const operatorMiddleware = async <B, P, Q>(
+  request: AuthRequest<B, P, Q>,
 ): Promise<MiddlewareResponse> => {
   if (request.user?.role !== "operator") {
     throw new ForbiddenException("Operator role required");
@@ -312,8 +320,8 @@ export const operatorMiddleware = async <B, Q>(
   return { message: "", statusCode: 200, next: true };
 };
 
-export const originMiddleware = async <B, Q>(
-  request: AuthRequest<B, Q>,
+export const originMiddleware = async <B, P, Q>(
+  request: AuthRequest<B, P, Q>,
 ): Promise<MiddlewareResponse> => {
   if (
     request.authTransport === "cookie" &&
@@ -334,4 +342,10 @@ export const originMiddleware = async <B, Q>(
   return { message: "", statusCode: 200, next: true };
 };
 
-export type { AuthRequest, MiddlewareFunction, MiddlewareResponse, QueryParameters };
+export type {
+  AuthRequest,
+  MiddlewareFunction,
+  MiddlewareResponse,
+  PathParameters,
+  QueryParameters,
+};

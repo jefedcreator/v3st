@@ -11,7 +11,7 @@ import {
 } from "@/backend/validators/withdrawal.validator";
 import { ok } from "@/utils/response";
 
-export const POST = withMiddleware<WithdrawalQuoteBodySchema>(
+export const POST = withMiddleware<WithdrawalQuoteBodySchema, null, null>(
   async (request) => {
     const body = request.validatedData!;
     const quote = await withdrawalService.quote(request.user!.id, {

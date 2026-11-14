@@ -468,7 +468,8 @@ Filters, tabs, and pagination that should survive a refresh/share live in the UR
 - **Zod is the single source of truth** for server validation and payload contracts.
 - **Compile-time contract proof (`src/types/contract.ts`):** Asserts type equality between service response types and documented API DTOs.
 - Route Handlers are composed with `withMiddleware(handler, [authMiddleware, bodyValidatorMiddleware(schema), ...])`.
-- Middleware carries the validators' inferred output types through `withMiddleware<B, Q>`; handlers read `request.validatedData!` and `request.query!` without casting request data inside API routes.
+- Middleware carries the validators' inferred output types through `withMiddleware<B, P, Q>` in **body, path, query** order, with `null` for every unused channel. For example: body-only `withMiddleware<DepositBodySchema, null, null>`, ID detail `withMiddleware<null, PathParameters, null>`, and paginated list `withMiddleware<null, null, PaginationQuerySchema>`.
+- Handlers read `request.validatedData!`, `request.params!` and `request.query!` after the matching validators run, without casting request data inside API routes. Path transforms also reach the handler's `context.params`; unvalidated `parsedBody`, `parsedParams` and `parsedQuery` belong to the middleware pipeline.
 
 ### What the client must expect from the API
 

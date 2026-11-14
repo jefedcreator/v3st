@@ -12,7 +12,7 @@ import {
 } from "@/backend/validators/withdrawal.validator";
 import { ok } from "@/utils/response";
 
-export const POST = withMiddleware<WithdrawalBodySchema>(
+export const POST = withMiddleware<WithdrawalBodySchema, null, null>(
   async (request) => {
     const { quote_id } = request.validatedData!;
     const { withdrawal, created } = await withdrawalService.confirm(

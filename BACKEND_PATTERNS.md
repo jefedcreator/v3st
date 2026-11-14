@@ -165,18 +165,22 @@ Every route handler receives an `AuthRequest` instead of a plain `NextRequest`. 
 ```typescript
 import type { Session, User } from '../../generated/prisma';
 import { type NextRequest } from 'next/server';
-import type { PaginationQuerySchema } from '@/backend/validators/index.validator';
+import type { IdParamSchema, PaginationQuerySchema } from '@/backend/validators/index.validator';
+import type { EventsQuerySchema } from '@/backend/validators/events.validator';
 
-// Concrete query validator outputs; add other query schema types as union members.
-export type QueryParameters = PaginationQuerySchema;
+// Concrete validator outputs; add other schema types as union members.
+export type PathParameters = IdParamSchema;
+export type QueryParameters = PaginationQuerySchema | EventsQuerySchema;
 
 // The full user object attached to every authenticated request
 export type AuthenticatedUser = User & { session: Session };
 
-export interface AuthRequest<B = unknown, Q = QueryParameters> extends NextRequest {
-  parsedBody?: B;
+export interface AuthRequest<B = null, P = null, Q = null> extends NextRequest {
+  parsedBody?: unknown;                    // unvalidated JSON input
+  parsedParams?: Record<string, string>;   // unvalidated Next.js path input
+  parsedQuery?: Record<string, string>;    // unvalidated URL query input
   query?: Q;
-  params?: Record<string, string>;
+  params?: P;
   validatedData?: B;
   user: AuthenticatedUser | null;
   rawBody?: Uint8Array;                    // bodyMode: 'raw' (webhook signatures cover raw bytes)
@@ -192,16 +196,21 @@ export type MiddlewareResponse = {
   code?: ErrorCode;
 };
 
-export type MiddlewareFunction<B = unknown, Q = QueryParameters> = (
-  req: AuthRequest<B, Q>
+export type MiddlewareFunction<B = null, P = null, Q = null> = (
+  req: AuthRequest<B, P, Q>
 ) => Promise<MiddlewareResponse>;
 ```
 
-`QueryParameters` contains the inferred outputs of the application's query validators.
-Pagination is currently the only query schema, so it is the sole member. Add new
-query schema types to this union as they are introduced; do not use an arbitrary
-`Record` fallback. Routes that read query parameters must run the corresponding
-`queryValidatorMiddleware` first so coercion and defaults match their declared types.
+The generic order is **body, path, query**. All three default to `null`; explicitly
+use `null` in API routes for each input channel the endpoint does not accept.
+`PathParameters` contains the inferred `idParamSchema` output. `QueryParameters`
+contains pagination and SSE resume-query outputs. Add new schema types to these
+unions as they are introduced; do not use an arbitrary `Record` fallback.
+
+`parsedBody`, `parsedParams` and `parsedQuery` contain unvalidated input for the
+middleware pipeline. Only successful validators populate `validatedData`, `params`
+and `query`; unused output fields remain absent. API handlers read the validated
+fields, preserving transforms and defaults without local casts.
 
 ### API Response Shapes
 
@@ -242,8 +251,8 @@ Always return `ApiResponse` / `PaginatedApiResponse` from handlers (build them w
 
 Every exported handler must be wrapped with `withMiddleware`. It:
 
-1. Resolves path params from Next.js `context.params` (awaited — Next 15 params are a Promise)
-2. Parses the query string into `request.query`
+1. Resolves path params from Next.js `context.params` into `request.parsedParams` (awaited — Next 15 params are a Promise)
+2. Parses the query string into `request.parsedQuery`
 3. Reads the body **once as bytes** and enforces `maxBodyBytes` (default 65 536) on both the declared `Content-Length` and the actual length — over the cap is `413 PAYLOAD_TOO_LARGE`. Then, per `options.bodyMode` (default `'json'`): `'json'` parses to `request.parsedBody` (unparseable is `400 MALFORMED_JSON`), `'raw'` sets `request.rawBody`, `'none'` skips the body
 4. Runs each middleware function in sequence; short-circuits on the first `{ next: false }` response
 5. Calls the handler
@@ -252,14 +261,29 @@ Every exported handler must be wrapped with `withMiddleware`. It:
 8. Logs every request once via `logRequest(method, path, status, ms, redact(parsedBody))` after the response is generated
 
 ```typescript
-export const withMiddleware = <B = unknown, Q = QueryParameters>(
-  handler: (request: AuthRequest<B, Q>, context: { params: Record<string, string> }) => Promise<Response>,
-  middlewares: MiddlewareFunction<B, Q>[],
+export const withMiddleware = <B = null, P = null, Q = null>(
+  handler: (request: AuthRequest<B, P, Q>, context: { params: P | undefined }) => Promise<Response>,
+  middlewares: MiddlewareFunction<B, P, Q>[],
   options?: { bodyMode?: 'json' | 'raw' | 'none'; maxBodyBytes?: number }
 ) => { /* ... */ };
 ```
 
-The exported route function takes a **required** second argument `context: { params: Promise<Record<string, string>> }` (Next 15 `RouteContext`); `withMiddleware` awaits it and passes the resolved `params` record to the handler.
+The exported route function takes a **required** second argument `context: { params: Promise<Record<string, string>> }` (Next 15 `RouteContext`). The wrapper awaits these raw inputs; `pathParamValidatorMiddleware` parses them, assigns its inferred output to `request.params`, and the handler's `context.params` receives that same validated value. Without a path validator both validated path fields remain absent.
+
+Declare the accepted input channels explicitly:
+
+| Endpoint inputs | Wrapper types |
+| --- | --- |
+| No body, path or query | `withMiddleware<null, null, null>` |
+| JSON body only | `withMiddleware<DepositBodySchema, null, null>` |
+| ID path only | `withMiddleware<null, PathParameters, null>` |
+| Pagination query only | `withMiddleware<null, null, PaginationQuerySchema>` |
+| ID path and pagination query | `withMiddleware<null, PathParameters, PaginationQuerySchema>` |
+| Raw webhook bytes only | `withMiddleware<Uint8Array, null, null>` with `bodyMode: 'raw'` |
+
+Raw webhooks read the typed `request.rawBody` bytes for signature verification.
+`/events` accepts `EventsQuerySchema` in its third slot and validates the optional
+`after` query string before streaming; `Last-Event-ID` still takes precedence.
 
 ### `authMiddleware`
 
@@ -267,14 +291,19 @@ Reads the session token from the `sara-session` httpOnly cookie (or falls back t
 
 ### `bodyValidatorMiddleware` / `queryValidatorMiddleware` / `pathParamValidatorMiddleware`
 
-Validate `parsedBody` / `query` / `params` against a Zod schema. On failure they short-circuit with `422` and code `VALIDATION_FAILED`, reporting the first issue as `<path>: <message>`; on success the body result is attached to `request.validatedData`.
+Validate `parsedBody` / `parsedQuery` / `parsedParams` against a Zod schema. On failure they short-circuit with `422` and code `VALIDATION_FAILED`, reporting the first issue as `<path>: <message>`; on success the schema output is attached to `request.validatedData` / `request.query` / `request.params`, respectively.
 
-Middleware is the source of truth for request types. `withMiddleware<B, Q>` carries
-the validator's inferred output types through `AuthRequest<B, Q>`:
-`validatedData?: B` and `query?: Q`. After the matching validator runs, handlers
-read `request.validatedData!` or `request.query!` directly. Never cast request data
+Middleware is the source of truth for request types. `withMiddleware<B, P, Q>` carries
+the validators' inferred output types through `AuthRequest<B, P, Q>`:
+`validatedData?: B`, `params?: P` and `query?: Q`. Declare those slots explicitly
+using the validators' exported inferred types and `null` for unused channels. After
+the matching validator runs, handlers read `request.validatedData!`,
+`request.params!` or `request.query!` directly. Never cast request data
 inside an API route; preserve schema transforms such as integer strings to `bigint`
-through the shared middleware types.
+and numeric path parameters through the shared middleware types. Each validator's
+request type picks only the raw input and validated output fields it consumes.
+Shared auth and transport middleware stay generic across all three channels, so
+composition preserves each route's declared schema types and `null` slots.
 
 ### `idempotencyKeyMiddleware`
 
@@ -324,6 +353,7 @@ export const paginationQuerySchema = z.object({
 export type PaginationQuerySchema = z.infer<typeof paginationQuerySchema>;
 
 export const idParamSchema = z.object({ id: cuidSchema }).strict();
+export type IdParamSchema = z.infer<typeof idParamSchema>;
 ```
 
 
@@ -342,7 +372,7 @@ import { depositService } from '@/backend/services/deposits';
 import { created } from '@/utils/response';
 
 // POST /api/v1/deposits — requires auth, body validation and an Idempotency-Key
-export const POST = withMiddleware<DepositBodySchema>(
+export const POST = withMiddleware<DepositBodySchema, null, null>(
   async (request) => {
     const payload = request.validatedData!;
     const user = request.user!;
@@ -355,7 +385,7 @@ export const POST = withMiddleware<DepositBodySchema>(
 
 - Middleware order matters: auth first, then validators (and the idempotency-key check on writes).
 - Responses are built with `ok` / `created` / `accepted` / `paginated` (`src/utils/response.ts`) and serialised through explicit snake_case DTO serializers — money fields are integer strings.
-- Nested routes live at `src/app/api/v1/[resource]/[id]/route.ts` with `pathParamValidatorMiddleware(idParamSchema)`.
+- Nested routes live at `src/app/api/v1/[resource]/[id]/route.ts` with `withMiddleware<null, PathParameters, null>` and `pathParamValidatorMiddleware(idParamSchema)`. Read the inferred ID as `request.params!.id`; use a concrete query schema in the third slot only when the endpoint accepts query input.
 
 
 ---
@@ -745,7 +775,7 @@ Client
 
 8. **Routes call services only.** Route handlers never import `db` — services are the only code that touches Prisma.
 
-9. **Types flow from Zod.** Never write a TypeScript interface for a request body — derive it with `z.infer<typeof schema>`.
+9. **Types flow from Zod.** Derive body, path and query types with `z.infer<typeof schema>`. The wrapper order is `withMiddleware<Body, Path, Query>`; use `null` for unused channels and read the middleware-validated fields without route-local casts.
 
 10. **Do not log inside handlers.** `withMiddleware` handles request logging automatically (with `redact`).
 

@@ -11,7 +11,7 @@ import {
 } from "@/backend/validators/identity.validator";
 import { ok } from "@/utils/response";
 
-export const POST = withMiddleware<PersonaValidatorSchema>(
+export const POST = withMiddleware<PersonaValidatorSchema, null, null>(
   async (request) => {
     const { persona } = request.validatedData!;
     const kyc = await kycService.verify(request.user!.id, { persona });

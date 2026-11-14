@@ -12,7 +12,7 @@ import {
 } from "@/backend/validators/deposit.validator";
 import { ok } from "@/utils/response";
 
-export const POST = withMiddleware<DepositBodySchema>(
+export const POST = withMiddleware<DepositBodySchema, null, null>(
   async (request) => {
     const body = request.validatedData!;
     const { deposit, created } = await depositService.create(

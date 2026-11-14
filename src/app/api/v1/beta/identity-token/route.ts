@@ -3,7 +3,7 @@ import { authService } from "@/backend/services/auth";
 import { identityTokenValidatorSchema, type IdentityTokenValidatorSchema } from "@/backend/validators/auth.validator";
 import { ok } from "@/utils/response";
 
-export const POST = withMiddleware<IdentityTokenValidatorSchema>(
+export const POST = withMiddleware<IdentityTokenValidatorSchema, null, null>(
   async (request) => {
     const { phone } = request.validatedData!;
     const { token, expiresAt } = authService.issueBetaIdentityToken(phone);

@@ -11,7 +11,7 @@ import {
 } from "@/backend/validators/scenario.validator";
 import { ok } from "@/utils/response";
 
-export const POST = withMiddleware<ScenarioBodySchema>(
+export const POST = withMiddleware<ScenarioBodySchema, null, null>(
   async (request) => {
     const body = request.validatedData!;
     const result = await scenarioService.run(request.user!.id, body);

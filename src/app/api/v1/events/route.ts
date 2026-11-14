@@ -1,9 +1,13 @@
 import {
   authMiddleware,
+  queryValidatorMiddleware,
   withMiddleware,
-  type QueryParameters,
 } from "@/backend/middleware";
 import { eventService } from "@/backend/services/events";
+import {
+  eventsQuerySchema,
+  type EventsQuerySchema,
+} from "@/backend/validators/events.validator";
 import { SESSION_COOKIE_NAME } from "@/server/auth/constants";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +16,10 @@ const POLL_MS = 2_000;
 const HEARTBEAT_MS = 15_000;
 const MAX_STREAM_MS = 300_000;
 
-export const GET = withMiddleware<unknown, QueryParameters>(
+export const GET = withMiddleware<null, null, EventsQuerySchema>(
   async (req) => {
     const userId = req.user!.id;
-    const url = new URL(req.url);
-    const resume = req.headers.get("last-event-id") ?? url.searchParams.get("after");
+    const resume = req.headers.get("last-event-id") ?? req.query!.after;
     let cursor = 0n;
     if (resume) {
       try {
@@ -75,6 +78,6 @@ export const GET = withMiddleware<unknown, QueryParameters>(
       },
     });
   },
-  [authMiddleware],
+  [authMiddleware, queryValidatorMiddleware(eventsQuerySchema)],
   { bodyMode: "none" },
 );

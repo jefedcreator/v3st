@@ -3,7 +3,6 @@ import {
   bodyValidatorMiddleware,
   originMiddleware,
   withMiddleware,
-  type QueryParameters,
 } from "@/backend/middleware";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import {
@@ -12,14 +11,14 @@ import {
 } from "@/backend/validators/bank-account.validator";
 import { ok } from "@/utils/response";
 
-export const GET = withMiddleware<unknown, QueryParameters>(
+export const GET = withMiddleware<null, null, null>(
   async (request) => {
     return ok(await bankAccountService.list(request.user!.id), "Bank accounts");
   },
   [authMiddleware],
 );
 
-export const POST = withMiddleware<BankAccountValidatorSchema>(
+export const POST = withMiddleware<BankAccountValidatorSchema, null, null>(
   async (request) => {
     const { bank_code, account_number } = request.validatedData!;
     const account = await bankAccountService.add(request.user!.id, {

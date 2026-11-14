@@ -11,7 +11,7 @@ import {
 } from "@/backend/validators/earnings.validator";
 import { ok } from "@/utils/response";
 
-export const PUT = withMiddleware<EarningsPreferenceSchema>(
+export const PUT = withMiddleware<EarningsPreferenceSchema, null, null>(
   async (request) => {
     const body = request.validatedData!;
     const preference = await earningsService.setPreference(request.user!.id, {
