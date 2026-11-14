@@ -92,6 +92,26 @@ export type PortfolioHoldingDto = {
   value_ngn: string | null;
 };
 
+export type PositionView = {
+  stock_id: string;
+  symbol: string;
+  asset: string | null;
+  raw_owned: string;
+  raw_reserved: string;
+  strategy_raw: string;
+  multiplier_wad: string;
+  multiplier_as_of: string | null;
+  share_equivalent_raw: string;
+  cost_basis_status: "available" | "basis_unavailable";
+  cost_basis_usdc: string | null;
+  realized_usdc: string;
+  unrealized_usdc: string | null;
+  value_usdc: string | null;
+  valuation_status: "ok" | "unavailable";
+  paused: boolean;
+  delisted: boolean;
+};
+
 export type PortfolioDto = {
   cash_usdc: string;
   reserved_usdc: string;
@@ -101,6 +121,7 @@ export type PortfolioDto = {
   pending_ngn: string | null;
   earnings_ngn: string | null;
   holdings: PortfolioHoldingDto[];
+  positions: PositionView[];
   rate: RateDto | null;
   valuation: "ok" | "partial" | "unavailable";
   as_of: string;

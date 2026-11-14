@@ -389,3 +389,5 @@ ALTER TABLE "earning_allocations" ADD CONSTRAINT "earning_allocations_receiptId_
 
 -- Track one-time local testnet funding of the user's execution account per ramp order.
 ALTER TABLE "ramp_orders" ADD COLUMN "onchainFundedAt" TIMESTAMPTZ(6);
+
+ALTER TABLE "position_lots" ADD COLUMN "realizedUsdc" DECIMAL(78,0) NOT NULL DEFAULT 0;

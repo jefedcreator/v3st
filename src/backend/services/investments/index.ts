@@ -10,6 +10,7 @@ import { jobService } from "@/backend/services/jobs";
 import { ledgerService } from "@/backend/services/ledger";
 import { cashReleased, cashReserved, stockReleased, stockReserved, tradeFilled } from "@/backend/services/ledger/postings";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
+import { positionService } from "@/backend/services/positions";
 import { settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
 import { referenceUsable } from "@/backend/services/stocks/reference";
@@ -407,6 +408,7 @@ class InvestmentService {
         const current = await tx.investment.findUniqueOrThrow({ where: { id: inv.id } });
         if (current.status === "filled") return;
         const amountOut = actual.output?.raw ?? 0n;
+        await positionService.applyFill(tx, op.id);
         await ledgerService.post(
           tx,
           tradeFilled({

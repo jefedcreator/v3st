@@ -990,12 +990,13 @@ model PositionLot {
     stockId    String
     asset      String
     operationId String?
-    quantity   Decimal   @db.Decimal(78, 0)
-    costUsdc   Decimal   @db.Decimal(78, 0)
-    fxRateKobo BigInt?
-    source     String
-    openedAt   DateTime  @default(now())
-    closedAt   DateTime?
+    quantity     Decimal   @db.Decimal(78, 0)
+    costUsdc     Decimal   @db.Decimal(78, 0)
+    realizedUsdc Decimal   @db.Decimal(78, 0) @default(0)
+    fxRateKobo   BigInt?
+    source       String
+    openedAt     DateTime  @default(now())
+    closedAt     DateTime?
 
     @@index([userId, stockId])
     @@map("position_lots")
