@@ -51,6 +51,7 @@ import {
 export type OperationFinalizer = (
   op: OnchainOperation,
   observation: ExecutionObservation,
+  tx: Tx,
 ) => Promise<void>;
 
 const finalizers = new Map<string, OperationFinalizer>();
@@ -107,7 +108,7 @@ export type CreateOperationInput = {
 // The executing account comes from the operation's custody profile: a
 // provider_managed profile (e.g. Bankr) uses its own managed account, anything
 // else uses the wallet's application execution account.
-async function accountAddressFor(
+export async function accountAddressFor(
   prisma: Pick<Tx, "custodyProfile" | "wallet">,
   op: OnchainOperation,
 ): Promise<Address> {
@@ -516,7 +517,7 @@ class ExecutionService {
         });
         const reloaded = await tx.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
         const finalizer = finalizers.get(op.kind) ?? finalizers.get("*");
-        if (finalizer) await finalizer(reloaded, observation);
+        if (finalizer) await finalizer(reloaded, observation, tx);
         return;
       }
       if (observation.state === "reverted") {
@@ -526,7 +527,7 @@ class ExecutionService {
         });
         const reloaded = await tx.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
         const finalizer = finalizers.get(op.kind) ?? finalizers.get("*");
-        if (finalizer) await finalizer(reloaded, observation);
+        if (finalizer) await finalizer(reloaded, observation, tx);
         return;
       }
       await tx.onchainOperation.update({

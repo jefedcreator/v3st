@@ -1,4 +1,6 @@
 import { UnverifiedProviderError } from "@/backend/services/onchain/registry";
+import type { StrategyAdapter, StrategyPlan, StrategyQuote, StrategyRequest } from "@/backend/services/onchain/types";
+import { db } from "@/server/db";
 
 import {
   hydrexExitRealizedCapabilities,
@@ -7,6 +9,26 @@ import {
   hydrexSpotReplica,
   hydrexStrategyReplica,
 } from "./replica";
+
+// Routes each strategy row to its declared fee-realization variant: separateClaim
+// strategies use the manual claim adapter, embedded-fee strategies use the
+// exit-realized adapter (claim unsupported, fees paid with principal on exit).
+async function adapterForStrategy(strategyId: string): Promise<StrategyAdapter> {
+  const strategy = await db.strategy.findUnique({ where: { id: strategyId } });
+  return strategy?.separateClaim === false ? hydrexExitRealizedStrategyReplica : hydrexStrategyReplica;
+}
+
+export const hydrexStrategyDispatcher: StrategyAdapter = {
+  get capabilities() {
+    return hydrexSpotCapabilities;
+  },
+  quote(input: StrategyRequest): Promise<StrategyQuote> {
+    return adapterForStrategy(input.strategyId).then((adapter) => adapter.quote(input));
+  },
+  prepare(quote: StrategyQuote, operationId: string): Promise<StrategyPlan> {
+    return adapterForStrategy(quote.request.strategyId).then((adapter) => adapter.prepare(quote, operationId));
+  },
+};
 
 export {
   HYDREX_FIXTURE_FEE_BPS,
@@ -48,7 +70,7 @@ export const hydrexProviderDescriptor = {
   betaAdapter: "local_testnet_replica" as const,
   actualFactory: createActualHydrexProvider,
   replica: hydrexSpotReplica,
-  strategy: hydrexStrategyReplica,
+  strategy: hydrexStrategyDispatcher,
   exitRealizedStrategy: hydrexExitRealizedStrategyReplica,
   hydropump: hydropumpLockerDescriptor,
 };

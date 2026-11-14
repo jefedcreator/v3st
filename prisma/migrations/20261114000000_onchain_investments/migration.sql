@@ -391,3 +391,6 @@ ALTER TABLE "earning_allocations" ADD CONSTRAINT "earning_allocations_receiptId_
 ALTER TABLE "ramp_orders" ADD COLUMN "onchainFundedAt" TIMESTAMPTZ(6);
 
 ALTER TABLE "position_lots" ADD COLUMN "realizedUsdc" DECIMAL(78,0) NOT NULL DEFAULT 0;
+
+-- Snapshot the beta context and full strategy quote (plus any preparatory spot quote) at quote time.
+ALTER TABLE "strategy_quotes" ADD COLUMN "context" JSONB;

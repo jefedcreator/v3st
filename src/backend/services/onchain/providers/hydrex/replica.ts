@@ -277,6 +277,10 @@ class HydrexStrategyReplicaAdapter implements StrategyAdapter {
       };
     }
     if (input.action === "claim") {
+      if (this.exitRealized) {
+        // Embedded fees realize on exit only; this variant declares no separate claim.
+        throw new HydrexReplicaError("Fees are embedded in exit value; separate claim is unsupported for this strategy");
+      }
       // Claimable fees are read for the user's execution account, which is also the
       // plan recipient resolved at prepare time.
       const walletRow = await db.wallet.findFirst({ where: { userId: input.userId, family: "evm" } });
@@ -368,6 +372,9 @@ class HydrexStrategyReplicaAdapter implements StrategyAdapter {
         },
       ];
     } else if (request.action === "claim") {
+      if (this.exitRealized) {
+        throw new HydrexReplicaError("Fees are embedded in exit value; separate claim is unsupported for this strategy");
+      }
       calls = [
         {
           to: pool,

@@ -14,6 +14,7 @@ import { executionService } from "@/backend/services/execution";
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
 import { pollOpenWork } from "@/backend/services/orders/poller";
 import { reconciliationService } from "@/backend/services/reconciliation";
+import { strategyService } from "@/backend/services/strategies";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
 import { treasuryService } from "@/backend/services/treasury";
@@ -32,6 +33,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "operation.progress": async (job) => {
     await executionService.progress(job.subjectId);
+  },
+  "strategy.progress": async (job) => {
+    await strategyService.progress(job.subjectId);
   },
   "deposit.progress": async (job) => {
     await depositService.progress(job.subjectId);

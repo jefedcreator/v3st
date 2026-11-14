@@ -39,6 +39,8 @@ type LockableTable =
   | "investment_authorizations"
   | "investment_quotes"
   | "investments"
+  | "strategy_quotes"
+  | "strategy_positions"
   | "sponsor_budgets";
 
 export async function lockRows(

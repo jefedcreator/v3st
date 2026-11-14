@@ -1062,6 +1062,7 @@ model StrategyQuote {
     fingerprint       String
     authorizationId   String?
     authorization     InvestmentAuthorization? @relation(fields: [authorizationId], references: [id])
+    context           Json?
     createdAt         DateTime               @default(now())
 
     @@index([userId])
