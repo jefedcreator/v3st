@@ -80,14 +80,16 @@ contract TestExecutionAccount {
             bytes32 callId = callIdOf(operationId, call);
             require(approvedCalls[callId], "call not approved");
             (bool ok, bytes memory ret) = call.target.call{value: call.value}(call.data);
-            require(ok, _revertReason(ret));
+            if (!ok) {
+                // Bubble the inner revert data verbatim so observers can decode the
+                // real reason (e.g. MIN_OUTPUT_BREACH) instead of a generic label.
+                assembly {
+                    revert(add(ret, 32), mload(ret))
+                }
+            }
             emit Executed(operationId, opNonce, callId, call.target, call.value);
         }
         emit OperationExecuted(operationId, opNonce, calls.length);
     }
 
-    function _revertReason(bytes memory ret) internal pure returns (string memory) {
-        if (ret.length == 0) return "call reverted";
-        return "call reverted";
-    }
 }

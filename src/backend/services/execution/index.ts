@@ -1,6 +1,6 @@
 import { encodeAbiParameters, type Address, type Hex, keccak256 } from "viem";
 
-import { type OnchainOperation, type OperationKind, Prisma } from "@/server/prisma";
+import { type OnchainOperation, type OperationKind, type Prisma } from "@/server/prisma";
 import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
@@ -11,6 +11,7 @@ import { executionAccountAbi } from "@/backend/services/onchain/abis";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import type {
   AssetAmount,
+  AssetDelta,
   BetaContext,
   ExecutionObservation,
   ExecutionPlan,
@@ -38,13 +39,16 @@ import {
 } from "@/utils/exceptions";
 
 import { accountOperationNonce, allocateSignerNonce } from "./nonce";
-import { assertExecutionPlan, callHashOf, operationKeyBytes32 } from "./policy";
+import { assertExecutionPlan, callHashOf, ExecutionPlanRejected, operationKeyBytes32 } from "./policy";
 import {
+  assertPartialFill,
   buildObservation,
   captureBalances,
   deltaVector,
+  PartialFillViolation,
   fetchReceipt,
   observationState,
+  revertReasonOf,
   txExists,
 } from "./receipts";
 
@@ -131,15 +135,6 @@ function planAssets(plan: ExecutionPlan | StrategyPlan): string[] {
   return [...assets];
 }
 
-function planUsageUsdc(plan: ExecutionPlan | StrategyPlan): bigint {
-  if ("expectedInput" in plan) return plan.expectedInput.raw;
-  let total = 0n;
-  for (const a of plan.maximumInputs) {
-    if (a.asset.includes("usdc") || a.asset.endsWith("settlement")) total += a.raw;
-  }
-  return total;
-}
-
 class ExecutionService {
   async createOperation(input: CreateOperationInput): Promise<OnchainOperation> {
     const existing = await db.onchainOperation.findUnique({ where: { key: input.key } });
@@ -187,7 +182,7 @@ class ExecutionService {
     const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
     if (["prepared", "signed", "broadcast", "confirmed", "finalized"].includes(op.status)) return;
     const quote = this.quoteOf(op);
-    const context = ((quote as ExecutionQuote).context ?? (quote as StrategyQuote).request?.context) as BetaContext;
+    const context = ((quote as ExecutionQuote).context ?? (quote as StrategyQuote).request?.context);
     let plan: ExecutionPlan | StrategyPlan;
     if (op.kind === "spot") {
       const adapter = onchainRegistry.spot(op.providerId as StockProviderId, context);
@@ -197,6 +192,11 @@ class ExecutionService {
       plan = await adapter.prepare(quote as StrategyQuote, operationId);
     }
     await assertExecutionPlan(plan);
+    // The quote expiry is the latest permitted acceptance and broadcast bound; a
+    // plan deadline that extends past it is rejected, never silently extended.
+    if (plan.deadline.getTime() > quote.expiresAt.getTime()) {
+      throw new ExecutionPlanRejected("Plan deadline extends past the quote expiry bound");
+    }
     await withTx(async (tx) => {
       await lockRows(tx, "onchain_operations", [op.id]);
       const current = await tx.onchainOperation.findUniqueOrThrow({ where: { id: op.id } });
@@ -227,6 +227,10 @@ class ExecutionService {
       [`operation:${operationId}`, policy.onchain.sponsor.perOperationCapWei],
       [`daily:${now().toISOString().slice(0, 10)}`, policy.onchain.sponsor.dailyCapWei],
     ];
+    // One advisory lock serializes all sponsor reservations, so concurrent
+    // operations never race the upsert's create branch on the shared daily scope;
+    // the per-row lock then serializes the spend check below.
+    await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(72_012::bigint)`);
     for (const [scope, defaultCap] of scopes) {
       const row = await tx.sponsorBudget.upsert({
         where: { scope },
@@ -252,16 +256,16 @@ class ExecutionService {
     plan: ExecutionPlan | StrategyPlan,
     signerNonce: number,
     accountAddress: Address,
+    opNonce: bigint,
   ): Promise<{ approveTx: Hex; executeTx: Hex; approveHash: Hex; executeHash: Hex }> {
     const account = relayerAccount();
     const walletClient = walletClientFor(account);
     const opKey = operationKeyBytes32(op.id);
-    const opNonce = await accountOperationNonce(accountAddress);
     const epoch = (await testnetWalletService.accountState(accountAddress)).epoch;
     const deadlineSeconds = BigInt(Math.floor(plan.deadline.getTime() / 1000));
     const calls = plan.calls.map((c: PreparedCall) => ({
-      target: c.to as Address,
-      data: c.data as Hex,
+      target: c.to,
+      data: c.data,
       value: c.value,
     }));
     const callIds = calls.map((c) =>
@@ -326,7 +330,7 @@ class ExecutionService {
     if (op.status === "prepared") {
       const plan = this.planOf(op);
       const quote = this.quoteOf(op);
-      const context = (quote as ExecutionQuote).context as BetaContext;
+      const context = (quote as ExecutionQuote).context;
       const manifest = readManifest();
       const client = publicClientFor();
       const chainId = await client.getChainId();
@@ -339,19 +343,19 @@ class ExecutionService {
         const current = await tx.onchainOperation.findUniqueOrThrow({ where: { id: op.id } });
         if (current.status !== "prepared") return;
         if (current.authorizationId) {
-          await authorizationService.check(tx, current.userId, current.authorizationId, {
-            scope: current.kind === "spot" ? "investments" : "strategies",
-            stockId: (quote as ExecutionQuote).stockId ?? null,
-            amountUsdc: planUsageUsdc(plan),
-          });
+          // Revalidate consent before signing; the epoch check rejects revoked work.
+          await authorizationService.assertActive(tx, current.userId, current.authorizationId);
         }
         const gasPrice = BigInt(await rpcRequest<Hex>(testnetRpcUrl(), "eth_gasPrice"));
         const estWei = gasPrice * 1_500_000n + 1n;
         await this.reserveSponsorBudget(tx, op.id, estWei);
         const accountAddress = await accountAddressFor(tx, current);
+        // Execution-account operation nonce and shared relayer transaction nonce are
+        // distinct persisted resources under separate concurrency controls.
+        const opNonce = await accountOperationNonce(accountAddress);
         const signerNonce = await allocateSignerNonce(tx, current.id, relayerAccount().address);
         const pre = await captureBalances(planAssets(plan), accountAddress);
-        const signed = await this.signOperation(current, plan, signerNonce, accountAddress);
+        const signed = await this.signOperation(current, plan, signerNonce, accountAddress, opNonce);
         await tx.signedPayload.upsert({
           where: { operationId: current.id },
           create: {
@@ -370,7 +374,8 @@ class ExecutionService {
           where: { id: current.id },
           data: {
             status: "signed",
-            nonce: signerNonce,
+            nonce: Number(opNonce),
+            relayerNonce: signerNonce,
             signedPayloadHash: sha256Hex(signed.approveTx + signed.executeTx),
             txHash: signed.executeHash,
             expected: expected as Prisma.InputJsonValue,
@@ -423,6 +428,7 @@ class ExecutionService {
     let actualInput: AssetAmount | null = null;
     let actualOutput: AssetAmount | null = null;
     let gasCostWei: bigint | null = null;
+    let deltas: AssetDelta[] = [];
     if (plan && txHash) {
       const assets = planAssets(plan);
       const inputAsset = "expectedInput" in plan ? plan.expectedInput.asset : plan.maximumInputs[0]?.asset;
@@ -432,7 +438,7 @@ class ExecutionService {
       for (const asset of assets) {
         post[asset] = (await captureBalances([asset], accountAddress))[asset]!;
       }
-      const deltas = deltaVector(expected.preBalances ?? {}, post, accountAddress);
+      deltas = deltaVector(expected.preBalances ?? {}, post, accountAddress);
       const obs = buildObservation({
         operationId,
         txHash,
@@ -442,8 +448,12 @@ class ExecutionService {
         inputAsset: inputAsset ?? assets[0]!,
         outputAsset: outputAsset ?? assets[assets.length - 1]!,
       });
-      actualInput = obs.actualInput;
-      actualOutput = obs.actualOutput;
+      // A strategy operation uses the persisted deltas vector; its single-asset
+      // actualInput/actualOutput fields remain null.
+      if (op.kind === "spot") {
+        actualInput = obs.actualInput;
+        actualOutput = obs.actualOutput;
+      }
       gasCostWei = obs.gasCostWei;
     }
     const observation: ExecutionObservation = {
@@ -454,6 +464,7 @@ class ExecutionService {
       blockNumber: receipt?.blockNumber ?? null,
       actualInput,
       actualOutput,
+      deltas,
       gasCostWei,
     };
     await db.chainObservation.create({
@@ -466,15 +477,21 @@ class ExecutionService {
         gasCostWei: gasCostWei === null ? null : toDbRaw(gasCostWei),
         actualInput: pack(actualInput) as Prisma.InputJsonValue,
         actualOutput: pack(actualOutput) as Prisma.InputJsonValue,
+        deltas: pack(deltas) as Prisma.InputJsonValue,
       },
     });
     if (["confirmed", "reverted", "unknown"].includes(state)) {
       const status = state === "confirmed" ? "confirmed" : state === "reverted" ? "reverted" : "unknown";
       if (op.status !== "finalized") {
+        // A reverted inclusion is labelled with the decoded onchain reason (e.g.
+        // MIN_OUTPUT_BREACH) so downstream holds carry the real cause.
+        const errorReason =
+          status === "reverted" && txHash ? ((await revertReasonOf(txHash)) ?? "EXECUTION_REVERTED") : undefined;
         await db.onchainOperation.update({
           where: { id: operationId },
           data: {
             status,
+            errorReason,
             blockHash: observation.blockHash,
             blockNumber: observation.blockNumber === null ? null : toDbRaw(observation.blockNumber),
           },
@@ -492,9 +509,46 @@ class ExecutionService {
       if (op.status === "finalized" || op.status === "reverted") return;
       const expected = (op.expected as { plan?: unknown }) ?? {};
       const plan = expected.plan ? (unpackInner(expected.plan) as ExecutionPlan | StrategyPlan) : null;
+      const quote = this.quoteOf(op);
       if (observation.state === "confirmed" && plan) {
         const minimum = "minimumOutput" in plan ? plan.minimumOutput : plan.minimumOutputs[0];
-        if (minimum && observation.actualOutput && observation.actualOutput.raw < minimum.raw) {
+        if (op.kind === "spot" && minimum) {
+          // Accepted-quote partial-fill rules: without allowPartialFill a smaller
+          // input fill cannot finalize successfully; with it, the minimum
+          // output/input rate is preserved with conservative rounding. A violation
+          // observed onchain is a reconciliation hold, never a successful credit.
+          const eq = quote as ExecutionQuote;
+          const spotPlan = plan as ExecutionPlan;
+          const actualIn = observation.actualInput?.raw ?? 0n;
+          const actualOut = observation.actualOutput?.raw ?? 0n;
+          try {
+            assertPartialFill(
+              {
+                input: spotPlan.expectedInput,
+                minOutput: minimum,
+                allowPartialFill: eq.allowPartialFill ?? false,
+              },
+              actualIn,
+              actualOut,
+            );
+          } catch (error) {
+            if (error instanceof PartialFillViolation) {
+              if (actualIn < spotPlan.expectedInput.raw && !(eq.allowPartialFill ?? false)) {
+                await tx.onchainOperation.update({
+                  where: { id: operationId },
+                  data: { status: "reverted", errorReason: "MIN_OUTPUT_BREACH" },
+                });
+                return;
+              }
+              await tx.onchainOperation.update({
+                where: { id: operationId },
+                data: { status: "needs_review", errorReason: "PARTIAL_FILL_VIOLATION" },
+              });
+              return;
+            }
+            throw error;
+          }
+        } else if (minimum && observation.actualOutput && observation.actualOutput.raw < minimum.raw) {
           await tx.onchainOperation.update({
             where: { id: operationId },
             data: { status: "reverted", errorReason: "MIN_OUTPUT_BREACH" },
@@ -504,6 +558,7 @@ class ExecutionService {
         const actual = pack({
           input: observation.actualInput,
           output: observation.actualOutput,
+          deltas: observation.deltas,
           gasCostWei: observation.gasCostWei,
         });
         await tx.onchainOperation.update({

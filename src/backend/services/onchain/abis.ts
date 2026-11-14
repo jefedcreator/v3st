@@ -64,7 +64,7 @@ export const o1RouterAbi = parseAbi([
   "function seedPool(address settlement, address stock, uint256 settlementAmount, uint256 stockAmount)",
   "function setPartialFillBps(uint256 bps)",
   "function quoteOut(bytes32 key, uint256 amountInNet, bool settlementIn) view returns (uint256)",
-  "function swapExactIn(address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut, address recipient, uint64 deadline) returns (uint256 amountOut)",
+  "function swapExactIn(address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut, address recipient, uint64 deadline, bool allowPartialFill) returns (uint256 amountOut, uint256 amountInUsed)",
   "event PoolSeeded(bytes32 indexed pairKey, address indexed settlement, address indexed stock, uint256 settlementAmount, uint256 stockAmount)",
   "event SwapExecuted(address indexed sender, bytes32 indexed pairKey, uint256 amountIn, uint256 fee, uint256 amountOut, address indexed recipient)",
 ]);

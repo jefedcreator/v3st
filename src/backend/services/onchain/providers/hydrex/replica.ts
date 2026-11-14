@@ -21,12 +21,13 @@ import type {
 } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
 import { planFingerprint } from "@/backend/services/execution/policy";
-import {
+import { onchainExpiryMs, 
+  chainDeadlineBounded,
   chainDeadlineFromNow,
   publicClientFor,
   readManifest,
   settlementAssetKey,
-} from "@/backend/services/onchain/testnet";
+ } from "@/backend/services/onchain/testnet";
 import { db } from "@/server/db";
 import { UnprocessableEntityException } from "@/utils/exceptions";
 
@@ -139,7 +140,7 @@ async function localQuoteTransport(
     minOutput: { asset: input.outputAsset, raw: minOut.toString() },
     fee: { asset: input.input.asset, raw: fee.toString(), bps: HYDREX_FIXTURE_FEE_BPS },
     priceImpactBps: Math.min(impactBps, 10_000),
-    expiresAt: new Date(now().getTime() + policy.onchain.quoteTtlSeconds * 1000).toISOString(),
+    expiresAt: new Date(await onchainExpiryMs(policy.onchain.quoteTtlSeconds)).toISOString(),
   });
 }
 
@@ -175,19 +176,21 @@ class HydrexSpotReplicaAdapter implements SpotAdapter {
     }
     const expiryMs = Math.min(
       new Date(parsed.expiresAt).getTime(),
-      now().getTime() + policy.onchain.quoteTtlSeconds * 1000,
+      await onchainExpiryMs(policy.onchain.quoteTtlSeconds),
     );
     return {
       id: parsed.quoteId,
       userId: input.userId,
       walletId: input.walletId,
       stockId: input.stockId,
+      side: input.side,
       context: input.context,
       input: { asset: parsed.input.asset, raw: parsed.input.raw },
       expectedOutput: { asset: parsed.output.asset, raw: parsed.output.raw },
       minOutput: { asset: parsed.minOutput.asset, raw: parsed.minOutput.raw },
       userFeeUsdc: 0n,
       sponsorCostWei: 0n,
+      allowPartialFill: input.allowPartialFill ?? false,
       priceImpactBps: parsed.priceImpactBps,
       expiresAt: new Date(expiryMs),
       sourceBlock: await publicClientFor().getBlockNumber(),
@@ -209,7 +212,7 @@ class HydrexSpotReplicaAdapter implements SpotAdapter {
     const buy = quote.input.asset === settlement;
     const tokenIn = (buy ? parseAssetKey(settlement).address : parseAssetKey(stock.assetKey!).address) as Address;
     const tokenOut = (buy ? parseAssetKey(stock.assetKey!).address : parseAssetKey(settlement).address) as Address;
-    const deadline = await chainDeadlineFromNow();
+    const deadline = await chainDeadlineBounded(quote.expiresAt.getTime());
     const swapData = encodeFunctionData({
       abi: hydrexPoolAbi,
       functionName: "swapExactIn",
@@ -250,7 +253,7 @@ class HydrexStrategyReplicaAdapter implements StrategyAdapter {
 
   async quote(input: StrategyRequest): Promise<StrategyQuote> {
     const { pool, stock, settlement } = await strategyContext(input);
-    const expiresAt = new Date(now().getTime() + policy.onchain.quoteTtlSeconds * 1000);
+    const expiresAt = new Date(await onchainExpiryMs(policy.onchain.quoteTtlSeconds));
     const strategy = await db.strategy.findUniqueOrThrow({ where: { id: input.strategyId } });
     if (input.action === "enter") {
       const settlementIn = input.inputs.find((a) => a.asset === settlement);
@@ -336,7 +339,7 @@ class HydrexStrategyReplicaAdapter implements StrategyAdapter {
     const wallet = await db.wallet.findFirstOrThrow({ where: { userId: quote.request.userId, family: "evm" } });
     const recipient = wallet.executionAddress as Address;
     if (!recipient) throw new HydrexReplicaError("Execution account missing");
-    const deadline = await chainDeadlineFromNow();
+    const deadline = await chainDeadlineBounded(quote.expiresAt.getTime());
     const request = quote.request;
     let calls: PreparedCall[];
     if (request.action === "enter") {

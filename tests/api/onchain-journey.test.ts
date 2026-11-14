@@ -260,15 +260,30 @@ describe("onchain beta HTTP journey", () => {
       });
       expect(missingStock.status).toBe(404);
 
-      // 4. Investment authorization: create, replay returns the same resource, a
-      // reused key with a different body conflicts, list is owner-scoped.
+      // 4. Investment quote first, then a one-time authorization bound to that
+      // persisted quote; replay returns the same resource, a reused key with a
+      // different body conflicts, list is owner-scoped.
+      await touchReference();
+      const quoteRes = await callRoute(investmentQuotePOST, {
+        method: "POST",
+        url: `${ORIGIN}/api/v1/investments/quote`,
+        body: JSON.stringify({ stock_id: stock.id, side: "buy", budget_ngn: "300000" }),
+        headers: authHeaders(session),
+      });
+      expect(quoteRes.status).toBe(200);
+      const quote = (quoteRes.json as { data: InvestmentQuoteDto }).data;
+      expect(["o1", "hydrex", "bankr"]).toContain(quote.provider_id);
+      expect(BigInt(quote.expected_output_raw)).toBeGreaterThan(0n);
+      expect(BigInt(quote.min_output_raw)).toBeGreaterThan(0n);
+      expect(JSON.stringify(quoteRes.json)).not.toMatch(NO_SIGNING_MATERIAL);
+
       const authKey = randomUUID();
       const authBody = {
-        scope: "investments",
-        stock_id: stock.id,
-        max_spend_usdc: "9000000000000000000",
-        duration_days: 7,
+        kind: "one_time",
+        quote_kind: "investment",
+        quote_id: quote.id,
         policy_version: "api-1",
+        disclosure_version: "1",
       };
       const authRes = await callRoute(authorizationsPOST, {
         method: "POST",
@@ -289,7 +304,7 @@ describe("onchain beta HTTP journey", () => {
       const authConflict = await callRoute(authorizationsPOST, {
         method: "POST",
         url: `${ORIGIN}/api/v1/investment-authorizations`,
-        body: JSON.stringify({ ...authBody, max_spend_usdc: "5" }),
+        body: JSON.stringify({ ...authBody, disclosure_version: "2" }),
         headers: authHeaders(session, authKey),
       });
       expect(authConflict.status).toBe(409);
@@ -303,21 +318,6 @@ describe("onchain beta HTTP journey", () => {
       expect(
         (authList.json as { data: { id: string }[] }).data.some((a) => a.id === authId),
       ).toBe(true);
-
-      // 5. Investment quote and confirmation; the quote carries no signing material.
-      await touchReference();
-      const quoteRes = await callRoute(investmentQuotePOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/investments/quote`,
-        body: JSON.stringify({ stock_id: stock.id, side: "buy", budget_ngn: "300000" }),
-        headers: authHeaders(session),
-      });
-      expect(quoteRes.status).toBe(200);
-      const quote = (quoteRes.json as { data: InvestmentQuoteDto }).data;
-      expect(["o1", "hydrex", "bankr"]).toContain(quote.provider_id);
-      expect(BigInt(quote.expected_output_raw)).toBeGreaterThan(0n);
-      expect(BigInt(quote.min_output_raw)).toBeGreaterThan(0n);
-      expect(JSON.stringify(quoteRes.json)).not.toMatch(NO_SIGNING_MATERIAL);
 
       const buyKey = randomUUID();
       const confirmBody = JSON.stringify({ quote_id: quote.id, authorization_id: authId });
@@ -398,21 +398,6 @@ describe("onchain beta HTTP journey", () => {
       });
       expect(stratDetail.status).toBe(200);
 
-      const stratAuthRes = await callRoute(authorizationsPOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/investment-authorizations`,
-        body: JSON.stringify({
-          scope: "strategies",
-          strategy_id: lpStrategy.id,
-          max_spend_usdc: "1000000000000",
-          duration_days: 7,
-          policy_version: "api-1",
-        }),
-        headers: authHeaders(session, randomUUID()),
-      });
-      expect(stratAuthRes.status).toBe(201);
-      const stratAuthId = (stratAuthRes.json as { data: { id: string } }).data.id;
-
       await touchReference();
       const stockHalf = (BigInt(filled.amount_out!) / 2n).toString();
       const enterQuoteRes = await callRoute(strategyQuotesPOST, {
@@ -433,6 +418,21 @@ describe("onchain beta HTTP journey", () => {
         enterQuoteRes.json as { data: { id: string; preparatory_swap: boolean } }
       ).data;
       expect(enterQuote.preparatory_swap).toBe(false);
+
+      const stratAuthRes = await callRoute(authorizationsPOST, {
+        method: "POST",
+        url: `${ORIGIN}/api/v1/investment-authorizations`,
+        body: JSON.stringify({
+          kind: "one_time",
+          quote_kind: "strategy",
+          quote_id: enterQuote.id,
+          policy_version: "api-1",
+          disclosure_version: "1",
+        }),
+        headers: authHeaders(session, randomUUID()),
+      });
+      expect(stratAuthRes.status).toBe(201);
+      const stratAuthId = (stratAuthRes.json as { data: { id: string } }).data.id;
 
       const enterKey = randomUUID();
       const enterBody = JSON.stringify({ quote_id: enterQuote.id, authorization_id: stratAuthId });
@@ -487,20 +487,6 @@ describe("onchain beta HTTP journey", () => {
       expect(BigInt(lpPosition.receipt_raw)).toBeGreaterThan(0n);
 
       // 8. Claim the distribution reward, then convert the receipt over HTTP.
-      const stonksAuthRes = await callRoute(authorizationsPOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/investment-authorizations`,
-        body: JSON.stringify({
-          scope: "strategies",
-          strategy_id: stonksStrategy.id,
-          max_spend_usdc: "1000000000000",
-          duration_days: 7,
-          policy_version: "api-1",
-        }),
-        headers: authHeaders(session, randomUUID()),
-      });
-      expect(stonksAuthRes.status).toBe(201);
-      const stonksAuthId = (stonksAuthRes.json as { data: { id: string } }).data.id;
       await touchReference();
       const claimQuoteRes = await callRoute(strategyQuotesPOST, {
         method: "POST",
@@ -510,6 +496,20 @@ describe("onchain beta HTTP journey", () => {
       });
       expect(claimQuoteRes.status).toBe(200);
       const claimQuote = (claimQuoteRes.json as { data: { id: string } }).data;
+      const stonksAuthRes = await callRoute(authorizationsPOST, {
+        method: "POST",
+        url: `${ORIGIN}/api/v1/investment-authorizations`,
+        body: JSON.stringify({
+          kind: "one_time",
+          quote_kind: "strategy",
+          quote_id: claimQuote.id,
+          policy_version: "api-1",
+          disclosure_version: "1",
+        }),
+        headers: authHeaders(session, randomUUID()),
+      });
+      expect(stonksAuthRes.status).toBe(201);
+      const stonksAuthId = (stonksAuthRes.json as { data: { id: string } }).data.id;
       const claimRes = await callRoute(strategyOperationsPOST, {
         method: "POST",
         url: `${ORIGIN}/api/v1/strategy-operations`,
@@ -538,10 +538,30 @@ describe("onchain beta HTTP journey", () => {
       expect(receipt.tx_hash).toBeTruthy();
 
       await touchReference();
+      const standingAuthRes = await callRoute(authorizationsPOST, {
+        method: "POST",
+        url: `${ORIGIN}/api/v1/investment-authorizations`,
+        body: JSON.stringify({
+          kind: "standing",
+          stock_ids: [stock.id],
+          strategy_ids: [],
+          actions: ["reward_conversion"],
+          max_action_ngn: "1000000000000000000",
+          max_total_ngn: "1000000000000000000",
+          max_fee_bps: 10000,
+          max_slippage_bps: 100,
+          expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+          policy_version: "api-1",
+          disclosure_version: "1",
+        }),
+        headers: authHeaders(session, randomUUID()),
+      });
+      expect(standingAuthRes.status).toBe(201);
+      const standingAuthId = (standingAuthRes.json as { data: { id: string } }).data.id;
       const convertRes = await callRoute(receiptConvertPOST, {
         method: "POST",
         url: `${ORIGIN}/api/v1/reward-receipts/${receipt.id}/convert`,
-        body: JSON.stringify({ authorization_id: authId }),
+        body: JSON.stringify({ authorization_id: standingAuthId }),
         headers: authHeaders(session, randomUUID()),
         params: { id: receipt.id },
       });
@@ -599,20 +619,6 @@ describe("onchain beta HTTP journey", () => {
       // 10. Failed buy cash fallback: a named scenario makes the executed swap fall
       // below the quoted minimum; the reservation is released back to cash.
       const cashBefore = await ledgerService.balance(acct.userCash(userId, "testnet"));
-      const failAuthRes = await callRoute(authorizationsPOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/investment-authorizations`,
-        body: JSON.stringify({
-          scope: "investments",
-          stock_id: failStock.id,
-          max_spend_usdc: "9000000000000000000",
-          duration_days: 7,
-          policy_version: "api-1",
-        }),
-        headers: authHeaders(session, randomUUID()),
-      });
-      expect(failAuthRes.status).toBe(201);
-      const failAuthId = (failAuthRes.json as { data: { id: string } }).data.id;
       await touchReference();
       const failQuoteRes = await callRoute(investmentQuotePOST, {
         method: "POST",
@@ -623,6 +629,20 @@ describe("onchain beta HTTP journey", () => {
       expect(failQuoteRes.status).toBe(200);
       const failQuote = (failQuoteRes.json as { data: InvestmentQuoteDto }).data;
       expect(failQuote.provider_id).toBe("o1");
+      const failAuthRes = await callRoute(authorizationsPOST, {
+        method: "POST",
+        url: `${ORIGIN}/api/v1/investment-authorizations`,
+        body: JSON.stringify({
+          kind: "one_time",
+          quote_kind: "investment",
+          quote_id: failQuote.id,
+          policy_version: "api-1",
+          disclosure_version: "1",
+        }),
+        headers: authHeaders(session, randomUUID()),
+      });
+      expect(failAuthRes.status).toBe(201);
+      const failAuthId = (failAuthRes.json as { data: { id: string } }).data.id;
       const failKey = randomUUID();
       const failConfirm = await callRoute(investmentsPOST, {
         method: "POST",
@@ -660,7 +680,9 @@ describe("onchain beta HTTP journey", () => {
       });
       const failDto = (failFinal.json as { data: InvestmentDto }).data;
       expect(failDto.status).toBe("failed");
-      expect(failDto.failure_reason).toBe("EXECUTION_REVERTED");
+      // The quote did not consent to partial fills, so the smaller input fill
+      // cannot finalize: the contract reverts MIN_OUTPUT_BREACH.
+      expect(failDto.failure_reason).toBe("MIN_OUTPUT_BREACH");
       expect(await ledgerService.balance(acct.userCash(userId, "testnet"))).toBe(cashBefore);
 
       // 11. No gas top-up: the user's EOA and execution account never hold native

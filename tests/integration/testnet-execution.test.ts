@@ -9,7 +9,7 @@ import { executionService, registerOperationFinalizer } from "@/backend/services
 import { planFingerprint } from "@/backend/services/execution/policy";
 import { settlementTokenAbi } from "@/backend/services/onchain/abis";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
-import { chainDeadlineFromNow, settlementAssetKey, testnetService, readManifest } from "@/backend/services/onchain/testnet";
+import { chainDeadlineBounded, chainDeadlineFromNow, onchainExpiryMs, settlementAssetKey, testnetService, readManifest } from "@/backend/services/onchain/testnet";
 import type {
   ExecutionPlan,
   ExecutionQuote,
@@ -21,9 +21,10 @@ import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { db } from "@/server/db";
 import { toDbRaw } from "@/utils/asset-units";
 
+import { standingAuth } from "../helpers/authorizations";
 import { useTestDatabase } from "../helpers/db";
 import { makeUserWithWallets } from "../helpers/factories";
-import { ensureTestnetNetwork, testnet } from "../helpers/testnet";
+import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../helpers/testnet";
 
 useTestDatabase();
 
@@ -51,10 +52,10 @@ const testSpotAdapter: SpotAdapter = {
     const wallet = await db.wallet.findUniqueOrThrow({ where: { id: quote.walletId } });
     const accountAddress = wallet.executionAddress as Address;
     const recipient = manifest.relayerAddress;
-    const deadline = await chainDeadlineFromNow();
+    const deadline = await chainDeadlineBounded(quote.expiresAt.getTime());
     const calls = [
       {
-        to: settlement as Address,
+        to: settlement,
         data: encodeFunctionData({
           abi: settlementTokenAbi,
           functionName: "approve",
@@ -63,7 +64,7 @@ const testSpotAdapter: SpotAdapter = {
         value: 0n,
       },
       {
-        to: settlement as Address,
+        to: settlement,
         data: encodeFunctionData({
           abi: settlementTokenAbi,
           functionName: "transfer",
@@ -96,14 +97,16 @@ async function makeQuote(input: QuoteRequest): Promise<ExecutionQuote> {
     userId: input.userId,
     walletId: input.walletId,
     stockId: input.stockId,
+    side: input.side,
     context: input.context,
     input: input.input,
     expectedOutput: { asset: input.outputAsset, raw: 0n },
     minOutput: { asset: input.outputAsset, raw: 0n },
     userFeeUsdc: 0n,
     sponsorCostWei: 0n,
+    allowPartialFill: input.allowPartialFill ?? false,
     priceImpactBps: 0,
-    expiresAt: new Date(now().getTime() + 30_000),
+    expiresAt: new Date(await onchainExpiryMs(30)),
     sourceBlock: 0n,
     routeFingerprint: "test-fixture",
   };
@@ -134,14 +137,16 @@ async function makeOperation(
     userId: ctx.u.id,
     walletId: ctx.ref.wallet.id,
     stockId: "test-stock",
+    side: "buy",
     context,
     input: { asset: settlementAssetKey(manifest), raw: amount },
     expectedOutput: { asset: settlementAssetKey(manifest), raw: 0n },
     minOutput: { asset: settlementAssetKey(manifest), raw: 0n },
     userFeeUsdc: 0n,
     sponsorCostWei: 0n,
+    allowPartialFill: false,
     priceImpactBps: 0,
-    expiresAt: new Date(now().getTime() + 30_000),
+    expiresAt: new Date(await onchainExpiryMs(30)),
     sourceBlock: await handle.blockNumber(),
     routeFingerprint: "test-fixture",
   };
@@ -218,11 +223,11 @@ describe("testnet execution", () => {
       ...base,
       calls: [
         {
-          to: settlement as Address,
+          to: settlement,
           data: encodeFunctionData({
             abi: settlementTokenAbi,
             functionName: "transfer",
-            args: ["0x000000000000000000000000000000000000dEaD" as Address, 100n],
+            args: ["0x000000000000000000000000000000000000dEaD", 100n],
           }) as Hex,
           value: 0n,
         },
@@ -236,7 +241,7 @@ describe("testnet execution", () => {
       ...base,
       calls: [
         {
-          to: settlement as Address,
+          to: settlement,
           data: encodeFunctionData({
             abi: settlementTokenAbi,
             functionName: "approve",
@@ -254,20 +259,11 @@ describe("testnet execution", () => {
 
   it("revocationStopsUnsubmittedWork: a revoked authorization blocks signing", { timeout: 60_000 }, async () => {
     const ctx = await setupUser();
-    const auth = await authorizationService.create(
-      ctx.u.id,
-      {
-        scope: "investments",
-        stockId: "test-stock",
-        maxSpendUsdc: 100_000_000n,
-        durationDays: 7,
-        policyVersion: "beta-1",
-      },
-      randomUUID(),
-    );
-    const { op } = await makeOperation(ctx, 1_000_000n, auth.dto.id);
+    const { stock } = await makeTestnetStock({ symbol: "REV" });
+    const auth = await standingAuth(ctx.u.id, { stockIds: [stock.id] }, ["claim"]);
+    const { op } = await makeOperation(ctx, 1_000_000n, auth.id);
     await executionService.prepare(op.id);
-    await authorizationService.revoke(ctx.u.id, auth.dto.id);
+    await authorizationService.revoke(ctx.u.id, auth.id);
     await expect(executionService.submit(op.id)).rejects.toMatchObject({
       code: "AUTHORIZATION_REVOKED",
     });
@@ -304,6 +300,68 @@ describe("testnet execution", () => {
     const reloaded = await db.onchainOperation.findUniqueOrThrow({ where: { id: op.id } });
     expect(reloaded.status).toBe("prepared");
     expect(await db.signedPayload.count({ where: { operationId: op.id } })).toBe(0);
+  });
+
+  it("sharedRelayerAllocatesUniqueNonces: concurrent operations from two accounts on one relayer get distinct nonces", { timeout: 60_000 }, async () => {
+    const ctxA = await setupUser();
+    const ctxB = await setupUser();
+    const a = await makeOperation(ctxA, 1_000_000n);
+    const b = await makeOperation(ctxB, 1_000_000n);
+    await executionService.prepare(a.op.id);
+    await executionService.prepare(b.op.id);
+    await Promise.all([executionService.submit(a.op.id), executionService.submit(b.op.id)]);
+    const opA = await db.onchainOperation.findUniqueOrThrow({ where: { id: a.op.id } });
+    const opB = await db.onchainOperation.findUniqueOrThrow({ where: { id: b.op.id } });
+    expect(["signed", "broadcast"]).toContain(opA.status);
+    expect(["signed", "broadcast"]).toContain(opB.status);
+    // One shared relayer, two distinct persisted transaction nonces...
+    expect(opA.relayerNonce).not.toBeNull();
+    expect(opB.relayerNonce).not.toBeNull();
+    expect(opA.relayerNonce).not.toBe(opB.relayerNonce);
+    // ...while each execution account keeps its own operation nonce sequence.
+    expect(opA.nonce).toBe(1);
+    expect(opB.nonce).toBe(1);
+    const payloadA = await db.signedPayload.findUniqueOrThrow({ where: { operationId: a.op.id } });
+    const payloadB = await db.signedPayload.findUniqueOrThrow({ where: { operationId: b.op.id } });
+    expect(payloadA.executeTx).not.toBe(payloadB.executeTx);
+    await ctxA.handle.mine(3);
+    await executionService.progress(a.op.id);
+    await executionService.progress(b.op.id);
+    await ctxA.handle.mine(3);
+    await executionService.progress(a.op.id);
+    await executionService.progress(b.op.id);
+    const finalA = await db.onchainOperation.findUniqueOrThrow({ where: { id: a.op.id } });
+    const finalB = await db.onchainOperation.findUniqueOrThrow({ where: { id: b.op.id } });
+    expect(finalA.status).toBe("finalized");
+    expect(finalB.status).toBe("finalized");
+    expect(finalA.txHash).not.toBe(finalB.txHash);
+  });
+
+  it("restartRetainsAccountOwner: the deployment keystore reloads the same account and holds on key loss", async () => {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { keystorePath, keystoreRelayerKey } = await import("@/backend/services/onchain/testnet");
+    const { privateKeyToAccount } = await import("viem/accounts");
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "v3st-keystore-"));
+    try {
+      const first = keystoreRelayerKey(dir);
+      const owner = privateKeyToAccount(first).address;
+      // A restart (fresh call, same deployment directory) reloads the same owner.
+      const second = keystoreRelayerKey(dir);
+      expect(second).toBe(first);
+      expect(privateKeyToAccount(second).address).toBe(owner);
+      // The keystore file is restricted to the owner.
+      const stat = await fs.stat(keystorePath(dir));
+      expect(stat.mode & 0o077).toBe(0);
+      // Key loss with an existing deployment holds instead of silently
+      // assigning a new account owner.
+      await fs.writeFile(path.join(dir, "manifest.json"), "{}");
+      await fs.unlink(keystorePath(dir));
+      expect(() => keystoreRelayerKey(dir)).toThrow(/holding/i);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("reorgBeforeFinalityCreditsNothing: an unfinalized reorged operation retains holds and posts nothing", { timeout: 60_000 }, async () => {

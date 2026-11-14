@@ -12,7 +12,7 @@ import type {
   StrategyRequest,
 } from "@/backend/services/onchain/types";
 import { planFingerprint } from "@/backend/services/execution/policy";
-import { chainDeadlineFromNow } from "@/backend/services/onchain/testnet";
+import { chainDeadlineBounded, chainDeadlineFromNow, onchainExpiryMs } from "@/backend/services/onchain/testnet";
 import { db } from "@/server/db";
 import { UnprocessableEntityException } from "@/utils/exceptions";
 
@@ -91,7 +91,7 @@ export async function buildClaimQuote(
     minimumOutputs: [spec.minimumOutput],
     maximumInputs: [],
     userFeeUsdc: 0n,
-    expiresAt: new Date(now().getTime() + policy.onchain.quoteTtlSeconds * 1000),
+    expiresAt: new Date(await onchainExpiryMs(policy.onchain.quoteTtlSeconds)),
     strategyVersion: spec.strategyVersion,
     disclosureVersion: spec.disclosureVersion,
     planFingerprint: "",
@@ -119,7 +119,7 @@ export async function buildClaimPlan(
     maximumInputs: quote.maximumInputs,
     minimumOutputs: quote.minimumOutputs,
     recipient,
-    deadline: await chainDeadlineFromNow(),
+    deadline: await chainDeadlineBounded(quote.expiresAt.getTime()),
     fingerprint: "",
   };
   plan.fingerprint = planFingerprint(plan);

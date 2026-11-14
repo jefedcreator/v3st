@@ -4,7 +4,7 @@
 
 CREATE TYPE "IntegrationKind" AS ENUM ('local_testnet_replica', 'verified_provider_testnet');
 CREATE TYPE "CustodyKind" AS ENUM ('application_account', 'provider_managed');
-CREATE TYPE "AuthScope" AS ENUM ('investments', 'strategies', 'all');
+CREATE TYPE "AuthKind" AS ENUM ('one_time', 'standing');
 CREATE TYPE "OperationKind" AS ENUM ('spot', 'strategy');
 CREATE TYPE "OperationStatus" AS ENUM ('pending', 'prepared', 'signed', 'broadcast', 'confirmed', 'finalized', 'reverted', 'failed', 'unknown', 'needs_review');
 CREATE TYPE "StepStatus" AS ENUM ('pending', 'prepared', 'signed', 'broadcast', 'confirmed', 'reverted', 'failed', 'unknown');
@@ -88,14 +88,22 @@ CREATE TABLE "investment_authorizations" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "key" TEXT NOT NULL,
-    "scope" "AuthScope" NOT NULL,
-    "stockId" TEXT,
-    "strategyId" TEXT,
-    "maxSpendUsdc" numeric(78,0) NOT NULL,
+    "kind" "AuthKind" NOT NULL,
+    "quoteKind" TEXT,
+    "quoteId" TEXT,
+    "stockIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "strategyIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "actions" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "maxActionNgn" numeric(78,0),
+    "maxTotalNgn" numeric(78,0),
+    "maxFeeBps" INTEGER,
+    "maxSlippageBps" INTEGER,
     "expiresAt" TIMESTAMPTZ(6) NOT NULL,
     "revokedAt" TIMESTAMPTZ(6),
     "epoch" INTEGER NOT NULL DEFAULT 0,
     "policyVersion" TEXT NOT NULL,
+    "disclosureVersion" TEXT,
+    "betaContext" JSONB,
     "requestHash" TEXT NOT NULL,
     "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "investment_authorizations_pkey" PRIMARY KEY ("id")
@@ -114,6 +122,7 @@ CREATE TABLE "investment_quotes" (
     "expectedOutputRaw" numeric(78,0) NOT NULL,
     "minOutputRaw" numeric(78,0) NOT NULL,
     "budgetNgn" BIGINT,
+    "allowPartialFill" BOOLEAN NOT NULL DEFAULT false,
     "feeUsdc" numeric(78,0) NOT NULL,
     "fxFeeUsdc" numeric(78,0) NOT NULL DEFAULT 0,
     "venueFeeUsdc" numeric(78,0) NOT NULL DEFAULT 0,
@@ -172,6 +181,7 @@ CREATE TABLE "onchain_operations" (
     "authorizationId" TEXT,
     "status" "OperationStatus" NOT NULL DEFAULT 'pending',
     "nonce" INTEGER,
+    "relayerNonce" INTEGER,
     "signedPayloadHash" TEXT,
     "txHash" TEXT,
     "blockHash" TEXT,
@@ -212,6 +222,7 @@ CREATE TABLE "chain_observations" (
     "gasCostWei" numeric(78,0),
     "actualInput" JSONB,
     "actualOutput" JSONB,
+    "deltas" JSONB,
     "observedAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "chain_observations_pkey" PRIMARY KEY ("id")
 );

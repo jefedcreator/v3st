@@ -185,10 +185,9 @@ enum CustodyKind {
     provider_managed
 }
 
-enum AuthScope {
-    investments
-    strategies
-    all
+enum AuthKind {
+    one_time
+    standing
 }
 
 enum OperationKind {
@@ -824,16 +823,26 @@ model InvestmentAuthorization {
     id            String    @id @default(cuid())
     userId        String
     key           String    @unique
-    scope         AuthScope
-    stockId       String?
-    strategyId    String?
-    maxSpendUsdc  Decimal   @db.Decimal(78, 0)
-    expiresAt     DateTime
+    kind              AuthKind
+    // one_time: bound to one owned persisted quote; all limits resolve from it.
+    quoteKind         String?
+    quoteId           String?
+    // standing: explicit non-empty asset scopes and allowed actions.
+    stockIds          String[]
+    strategyIds       String[]
+    actions           String[]
+    maxActionNgn      Decimal?  @db.Decimal(78, 0)
+    maxTotalNgn       Decimal?  @db.Decimal(78, 0)
+    maxFeeBps         Int?
+    maxSlippageBps    Int?
+    expiresAt         DateTime
     revokedAt     DateTime?
     epoch         Int       @default(0)
-    policyVersion String
-    requestHash   String
-    createdAt     DateTime  @default(now())
+    policyVersion     String
+    disclosureVersion String?
+    betaContext       Json?
+    requestHash       String
+    createdAt         DateTime  @default(now())
 
     investments    Investment[]
     strategyQuotes StrategyQuote[]
@@ -853,6 +862,7 @@ model InvestmentQuote {
     expectedOutputRaw Decimal   @db.Decimal(78, 0)
     minOutputRaw      Decimal   @db.Decimal(78, 0)
     budgetNgn         BigInt?
+    allowPartialFill  Boolean   @default(false)
     feeUsdc           Decimal   @db.Decimal(78, 0)
     fxFeeUsdc         Decimal   @db.Decimal(78, 0) @default(0)
     venueFeeUsdc      Decimal   @db.Decimal(78, 0) @default(0)
@@ -918,6 +928,7 @@ model OnchainOperation {
     authorizationId       String?
     status                OperationStatus @default(pending)
     nonce                 Int?
+    relayerNonce          Int?
     signedPayloadHash     String?
     txHash                String?
     blockHash             String?
@@ -966,6 +977,7 @@ model ChainObservation {
     gasCostWei   Decimal?        @db.Decimal(78, 0)
     actualInput  Json?
     actualOutput Json?
+    deltas       Json?
     observedAt   DateTime        @default(now())
 
     @@index([operationId])

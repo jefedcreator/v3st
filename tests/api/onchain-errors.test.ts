@@ -64,16 +64,16 @@ async function setup(symbol: string) {
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 
-async function makeAuthorization(ctx: Ctx): Promise<string> {
+async function makeAuthorization(ctx: Ctx, quoteId: string, quoteKind: "investment" | "strategy" = "investment"): Promise<string> {
   const res = await callRoute(authorizationsPOST, {
     method: "POST",
     url: `${ORIGIN}/api/v1/investment-authorizations`,
     body: JSON.stringify({
-      scope: "investments",
-      stock_id: ctx.stock.id,
-      max_spend_usdc: "9000000000000000000",
-      duration_days: 7,
+      kind: "one_time",
+      quote_kind: quoteKind,
+      quote_id: quoteId,
       policy_version: "api-errors",
+      disclosure_version: "1",
     }),
     headers: authHeaders(ctx.session, randomUUID()),
   });
@@ -173,10 +173,10 @@ describe("onchain API error contract", () => {
 
   it("rejects cross-user reads and writes with 404", async () => {
     const ctx = await setup("ERR2");
-    const authId = await makeAuthorization(ctx);
     const q = await quoteBuy(ctx, { side: "buy", input_raw: "1000000" });
     expect(q.status).toBe(200);
     const quote = (q.json as { data: InvestmentQuoteDto }).data;
+    const authId = await makeAuthorization(ctx, quote.id);
     const confirm = await callRoute(investmentsPOST, {
       method: "POST",
       url: `${ORIGIN}/api/v1/investments`,
@@ -222,13 +222,13 @@ describe("onchain API error contract", () => {
 
   it("returns 409 for expired strategy quotes and keeps cash for expired investment quotes", async () => {
     const ctx = await setup("ERR3");
-    const authId = await makeAuthorization(ctx);
 
     // Expired investment quote: 202 with a friendly hold reason, cash untouched.
     const cashBefore = await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"));
     const q = await quoteBuy(ctx, { side: "buy", input_raw: "5000000" });
     expect(q.status).toBe(200);
     const quote = (q.json as { data: InvestmentQuoteDto }).data;
+    const authId = await makeAuthorization(ctx, quote.id);
     await db.investmentQuote.update({
       where: { id: quote.id },
       data: { expiresAt: new Date(now().getTime() - 1_000) },
@@ -249,10 +249,11 @@ describe("onchain API error contract", () => {
     const big = await quoteBuy(ctx, { side: "buy", input_raw: "50000000" });
     expect(big.status).toBe(200);
     const bigQuote = (big.json as { data: InvestmentQuoteDto }).data;
+    const bigAuthId = await makeAuthorization(ctx, bigQuote.id);
     const bigConfirm = await callRoute(investmentsPOST, {
       method: "POST",
       url: `${ORIGIN}/api/v1/investments`,
-      body: JSON.stringify({ quote_id: bigQuote.id, authorization_id: authId }),
+      body: JSON.stringify({ quote_id: bigQuote.id, authorization_id: bigAuthId }),
       headers: authHeaders(ctx.session, randomUUID()),
     });
     expect(bigConfirm.status).toBe(409);
@@ -262,20 +263,6 @@ describe("onchain API error contract", () => {
 
     // Expired strategy quote: 409 QUOTE_EXPIRED on confirm.
     const strategy = await makeStonksStrategy(ctx, "err3");
-    const stratAuthRes = await callRoute(authorizationsPOST, {
-      method: "POST",
-      url: `${ORIGIN}/api/v1/investment-authorizations`,
-      body: JSON.stringify({
-        scope: "strategies",
-        strategy_id: strategy.id,
-        max_spend_usdc: "1000000000000",
-        duration_days: 7,
-        policy_version: "api-errors",
-      }),
-      headers: authHeaders(ctx.session, randomUUID()),
-    });
-    expect(stratAuthRes.status).toBe(201);
-    const stratAuthId = (stratAuthRes.json as { data: { id: string } }).data.id;
     const sq = await callRoute(strategyQuotesPOST, {
       method: "POST",
       url: `${ORIGIN}/api/v1/strategy-quotes`,
@@ -284,6 +271,7 @@ describe("onchain API error contract", () => {
     });
     expect(sq.status).toBe(200);
     const sqId = (sq.json as { data: { id: string } }).data.id;
+    const stratAuthId = await makeAuthorization(ctx, sqId, "strategy");
     await db.strategyQuote.update({
       where: { id: sqId },
       data: { expiresAt: new Date(now().getTime() - 1_000) },
@@ -300,9 +288,9 @@ describe("onchain API error contract", () => {
 
   it("scopes beta scenarios to the owner and the operation state", async () => {
     const ctx = await setup("ERR4");
-    const authId = await makeAuthorization(ctx);
     const q = await quoteBuy(ctx, { side: "buy", input_raw: "1000000" });
     const quote = (q.json as { data: InvestmentQuoteDto }).data;
+    const authId = await makeAuthorization(ctx, quote.id);
     const confirm = await callRoute(investmentsPOST, {
       method: "POST",
       url: `${ORIGIN}/api/v1/investments`,
@@ -329,25 +317,13 @@ describe("onchain API error contract", () => {
     // partial_fill fits o1 spot operations only: create a strategy-kind op and
     // confirm the scenario is refused for it.
     const strategy = await makeStonksStrategy(ctx, "err4");
-    const stratAuthRes = await callRoute(authorizationsPOST, {
-      method: "POST",
-      url: `${ORIGIN}/api/v1/investment-authorizations`,
-      body: JSON.stringify({
-        scope: "strategies",
-        strategy_id: strategy.id,
-        max_spend_usdc: "1000000000000",
-        duration_days: 7,
-        policy_version: "api-errors",
-      }),
-      headers: authHeaders(ctx.session, randomUUID()),
-    });
-    const stratAuthId = (stratAuthRes.json as { data: { id: string } }).data.id;
     const sq = await callRoute(strategyQuotesPOST, {
       method: "POST",
       url: `${ORIGIN}/api/v1/strategy-quotes`,
       body: JSON.stringify({ strategy_id: strategy.id, action: "claim" }),
       headers: authHeaders(ctx.session),
     });
+    const stratAuthId = await makeAuthorization(ctx, (sq.json as { data: { id: string } }).data.id, "strategy");
     const stratOp = await callRoute(strategyOperationsPOST, {
       method: "POST",
       url: `${ORIGIN}/api/v1/strategy-operations`,

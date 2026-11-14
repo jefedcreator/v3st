@@ -26,7 +26,7 @@ resources, `403` for non-operators on `/ops/*`.
 
 | Endpoint | Request → result |
 | --- | --- |
-| `POST /investments/quote` | `{ stock_id, side: "buy", input_raw? , budget_ngn? , slippage_bps? }` or `{ stock_id, side: "sell", input_raw }` (raw stock units) → persisted quote with expiry, fee breakdown, expected/minimum raw outputs, provider id |
+| `POST /investments/quote` | `{ stock_id, side: "buy", input_raw? , budget_ngn? , slippage_bps? , allow_partial_fill? }` or `{ stock_id, side: "sell", input_raw }` (raw stock units) → persisted quote with expiry, fee breakdown, expected/minimum raw outputs, `allow_partial_fill`, provider id. If `allow_partial_fill` is false, a smaller input fill cannot finalize (reverted `MIN_OUTPUT_BREACH`); if true, the filled portion must satisfy `0 < actualInput <= quotedInput` and `actualOutput >= ceil(minOutput * actualInput / quotedInput)`, and only the unused input remainder is released |
 | `POST /investments` | `{ quote_id, authorization_id }` + `Idempotency-Key` → `202` investment (status `executing` with `operation_id`); an identical replay returns `200` with the one created resource |
 | `GET /investments`, `GET /investments/:id` | Owner-scoped list/detail: status, accepted terms, confirmed fill, friendly `failure_reason`; `Cache-Control: private, no-store` |
 
@@ -34,7 +34,7 @@ resources, `403` for non-operators on `/ops/*`.
 
 | Endpoint | Request → result |
 | --- | --- |
-| `GET /investment-authorizations`, `POST /investment-authorizations` | List; create `{ scope: "investments"\|"strategies"\|"all", stock_id?, strategy_id?, max_spend_usdc, duration_days (1..30), policy_version }` + `Idempotency-Key` → `201` (`200` on replay) |
+| `GET /investment-authorizations`, `POST /investment-authorizations` | List; create a strict union + `Idempotency-Key` → `201` (`200` on replay). One-time: `{ kind: "one_time", quote_kind: "investment"\|"strategy", quote_id, policy_version, disclosure_version }` — bound to one owned persisted quote, all limits resolve from it (strategy entry always requires this). Standing: `{ kind: "standing", stock_ids, strategy_ids, actions, max_action_ngn, max_total_ngn, max_fee_bps, max_slippage_bps (≤100), expires_at (≤30 days out), policy_version, disclosure_version }` — `actions` only `claim`/`reward_conversion`/`reinvest`/`withdrawal_sale`, naira caps in positive integer-string kobo, empty/wildcard asset scopes rejected; cumulative value reserves atomically against the caps |
 | `DELETE /investment-authorizations/:id` | Revokes new activity (epoch bump); accepted/broadcast work is preserved for reconciliation; idempotent |
 
 ## Strategies
@@ -50,7 +50,7 @@ resources, `403` for non-operators on `/ops/*`.
 | Endpoint | Notes |
 | --- | --- |
 | `GET /portfolio` | Existing DTO plus `receipts`: owner-scoped reward receipts with source, tx hash, state (`received_asset`, `conversion_pending`, `available`, `reserved_for_payout`, `paid`) |
-| `POST /reward-receipts/:id/convert` | `{ authorization_id }` + `Idempotency-Key` → `202 { operation_id }`; consent-bound sell of a stock-asset receipt; replay returns the same operation. Finalized proceeds are recognized automatically and become payable Friday |
+| `POST /reward-receipts/:id/convert` | `{ authorization_id }` + `Idempotency-Key` → `202 { operation_id }`; the authorization must be a standing `reward_conversion` consent covering the receipt's stock; replay returns the same operation. Finalized proceeds are recognized automatically and become payable Friday |
 | `GET /earnings` | Weeks with earned/paid/reinvested/pending and payout state |
 | `PUT /earnings/preference` | `{ mode, stock_id? }` plus versioned consent limits: `consent_version`, `allow_background_conversion`, `max_conversion_fee_bps`, `max_fx_bps` (required together) |
 

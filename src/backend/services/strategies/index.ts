@@ -10,7 +10,7 @@ import {
 import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
-import { authorizationService } from "@/backend/services/authorizations";
+import { authorizationService, type StandingAction } from "@/backend/services/authorizations";
 import { eventService } from "@/backend/services/events";
 import {
   accountAddressFor,
@@ -19,7 +19,7 @@ import {
   registerOperationFinalizer,
   unpack,
 } from "@/backend/services/execution";
-import { captureBalances, deltaVector } from "@/backend/services/execution/receipts";
+import { captureBalances, deltaVector, receivedOf as deltaReceivedOf, spentOf as deltaSpentOf } from "@/backend/services/execution/receipts";
 import { jobService } from "@/backend/services/jobs";
 import { acct } from "@/backend/services/ledger/accounts";
 import { ledgerService } from "@/backend/services/ledger";
@@ -35,9 +35,10 @@ import {
 import { hydrexPoolAbi } from "@/backend/services/onchain/abis";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import "@/backend/services/onchain/providers";
-import { publicClientFor, readManifest, settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
+import { onchainExpiryMs, publicClientFor, readManifest, settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
 import type {
   AssetAmount,
+  AssetDelta,
   BetaContext,
   ExecutionObservation,
   ExecutionQuote,
@@ -400,7 +401,7 @@ class StrategyService {
 
     const request: StrategyRequest = { userId, strategyId, positionId, action, inputs, context };
     const quote = await adapter.quote(request);
-    const expiresAt = new Date(Math.min(quote.expiresAt.getTime(), now().getTime() + 30_000));
+    const expiresAt = new Date(Math.min(quote.expiresAt.getTime(), await onchainExpiryMs(30)));
     const fingerprint =
       quote.planFingerprint ||
       sha256Hex(
@@ -439,6 +440,7 @@ class StrategyService {
     quoteId: string,
     authorizationId: string,
     key: string,
+    opts?: { standingAction?: StandingAction },
   ): Promise<StrategyOperationDto> {
     const requestHash = sha256Hex(canonicalJson({ quoteId, authorizationId, key }));
     return withTx(async (tx) => {
@@ -479,10 +481,16 @@ class StrategyService {
       if (!network) throw new NotFoundException("Onchain network not registered", "NETWORK_UNHEALTHY");
 
       const allocationUsdc = await this.usdcEquivalentOf(tx, quote.maximumInputs);
-      await authorizationService.check(tx, userId, authorizationId, {
-        scope: "strategies",
-        strategyId: strategy.id,
-        amountUsdc: allocationUsdc,
+      const usageNgnKobo = await authorizationService.check(tx, userId, authorizationId, {
+        // Strategy entry/exit require one-time consent bound to this quote; a claim
+        // may instead ride a standing authorization with the claim action.
+        action: opts?.standingAction,
+        quote: {
+          kind: "strategy",
+          id: row.id,
+          strategyId: strategy.id,
+          valueMicroUsd: allocationUsdc,
+        },
       });
 
       // Fixture ceiling under locks: 20%-of-investment-value exposure across active
@@ -616,6 +624,9 @@ class StrategyService {
         await tx.strategyPosition.update({ where: { id: position.id }, data: { operationId: op.id } });
       }
       await tx.strategyQuote.update({ where: { id: quoteId }, data: { consumedAt: now(), authorizationId } });
+      if (opts?.standingAction) {
+        await authorizationService.recordUsage(tx, op.id, usageNgnKobo);
+      }
       await jobService.enqueue(tx, { kind: "strategy.progress", subjectId: op.id });
       return this.operationDto(tx, op);
     }, { timeoutMs: 30_000 });
@@ -817,12 +828,19 @@ class StrategyService {
 
     if (op.status === "finalized") {
       const plan = expected.plan ? (unpack(expected.plan) as StrategyPlan) : null;
-      const assets = plan ? [...plan.maximumInputs, ...plan.minimumOutputs].map((a) => a.asset) : [];
-      const uniqueAssets = [...new Set(assets)];
-      const post = uniqueAssets.length > 0 ? await captureBalances(uniqueAssets, account) : {};
-      const deltas = deltaVector(expected.preBalances ?? {}, post, account);
-      const spentOf = (asset: string): bigint => deltas.find((d) => d.asset === asset)?.spent ?? 0n;
-      const receivedOf = (asset: string): bigint => deltas.find((d) => d.asset === asset)?.received ?? 0n;
+      // A strategy operation settles from its persisted observed delta vector
+      // (transaction-local, account-attributed); its single-asset actualInput /
+      // actualOutput fields remain null.
+      const persisted = op.actual ? (unpack(op.actual) as { deltas?: AssetDelta[] }) : null;
+      let deltas: AssetDelta[] = persisted?.deltas ?? [];
+      if (deltas.length === 0) {
+        const assets = plan ? [...plan.maximumInputs, ...plan.minimumOutputs].map((a) => a.asset) : [];
+        const uniqueAssets = [...new Set(assets)];
+        const post = uniqueAssets.length > 0 ? await captureBalances(uniqueAssets, account) : {};
+        deltas = deltaVector(expected.preBalances ?? {}, post, account);
+      }
+      const spentOf = (asset: string): bigint => deltaSpentOf(deltas, asset);
+      const receivedOf = (asset: string): bigint => deltaReceivedOf(deltas, asset);
       if (action === "enter") {
         const shares = await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Deposited");
         const settleSpent = spentOf(settlement);

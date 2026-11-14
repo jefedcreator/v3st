@@ -31,6 +31,7 @@ export const POST = withMiddleware<InvestmentQuoteBodySchema, null, null>(
       inputRaw,
       budgetNgn: body.budget_ngn,
       slippageBps: body.slippage_bps,
+      allowPartialFill: body.allow_partial_fill,
     });
     const res = ok(quote, "Investment quote");
     res.headers.set("Cache-Control", "private, no-store");

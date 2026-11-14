@@ -5,7 +5,7 @@ import { assertOnchainContext } from "@/backend/integrations/onchain-policy";
 import { settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 import type { AssetAmount, ExecutionPlan, PreparedCall, StrategyPlan } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
-import { readManifest } from "@/backend/services/onchain/testnet";
+import { chainNowMs, readManifest } from "@/backend/services/onchain/testnet";
 import { db } from "@/server/db";
 import { canonicalJson, sha256Hex } from "@/utils";
 
@@ -142,7 +142,9 @@ function assertCall(
 
 export async function assertExecutionPlan(plan: ExecutionPlan | StrategyPlan): Promise<void> {
   assertOnchainContext(plan.context);
-  if (plan.deadline <= now()) {
+  // The plan deadline is enforced onchain against block.timestamp, so the
+  // passed-check uses the chain clock, not the (fakeable) app wall clock.
+  if (plan.deadline.getTime() <= (await chainNowMs())) {
     throw new ExecutionPlanRejected("Plan deadline has passed");
   }
   if (plan.calls.length === 0 || plan.calls.length > 8) {

@@ -38,8 +38,9 @@ contract O1RouterTest is TestBase, Cheats {
         bytes32 key = router.pairKeyOf(address(usdc), address(stock));
         uint256 expected = router.quoteOut(key, net, true);
         vm.prank(buyer);
-        uint256 out = router.swapExactIn(address(usdc), address(stock), amountIn, expected, buyer, uint64(block.timestamp + 60));
+        (uint256 out, uint256 used) = router.swapExactIn(address(usdc), address(stock), amountIn, expected, buyer, uint64(block.timestamp + 60), false);
         assertEqU(out, expected);
+        assertEqU(used, amountIn);
         assertTrue(out > 0, "positive output");
     }
 
@@ -48,22 +49,38 @@ contract O1RouterTest is TestBase, Cheats {
         uint256 expected = router.quoteOut(key, 10_000_000 - 50_000, true);
         vm.prank(buyer);
         vm.expectRevert("insufficient output");
-        router.swapExactIn(address(usdc), address(stock), 10_000_000, expected + 1, buyer, uint64(block.timestamp + 60));
+        router.swapExactIn(address(usdc), address(stock), 10_000_000, expected + 1, buyer, uint64(block.timestamp + 60), false);
     }
 
-    function test_partialFillFixture() public {
+    function test_partialFillPullsOnlyFilledInputWithProRataMin() public {
         router.setPartialFillBps(5_000); // deterministic 50% fill
         bytes32 key = router.pairKeyOf(address(usdc), address(stock));
+        // Only the filled portion is pulled; the fee is charged on it.
+        uint256 fillIn = (10_000_000 * 5_000) / 10_000;
+        uint256 expectedOut = router.quoteOut(key, fillIn - (fillIn * 50) / 10_000, true);
         uint256 full = router.quoteOut(key, 10_000_000 - 50_000, true);
+        // Pro-rata minimum: ceil(minOut * fillIn / amountIn), rounded up.
+        uint256 proRataMin = (full * fillIn + 10_000_000 - 1) / 10_000_000;
         vm.prank(buyer);
-        uint256 out = router.swapExactIn(address(usdc), address(stock), 10_000_000, (full * 5_000) / 10_000, buyer, uint64(block.timestamp + 60));
-        assertEqU(out, (full * 5_000) / 10_000);
+        (uint256 out, uint256 used) = router.swapExactIn(address(usdc), address(stock), 10_000_000, proRataMin, buyer, uint64(block.timestamp + 60), true);
+        assertEqU(out, expectedOut);
+        assertEqU(used, fillIn);
+        assertTrue(out >= proRataMin, "pro-rata minimum met");
+        // The sender was charged only the filled portion.
+        assertEqU(usdc.balanceOf(buyer), 10_000_000 - fillIn);
+    }
+
+    function test_partialFillWithoutConsentRevertsMinOutputBreach() public {
+        router.setPartialFillBps(5_000);
+        vm.prank(buyer);
+        vm.expectRevert("MIN_OUTPUT_BREACH");
+        router.swapExactIn(address(usdc), address(stock), 10_000_000, 0, buyer, uint64(block.timestamp + 60), false);
     }
 
     function test_revertsAfterDeadline() public {
         vm.warp(block.timestamp + 1000);
         vm.prank(buyer);
         vm.expectRevert("deadline exceeded");
-        router.swapExactIn(address(usdc), address(stock), 10_000_000, 0, buyer, uint64(block.timestamp - 1));
+        router.swapExactIn(address(usdc), address(stock), 10_000_000, 0, buyer, uint64(block.timestamp - 1), false);
     }
 }

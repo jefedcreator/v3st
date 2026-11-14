@@ -2,21 +2,26 @@ import { randomUUID } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { authorizationService } from "@/backend/services/authorizations";
+import { depositService } from "@/backend/services/deposits";
 import { investmentService } from "@/backend/services/investments";
 import { executionService, unpack } from "@/backend/services/execution";
+import { kycService } from "@/backend/services/kyc";
+import { simRamp } from "@/backend/services/simulator/ramp";
 import { acct } from "@/backend/services/ledger/accounts";
 import { ledgerService } from "@/backend/services/ledger";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import "@/backend/services/onchain/providers";
-import { settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
+import { publicClientFor, testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, ExecutionQuote } from "@/backend/services/onchain/types";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { db } from "@/server/db";
+import { fromDbRaw } from "@/utils/asset-units";
 
+import { oneTimeAuth, standingAuth } from "../helpers/authorizations";
 import { useTestDatabase } from "../helpers/db";
-import { fundCash, makeUserWithWallets } from "../helpers/factories";
+import { fundCash, makeBankAccount, makeUserWithWallets, seedTreasury } from "../helpers/factories";
 import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../helpers/testnet";
+import { drainJobs } from "../helpers/worker";
 
 useTestDatabase();
 
@@ -29,20 +34,21 @@ async function setup(symbol = "INV") {
   await handle.seedO1Pool(token, 1_000_000_000_000n, 500_000n * 10n ** 18n);
   await handle.mintSettlement(ref.accountAddress, 100_000_000n);
   await fundCash(u.id, 10_000_000n, "testnet");
-  const { dto: auth } = await authorizationService.create(
-    u.id,
-    { scope: "investments", stockId: stock.id, maxSpendUsdc: 100_000_000n, durationDays: 7, policyVersion: "test" },
-    randomUUID(),
-  );
-  return { handle, network, u, ref, stock, token, auth };
+  return { handle, network, u, ref, stock, token };
 }
 
-async function quoteBuy(ctx: Awaited<ReturnType<typeof setup>>, inputRaw: bigint, slippageBps?: number) {
+async function quoteBuy(
+  ctx: Awaited<ReturnType<typeof setup>>,
+  inputRaw: bigint,
+  slippageBps?: number,
+  allowPartialFill?: boolean,
+) {
   return investmentService.quote(ctx.u.id, {
     stockId: ctx.stock.id,
     side: "buy",
     inputRaw,
     slippageBps,
+    allowPartialFill,
   });
 }
 
@@ -60,9 +66,11 @@ describe("consent-bound investments on the local testnet", () => {
     const q1 = await quoteBuy(ctx, 7_000_000n);
     const q2 = await quoteBuy(ctx, 7_000_000n);
     expect(q1.provider_id).toBe("o1");
+    const auth1 = await oneTimeAuth(ctx.u.id, q1);
+    const auth2 = await oneTimeAuth(ctx.u.id, q2);
     const results = await Promise.allSettled([
-      investmentService.confirm(ctx.u.id, q1.id, ctx.auth.id, `buy-a-${randomUUID()}`),
-      investmentService.confirm(ctx.u.id, q2.id, ctx.auth.id, `buy-b-${randomUUID()}`),
+      investmentService.confirm(ctx.u.id, q1.id, auth1.id, `buy-a-${randomUUID()}`),
+      investmentService.confirm(ctx.u.id, q2.id, auth2.id, `buy-b-${randomUUID()}`),
     ]);
     const ok = results.filter((r) => r.status === "fulfilled");
     const failed = results.filter((r) => r.status === "rejected");
@@ -88,8 +96,9 @@ describe("consent-bound investments on the local testnet", () => {
   it("noProviderFallbackAfterBroadcast: the broadcast operation keeps its provider identity", { timeout: 60_000 }, async () => {
     const ctx = await setup("FALL");
     const q = await quoteBuy(ctx, 1_000_000n);
+    const auth = await oneTimeAuth(ctx.u.id, q);
     const key = `buy-${randomUUID()}`;
-    const inv = await investmentService.confirm(ctx.u.id, q.id, ctx.auth.id, key);
+    const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, key);
     expect(inv.operation_id).not.toBeNull();
     await investmentService.progress(inv.id);
     const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: inv.operation_id! } });
@@ -114,8 +123,9 @@ describe("consent-bound investments on the local testnet", () => {
   it("expiredDepositQuoteLeavesCash: an expired quote leaves cash and needs_confirmation", { timeout: 60_000 }, async () => {
     const ctx = await setup("EXP");
     const q = await quoteBuy(ctx, 5_000_000n);
+    const auth = await oneTimeAuth(ctx.u.id, q);
     await db.investmentQuote.update({ where: { id: q.id }, data: { expiresAt: new Date(Date.now() - 1_000) } });
-    const inv = await investmentService.confirm(ctx.u.id, q.id, ctx.auth.id, `buy-exp-${randomUUID()}`);
+    const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, `buy-exp-${randomUUID()}`);
     expect(inv.status).toBe("needs_confirmation");
     expect(inv.operation_id).toBeNull();
     expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(10_000_000n);
@@ -127,21 +137,23 @@ describe("consent-bound investments on the local testnet", () => {
 
   it("partialFillReleasesOnlyUnusedInput: partial fill settles actuals and consumes the quote", { timeout: 60_000 }, async () => {
     const ctx = await setup("PART");
-    const q = await quoteBuy(ctx, 10_000_000n, 6_000);
-    // The pool degrades after quoting: the executed output is half the quote.
+    const q = await quoteBuy(ctx, 10_000_000n, 6_000, true);
+    const auth = await oneTimeAuth(ctx.u.id, q);
+    // The pool degrades after quoting: the router pulls only half the input.
     await ctx.handle.setO1PartialFillBps(5_000n);
     try {
-      const inv = await investmentService.confirm(ctx.u.id, q.id, ctx.auth.id, `buy-part-${randomUUID()}`);
+      const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, `buy-part-${randomUUID()}`);
       await driveToFinal(ctx, inv.id);
       const row = await investmentService.get(ctx.u.id, inv.id);
       expect(row?.status).toBe("partial");
       const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: inv.operation_id! } });
       const actual = unpack(op.actual) as { input?: AssetAmount; output?: AssetAmount };
+      expect(actual.input!.raw).toBe(5_000_000n);
       expect(BigInt(row!.amount_out!)).toBe(actual.output!.raw);
       expect(BigInt(row!.amount_out!)).toBeLessThan(BigInt(q.expected_output_raw));
-      // Only the actual input was spent; the reservation is fully released.
+      // Only the actual input was pulled; the unused remainder returns to cash.
       expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(0n);
-      expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(0n);
+      expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(5_000_000n);
       expect(await ledgerService.balance(acct.userStock(ctx.u.id, ctx.stock.id))).toBe(actual.output!.raw);
       // The quote is single-use: the remainder needs a fresh quote.
       expect((await db.investmentQuote.findUniqueOrThrow({ where: { id: q.id } })).consumedAt).not.toBeNull();
@@ -152,11 +164,35 @@ describe("consent-bound investments on the local testnet", () => {
     }
   });
 
+  it("partialFillWithoutConsentReverts: a smaller input fill cannot finalize without allowPartialFill", { timeout: 60_000 }, async () => {
+    const ctx = await setup("PNF");
+    const q = await quoteBuy(ctx, 10_000_000n, 6_000, false);
+    const auth = await oneTimeAuth(ctx.u.id, q);
+    await ctx.handle.setO1PartialFillBps(5_000n);
+    try {
+      const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, `buy-pnf-${randomUUID()}`);
+      await driveToFinal(ctx, inv.id);
+      await investmentService.progress(inv.id);
+      const row = await investmentService.get(ctx.u.id, inv.id);
+      expect(row?.status).toBe("failed");
+      expect(row?.failure_reason).toBe("MIN_OUTPUT_BREACH");
+      const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: inv.operation_id! } });
+      expect(op.status).toBe("reverted");
+      // Nothing was pulled: the full reservation returns to cash.
+      expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(0n);
+      expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(10_000_000n);
+      expect(await ledgerService.balance(acct.userStock(ctx.u.id, ctx.stock.id))).toBe(0n);
+    } finally {
+      await ctx.handle.setO1PartialFillBps(10_000n);
+    }
+  });
+
   it("tradeCommitSurvivesCallbackCrash: one commit, one settlement journal after a crash and replay", { timeout: 60_000 }, async () => {
     const ctx = await setup("CRASH");
     const q = await quoteBuy(ctx, 2_000_000n);
+    const auth = await oneTimeAuth(ctx.u.id, q);
     const key = `buy-crash-${randomUUID()}`;
-    const inv = await investmentService.confirm(ctx.u.id, q.id, ctx.auth.id, key);
+    const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, key);
     await db.simFault.create({ data: { scope: "execution.broadcast", key: inv.operation_id! } });
     await expect(executionService.progress(inv.operation_id!)).rejects.toMatchObject({ code: "BROADCAST_INTERRUPTED" });
     // The commit survived: investment + operation exist exactly once.
@@ -168,5 +204,115 @@ describe("consent-bound investments on the local testnet", () => {
     expect(row?.status).toBe("filled");
     expect(await db.ledgerJournal.count({ where: { key: `trade:${inv.id}:filled` } })).toBe(1);
     expect(await db.onchainOperation.count({ where: { key: `inv-op:${key}` } })).toBe(1);
+  });
+
+  it("standingCapCannotBeOverspent: cumulative naira reservations against a standing total cap are atomic", { timeout: 60_000 }, async () => {
+    const ctx = await setup("CAP");
+    const budget = 1_000_000n;
+    const q1 = await investmentService.quote(ctx.u.id, {
+      stockId: ctx.stock.id,
+      side: "buy",
+      inputRaw: 1_000_000n,
+      budgetNgn: budget,
+    });
+    const q2 = await investmentService.quote(ctx.u.id, {
+      stockId: ctx.stock.id,
+      side: "buy",
+      inputRaw: 1_000_000n,
+      budgetNgn: budget,
+    });
+    // Total cap covers exactly one of the two actions.
+    const standing = await standingAuth(ctx.u.id, { stockIds: [ctx.stock.id] }, ["reinvest"], {
+      maxActionNgn: budget,
+      maxTotalNgn: budget,
+    });
+    const results = await Promise.allSettled([
+      investmentService.confirm(ctx.u.id, q1.id, standing.id, `cap-a-${randomUUID()}`, { standingAction: "reinvest" }),
+      investmentService.confirm(ctx.u.id, q2.id, standing.id, `cap-b-${randomUUID()}`, { standingAction: "reinvest" }),
+    ]);
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const failed = results.filter((r) => r.status === "rejected");
+    expect(ok.length).toBe(1);
+    expect(failed.length).toBe(1);
+    expect((failed[0]!).reason).toMatchObject({ code: "AUTHORIZATION_EXCEEDED" });
+    // Cash was reserved exactly once, by exactly one operation.
+    expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(1_000_000n);
+    expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(9_000_000n);
+  });
+
+  it("contractDeadlineCannotBeExtended: inclusion after the quote-expiry bound reverts and releases cash", { timeout: 60_000 }, async () => {
+    const ctx = await setup("DED");
+    const q = await quoteBuy(ctx, 2_000_000n);
+    const auth = await oneTimeAuth(ctx.u.id, q);
+    const key = `buy-ded-${randomUUID()}`;
+    const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, key);
+    const opId = inv.operation_id!;
+    // Sign, then crash before broadcast: the exact signed payload is persisted.
+    await db.simFault.create({ data: { scope: "execution.broadcast", key: opId } });
+    await expect(executionService.progress(opId)).rejects.toMatchObject({ code: "BROADCAST_INTERRUPTED" });
+    let op = await db.onchainOperation.findUniqueOrThrow({ where: { id: opId } });
+    expect(op.status).toBe("signed");
+    const signed = await db.signedPayload.findUniqueOrThrow({ where: { operationId: opId } });
+    // Advance the chain clock past the quote expiry: the bound is never extended.
+    const quoteRow = await db.investmentQuote.findUniqueOrThrow({ where: { id: q.id } });
+    const latest = await publicClientFor().getBlock({ blockTag: "latest" });
+    const target = Math.max(Number(latest.timestamp) + 1, Math.ceil(quoteRow.expiresAt.getTime() / 1000) + 1);
+    await ctx.handle.advanceTime(target - Number(latest.timestamp));
+    // The same signed bytes are broadcast; inclusion after the deadline reverts.
+    await executionService.progress(opId);
+    await ctx.handle.mine(3);
+    await executionService.progress(opId);
+    op = await db.onchainOperation.findUniqueOrThrow({ where: { id: opId } });
+    expect(op.status).toBe("reverted");
+    expect(op.errorReason).toBe("deadline exceeded");
+    expect(op.txHash).toBe(signed.executeHash);
+    await investmentService.progress(inv.id);
+    const row = await investmentService.get(ctx.u.id, inv.id);
+    expect(row?.status).toBe("failed");
+    // The full reservation returns to cash; nothing was spent.
+    expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(0n);
+    expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(10_000_000n);
+  });
+
+  it("fundingReceiptCannotCreditCashTwice: webhook replay and the confirmed funding receipt credit cash once", { timeout: 90_000 }, async () => {
+    const handle = await testnet();
+    await ensureTestnetNetwork();
+    const u = await makeUserWithWallets();
+    await kycService.verify(u.id, { persona: "ada_tier2" });
+    await makeBankAccount(u.id);
+    const { stock } = await makeTestnetStock({ symbol: "FUND" });
+    await seedTreasury("testnet", 1_000_000_000_000n);
+    const { deposit } = await depositService.create(
+      u.id,
+      { ngn_amount: 1_500_000n, stock_id: stock.id },
+      randomUUID(),
+    );
+    await simRamp.markCollectionPaid("yellowcard", deposit.id, {
+      ngnAmount: 1_500_000n,
+      senderName: "ADAEZE OBI",
+    });
+    for (let i = 0; i < 8; i += 1) {
+      await drainJobs();
+      await handle.mine(3);
+    }
+    const transfer = await db.chainTransfer.findFirstOrThrow({ where: { key: `fund:${deposit.id}` } });
+    const funded = fromDbRaw(transfer.amount);
+    // Replay the bank webhook and poll the confirmed funding receipt.
+    await Promise.all(
+      [depositService.progress(deposit.id), depositService.progress(deposit.id)].map((p) =>
+        p.catch(() => undefined),
+      ),
+    );
+    for (let i = 0; i < 4; i += 1) {
+      await drainJobs();
+      await handle.mine(3);
+    }
+    // Exactly one funding transfer and one settlement credit: the entitlement is
+    // the settled amount once, never doubled by the replayed webhook/receipt.
+    expect(await db.chainTransfer.count({ where: { key: `fund:${deposit.id}` } })).toBe(1);
+    expect(await db.ledgerJournal.count({ where: { key: `deposit:${deposit.id}:received` } })).toBe(1);
+    const cash = await ledgerService.balance(acct.userCash(u.id, "testnet"));
+    const reserved = await ledgerService.balance(acct.userReserved(u.id, "testnet"));
+    expect(cash + reserved).toBe(funded);
   });
 });

@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 
 import { now } from "@/backend/clock";
 import { db } from "@/server/db";
-import { authorizationService } from "@/backend/services/authorizations";
 import { earningsService } from "@/backend/services/earnings";
 import { earningsBatchService } from "@/backend/services/earnings/batch";
 import { investmentService } from "@/backend/services/investments";
@@ -21,6 +20,7 @@ import { kycService } from "@/backend/services/kyc";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { fromDbRaw, fromDbRawNullable, toDbRaw } from "@/utils/asset-units";
 
+import { oneTimeAuth, standingAuth } from "../helpers/authorizations";
 import { useTestDatabase } from "../helpers/db";
 import { makeBankAccount, seedFloat, seedTreasury } from "../helpers/factories";
 import { drainJobs } from "../helpers/worker";
@@ -81,17 +81,9 @@ async function setup(symbol: string) {
       provenance: { source: "stonks", distribution: handle.stockDistribution, launchId: epochKey, generation: 1 },
     },
   });
-  const { dto: strategyAuth } = await authorizationService.create(
-    u.id,
-    { scope: "strategies", strategyId: strategy.id, maxSpendUsdc: 1_000_000_000_000n, durationDays: 7, policyVersion: "test" },
-    randomUUID(),
-  );
-  const { dto: investmentAuth } = await authorizationService.create(
-    u.id,
-    { scope: "investments", stockId: stock.id, maxSpendUsdc: 10n ** 30n, durationDays: 7, policyVersion: "test" },
-    randomUUID(),
-  );
-  return { handle, network, u, ref, stock, pairStock, settlementKey, epochKey, strategy, strategyAuth, investmentAuth };
+  // Background reward conversion requires standing reward_conversion consent.
+  const conversionAuth = await standingAuth(u.id, { stockIds: [stock.id] }, ["reward_conversion"]);
+  return { handle, network, u, ref, stock, pairStock, settlementKey, epochKey, strategy, conversionAuth };
 }
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
@@ -108,7 +100,8 @@ async function driveStrategyOp(ctx: Ctx, operationId: string) {
 
 async function claimStockReward(ctx: Ctx): Promise<string> {
   const q = await strategyService.quote(ctx.u.id, { strategyId: ctx.strategy.id, action: "claim" });
-  const op = await strategyService.confirm(ctx.u.id, q.id, ctx.strategyAuth.id, `claim-${randomUUID()}`);
+  const auth = await oneTimeAuth(ctx.u.id, q, "strategy");
+  const op = await strategyService.confirm(ctx.u.id, q.id, auth.id, `claim-${randomUUID()}`);
   const row = await driveStrategyOp(ctx, op.operation_id);
   expect(row.status).toBe("finalized");
   const receipt = await db.rewardReceipt.findFirstOrThrow({ where: { txHash: row.txHash } });
@@ -166,12 +159,8 @@ async function claimSettlementReward(ctx: Ctx, launchId: string, amount: bigint)
       provenance: { source: "basestonk", hook, launchId },
     },
   });
-  const { dto: auth } = await authorizationService.create(
-    ctx.u.id,
-    { scope: "strategies", strategyId: strategy.id, maxSpendUsdc: 1_000_000_000_000n, durationDays: 7, policyVersion: "test" },
-    randomUUID(),
-  );
   const q = await strategyService.quote(ctx.u.id, { strategyId: strategy.id, action: "claim" });
+  const auth = await oneTimeAuth(ctx.u.id, q, "strategy");
   const op = await strategyService.confirm(ctx.u.id, q.id, auth.id, `claim-${randomUUID()}`);
   const row = await driveStrategyOp(ctx, op.operation_id);
   expect(row.status).toBe("finalized");
@@ -208,13 +197,13 @@ describe("receipt-backed income conversion and Friday payout", () => {
     const ctx = await setup("CNV");
     const receiptId = await claimStockReward(ctx);
     // Consent-bound sell of the reward asset.
-    const opId = await rewardService.convert(receiptId, ctx.investmentAuth.id);
+    const opId = await rewardService.convert(receiptId, ctx.conversionAuth.id);
     expect(opId).toBeTruthy();
     const receiptMid = await db.rewardReceipt.findUniqueOrThrow({ where: { id: receiptId } });
     expect(receiptMid.state).toBe("conversion_pending");
     expect(receiptMid.conversionOperationId).toBe(opId);
     // Replaying convert returns the same operation.
-    expect(await rewardService.convert(receiptId, ctx.investmentAuth.id)).toBe(opId);
+    expect(await rewardService.convert(receiptId, ctx.conversionAuth.id)).toBe(opId);
     await driveConversion(ctx, receiptId);
     const investment = await db.investment.findUniqueOrThrow({ where: { key: `convert:${receiptId}` } });
     expect(["filled", "partial"]).toContain(investment.status);

@@ -131,7 +131,7 @@ export async function testnet(): Promise<TestnetHandle> {
       ) as { abi: unknown; bytecode: { object: string } };
       const hash = await wallet.deployContract({
         abi: artifact.abi as never,
-        bytecode: `0x${artifact.bytecode.object.replace(/^0x/, "")}` as Hex,
+        bytecode: `0x${artifact.bytecode.object.replace(/^0x/, "")}`,
         args: [name, symbol, supply],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -261,7 +261,7 @@ export async function testnet(): Promise<TestnetHandle> {
       ) as { abi: unknown; bytecode: { object: string } };
       const hash = await wallet.deployContract({
         abi: artifact.abi as never,
-        bytecode: `0x${artifact.bytecode.object.replace(/^0x/, "")}` as Hex,
+        bytecode: `0x${artifact.bytecode.object.replace(/^0x/, "")}`,
         args: [settlement, stock],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });

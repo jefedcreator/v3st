@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { type Address, encodeFunctionData } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { authorizationService } from "@/backend/services/authorizations";
+import { executionService } from "@/backend/services/execution";
 import { investmentService } from "@/backend/services/investments";
 import { acct } from "@/backend/services/ledger/accounts";
 import { ledgerService } from "@/backend/services/ledger";
@@ -16,6 +16,7 @@ import { db, withTx } from "@/server/db";
 import { openingBalance } from "@/backend/services/ledger/postings";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 
+import { oneTimeAuth } from "../helpers/authorizations";
 import { useTestDatabase } from "../helpers/db";
 import { fundCash, makeUserWithWallets } from "../helpers/factories";
 import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../helpers/testnet";
@@ -94,12 +95,7 @@ async function setup(symbol: string, opts?: { separateClaim?: boolean; supply?: 
     );
   }
   await fundCash(u.id, CASH, "testnet");
-  const { dto: auth } = await authorizationService.create(
-    u.id,
-    { scope: "strategies", strategyId: strategy.id, maxSpendUsdc: 1_000_000_000_000n, durationDays: 7, policyVersion: "test" },
-    randomUUID(),
-  );
-  return { handle, network, u, ref, stock, token, pool, strategy, settlementKey, auth };
+  return { handle, network, u, ref, stock, token, pool, strategy, settlementKey };
 }
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
@@ -123,18 +119,15 @@ async function enterExplicit(ctx: Ctx, settlementRaw: bigint, stockRaw: bigint) 
       { asset: ctx.stock.assetKey!, raw: stockRaw },
     ],
   });
-  const confirmed = await strategyService.confirm(ctx.u.id, q.id, ctx.auth.id, `enter-${randomUUID()}`);
+  const auth = await oneTimeAuth(ctx.u.id, q, "strategy");
+  const confirmed = await strategyService.confirm(ctx.u.id, q.id, auth.id, `enter-${randomUUID()}`);
   const op = await drive(ctx, confirmed.operation_id);
   return { q, op, confirmed };
 }
 
 async function buyStock(ctx: Ctx, inputRaw: bigint) {
-  const { dto: invAuth } = await authorizationService.create(
-    ctx.u.id,
-    { scope: "investments", stockId: ctx.stock.id, maxSpendUsdc: 100_000_000_000n, durationDays: 7, policyVersion: "test" },
-    randomUUID(),
-  );
   const q = await investmentService.quote(ctx.u.id, { stockId: ctx.stock.id, side: "buy", inputRaw });
+  const invAuth = await oneTimeAuth(ctx.u.id, q);
   const inv = await investmentService.confirm(ctx.u.id, q.id, invAuth.id, `buy-${randomUUID()}`);
   for (let i = 0; i < 10; i += 1) {
     const row = await db.investment.findUniqueOrThrow({ where: { id: inv.id } });
@@ -230,7 +223,8 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
 
     // Exit burns only the owned receipt and returns principal separately.
     const q = await strategyService.quote(ctx.u.id, { positionId: position.id, action: "exit" });
-    const exitOp = await strategyService.confirm(ctx.u.id, q.id, ctx.auth.id, `exit-${randomUUID()}`);
+    const exitAuth = await oneTimeAuth(ctx.u.id, q, "strategy");
+    const exitOp = await strategyService.confirm(ctx.u.id, q.id, exitAuth.id, `exit-${randomUUID()}`);
     await drive(ctx, exitOp.operation_id);
     const exited = await db.onchainOperation.findUniqueOrThrow({ where: { id: exitOp.operation_id } });
     expect(exited.status).toBe("finalized");
@@ -251,11 +245,6 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     expect(buy?.status).toBe("filled");
     const stockOwned = BigInt(buy!.amount_out!);
     expect(stockOwned).toBeGreaterThan(0n);
-    const { dto: invAuth } = await authorizationService.create(
-      ctx.u.id,
-      { scope: "investments", stockId: ctx.stock.id, maxSpendUsdc: 10n ** 30n, durationDays: 7, policyVersion: "test" },
-      randomUUID(),
-    );
     const sellQuote = await investmentService.quote(ctx.u.id, {
       stockId: ctx.stock.id,
       side: "sell",
@@ -269,11 +258,13 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
         { asset: ctx.stock.assetKey!, raw: stockOwned },
       ],
     });
+    const invAuth = await oneTimeAuth(ctx.u.id, sellQuote);
+    const enterAuth = await oneTimeAuth(ctx.u.id, enterQuote, "strategy");
     const sellKey = `sell-${randomUUID()}`;
     const enterKey = `enter-${randomUUID()}`;
     const results = await Promise.allSettled([
       investmentService.confirm(ctx.u.id, sellQuote.id, invAuth.id, sellKey),
-      strategyService.confirm(ctx.u.id, enterQuote.id, ctx.auth.id, enterKey),
+      strategyService.confirm(ctx.u.id, enterQuote.id, enterAuth.id, enterKey),
     ]);
     const ok = results.filter((r) => r.status === "fulfilled");
     const failed = results.filter((r) => r.status === "rejected");
@@ -298,7 +289,8 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     // No trading activity: zero fees. The claim still finalizes onchain but proves
     // no transfer, so no receipt and no credit exist.
     const q = await strategyService.quote(ctx.u.id, { positionId: position.id, action: "claim" });
-    const claimOp = await strategyService.confirm(ctx.u.id, q.id, ctx.auth.id, `claim-${randomUUID()}`);
+    const claimAuth = await oneTimeAuth(ctx.u.id, q, "strategy");
+    const claimOp = await strategyService.confirm(ctx.u.id, q.id, claimAuth.id, `claim-${randomUUID()}`);
     const claimRow = await drive(ctx, claimOp.operation_id);
     expect(claimRow.status).toBe("finalized");
     expect(await db.rewardReceipt.count()).toBe(0);
@@ -321,7 +313,8 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     // Fees accrue from trading activity, then realize on exit (withdrawAndClaim).
     await swapOnPool(ctx, 100_000n);
     const q = await strategyService.quote(ctx.u.id, { positionId: position.id, action: "exit" });
-    const exitOp = await strategyService.confirm(ctx.u.id, q.id, ctx.auth.id, `exit-${randomUUID()}`);
+    const exitAuth = await oneTimeAuth(ctx.u.id, q, "strategy");
+    const exitOp = await strategyService.confirm(ctx.u.id, q.id, exitAuth.id, `exit-${randomUUID()}`);
     const row = await drive(ctx, exitOp.operation_id);
     expect(row.status).toBe("finalized");
     const after = await positionOf(ctx);
@@ -351,7 +344,8 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     // preparatory swap still meets its minimum output, large enough that the
     // deposit cannot pull the quoted stock amount.
     await swapOnPool(ctx, 1_000_000_000n);
-    const op = await strategyService.confirm(ctx.u.id, q.id, ctx.auth.id, `enter-${randomUUID()}`);
+    const enterAuth = await oneTimeAuth(ctx.u.id, q, "strategy");
+    const op = await strategyService.confirm(ctx.u.id, q.id, enterAuth.id, `enter-${randomUUID()}`);
     const row = await drive(ctx, op.operation_id);
     expect(row.status).toBe("reverted");
     const position = await positionOf(ctx);
@@ -388,7 +382,8 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     });
     // The separate claim realizes the accrued fees while the position is still LP.
     const claimQ = await strategyService.quote(ctx.u.id, { positionId: position.id, action: "claim" });
-    const claimOp = await strategyService.confirm(ctx.u.id, claimQ.id, ctx.auth.id, `claim-${randomUUID()}`);
+    const claimAuth = await oneTimeAuth(ctx.u.id, claimQ, "strategy");
+    const claimOp = await strategyService.confirm(ctx.u.id, claimQ.id, claimAuth.id, `claim-${randomUUID()}`);
     const claimRow = await drive(ctx, claimOp.operation_id);
     expect(claimRow.status).toBe("finalized");
     const receipts = await db.rewardReceipt.findMany();
@@ -400,7 +395,8 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     expect(await ledgerService.balance(acct.userEarnings(ctx.u.id, "testnet"))).toBe(feeAmount);
     // Exit at a loss: the loss is recorded, fees are not erased by it.
     const exitQ = await strategyService.quote(ctx.u.id, { positionId: position.id, action: "exit" });
-    const exitOp = await strategyService.confirm(ctx.u.id, exitQ.id, ctx.auth.id, `exit-${randomUUID()}`);
+    const exitAuth = await oneTimeAuth(ctx.u.id, exitQ, "strategy");
+    const exitOp = await strategyService.confirm(ctx.u.id, exitQ.id, exitAuth.id, `exit-${randomUUID()}`);
     const exitRow = await drive(ctx, exitOp.operation_id);
     expect(exitRow.status).toBe("finalized");
     const afterExit = await positionOf(ctx);
@@ -413,6 +409,52 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     expect(await db.rewardReceipt.count()).toBe(receipts.length);
   });
 
+
+  it("expiredIntermediateStepNeedsNewAuthorization: an expired consent blocks the parent market action after an intermediate fill", { timeout: 90_000 }, async () => {
+    const ctx = await setup("EXPIR", { onchainStock: false });
+    const budget = 2_000_000n;
+    const q = await strategyService.quote(ctx.u.id, {
+      strategyId: ctx.strategy.id,
+      action: "enter",
+      budgetInputRaw: budget,
+    });
+    expect(q.preparatory_swap).toBe(true);
+    const auth = await oneTimeAuth(ctx.u.id, q, "strategy");
+    const key = `enter-${randomUUID()}`;
+    const op = await strategyService.confirm(ctx.u.id, q.id, auth.id, key);
+    const parentId = op.operation_id;
+    const parentRow = await db.onchainOperation.findUniqueOrThrow({ where: { id: parentId } });
+    const prepId = (parentRow.expected as { preparatoryOperationId?: string }).preparatoryOperationId!;
+    expect(prepId).toBeTruthy();
+    // Drive only the preparatory swap to finality: the intermediate fill lands.
+    for (let i = 0; i < 10; i += 1) {
+      const prep = await db.onchainOperation.findUniqueOrThrow({ where: { id: prepId } });
+      if (["finalized", "reverted"].includes(prep.status)) break;
+      await executionService.progress(prepId);
+      await ctx.handle.mine(3);
+    }
+    expect((await db.onchainOperation.findUniqueOrThrow({ where: { id: prepId } })).status).toBe("finalized");
+    // The consent expires after the intermediate fill but before the parent action.
+    await db.investmentAuthorization.update({
+      where: { id: auth.id },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    // The parent market action is blocked at signing: no new authorization, no broadcast.
+    await expect(strategyService.progress(parentId)).rejects.toMatchObject({ code: "AUTHORIZATION_EXPIRED" });
+    const parent = await db.onchainOperation.findUniqueOrThrow({ where: { id: parentId } });
+    expect(parent.status).toBe("prepared");
+    expect(parent.txHash).toBeNull();
+    // The intermediate inventory is retained and reserved, never fictitiously reversed.
+    const stockReserved = await ledgerService.balance(acct.userStockReserved(ctx.u.id, ctx.stock.id));
+    expect(stockReserved).toBeGreaterThan(0n);
+    expect(await sharesOf(ctx.pool, ctx.ref.accountAddress)).toBe(0n);
+    expect((await positionOf(ctx)).state).toBe("reserved");
+    // Re-driving without a fresh quote + one-time authorization keeps failing.
+    await expect(strategyService.progress(parentId)).rejects.toMatchObject({ code: "AUTHORIZATION_EXPIRED" });
+    expect(await sharesOf(ctx.pool, ctx.ref.accountAddress)).toBe(0n);
+    expect(await ledgerService.balance(acct.userStockReserved(ctx.u.id, ctx.stock.id))).toBe(stockReserved);
+  });
+
   it("allocationCeilingsAreEnforcedUnderLocks", { timeout: 90_000 }, async () => {
     const ctx = await setup("CAP");
     // Per-allocation $100-equivalent fixture ceiling.
@@ -421,8 +463,9 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
       action: "enter",
       budgetInputRaw: 300_000_000n,
     });
+    const bigAuth = await oneTimeAuth(ctx.u.id, bigQ, "strategy");
     await expect(
-      strategyService.confirm(ctx.u.id, bigQ.id, ctx.auth.id, `cap-big-${randomUUID()}`),
+      strategyService.confirm(ctx.u.id, bigQ.id, bigAuth.id, `cap-big-${randomUUID()}`),
     ).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
     expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(0n);
     expect(await db.strategyPosition.count({ where: { userId: ctx.u.id } })).toBe(0);
@@ -431,25 +474,21 @@ describe("opt-in strategy lifecycle on the local testnet", () => {
     const u2 = await makeUserWithWallets();
     await testnetWalletService.ensureExecutionAccount(u2.id);
     await fundCash(u2.id, 10_000_000n, "testnet");
-    const { dto: auth2 } = await authorizationService.create(
-      u2.id,
-      { scope: "strategies", strategyId: ctx.strategy.id, maxSpendUsdc: 1_000_000_000_000n, durationDays: 7, policyVersion: "test" },
-      randomUUID(),
-    );
     // A quote owned by another user is invisible (404), never confirmable.
     const foreignQ = await strategyService.quote(ctx.u.id, {
       strategyId: ctx.strategy.id,
       action: "enter",
       budgetInputRaw: 4_000_000n,
     });
-    await expect(
-      strategyService.confirm(u2.id, foreignQ.id, auth2.id, `cap-foreign-${randomUUID()}`),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
     const smallQ2 = await strategyService.quote(u2.id, {
       strategyId: ctx.strategy.id,
       action: "enter",
       budgetInputRaw: 4_000_000n,
     });
+    const auth2 = await oneTimeAuth(u2.id, smallQ2, "strategy");
+    await expect(
+      strategyService.confirm(u2.id, foreignQ.id, auth2.id, `cap-foreign-${randomUUID()}`),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
       strategyService.confirm(u2.id, smallQ2.id, auth2.id, `cap-small-${randomUUID()}`),
     ).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });

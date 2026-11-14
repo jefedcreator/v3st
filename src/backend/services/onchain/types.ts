@@ -20,6 +20,11 @@ export type BetaContext = {
 
 export type AssetAmount = { asset: AssetKey; raw: bigint };
 
+// Transaction-local balance difference attributed to one account and operation.
+// Signed: positive means received, negative means spent. Bounded difference of
+// validated uint256 balances, so parseRaw must never parse a signedRaw.
+export type AssetDelta = { account: Address; asset: AssetKey; signedRaw: bigint };
+
 export type EvidenceId = string;
 
 export type ProviderCapabilities = {
@@ -42,6 +47,7 @@ export type QuoteRequest = {
   input: AssetAmount;
   outputAsset: AssetKey;
   slippageBps: number;
+  allowPartialFill?: boolean;
   context: BetaContext;
 };
 
@@ -50,12 +56,14 @@ export type ExecutionQuote = {
   userId: string;
   walletId: string;
   stockId: string;
+  side: "buy" | "sell";
   context: BetaContext;
   input: AssetAmount;
   expectedOutput: AssetAmount;
   minOutput: AssetAmount;
   userFeeUsdc: bigint;
   sponsorCostWei: bigint;
+  allowPartialFill: boolean;
   priceImpactBps: number;
   expiresAt: Date;
   sourceBlock: bigint;
@@ -85,6 +93,7 @@ export type ExecutionObservation = {
   blockNumber: bigint | null;
   actualInput: AssetAmount | null;
   actualOutput: AssetAmount | null;
+  deltas: AssetDelta[]; // transaction-local, attributed to this account and operation
   gasCostWei: bigint | null;
 };
 

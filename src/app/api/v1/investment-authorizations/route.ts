@@ -24,16 +24,10 @@ export const GET = withMiddleware<null, null, null>(
 export const POST = withMiddleware<AuthorizationCreateBodySchema, null, null>(
   async (request) => {
     const body = request.validatedData!;
+    // Task 4's strict one-time/standing union, passed through as-is.
     const { dto, created: isCreated } = await authorizationService.create(
       request.user!.id,
-      {
-        scope: body.scope,
-        stockId: body.stock_id ?? null,
-        strategyId: body.strategy_id ?? null,
-        maxSpendUsdc: body.max_spend_usdc,
-        durationDays: body.duration_days,
-        policyVersion: body.policy_version,
-      },
+      body,
       request.idempotencyKey!,
     );
     const res = isCreated ? created(dto, "Authorization created") : ok(dto, "Authorization", 200);

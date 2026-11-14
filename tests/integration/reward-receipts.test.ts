@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { encodeFunctionData, keccak256, toHex } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { authorizationService } from "@/backend/services/authorizations";
-import { pack } from "@/backend/services/execution";
+import { pack, unpack } from "@/backend/services/execution";
 import { hookFeeAbi, settlementTokenAbi, stockDistributionAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 import "@/backend/services/onchain/providers";
 import { settlementAssetKey } from "@/backend/services/onchain/testnet";
@@ -17,6 +16,7 @@ import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { db } from "@/server/db";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 
+import { oneTimeAuth } from "../helpers/authorizations";
 import { useTestDatabase } from "../helpers/db";
 import { makeUserWithWallets } from "../helpers/factories";
 import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../helpers/testnet";
@@ -55,18 +55,10 @@ async function makeStrategy(providerId: string, provenance: Record<string, unkno
   });
 }
 
-async function strategyAuth(ctx: Ctx, strategyId: string) {
-  const { dto } = await authorizationService.create(
-    ctx.u.id,
-    { scope: "strategies", strategyId, maxSpendUsdc: 1_000_000_000_000n, durationDays: 7, policyVersion: "test" },
-    randomUUID(),
-  );
-  return dto;
-}
-
-async function driveClaim(ctx: Ctx, strategyId: string, authId: string) {
+async function driveClaim(ctx: Ctx, strategyId: string) {
   const q = await strategyService.quote(ctx.u.id, { strategyId, action: "claim" });
-  const op = await strategyService.confirm(ctx.u.id, q.id, authId, `claim-${randomUUID()}`);
+  const auth = await oneTimeAuth(ctx.u.id, q, "strategy");
+  const op = await strategyService.confirm(ctx.u.id, q.id, auth.id, `claim-${randomUUID()}`);
   for (let i = 0; i < 10; i += 1) {
     const row = await db.onchainOperation.findUniqueOrThrow({ where: { id: op.operation_id } });
     if (["finalized", "reverted", "failed"].includes(row.status)) return row;
@@ -115,8 +107,7 @@ describe("confirmed reward receipts from finalized source proceeds", () => {
       launchId: epochKey,
       generation: 1,
     });
-    const auth = await strategyAuth(ctx, strategy.id);
-    const op = await driveClaim(ctx, strategy.id, auth.id);
+    const op = await driveClaim(ctx, strategy.id);
     expect(op.status).toBe("finalized");
 
     const receipts = await db.rewardReceipt.findMany();
@@ -179,13 +170,71 @@ describe("confirmed reward receipts from finalized source proceeds", () => {
       launchId: epochKey,
       launchToken: ctx.pairStock,
     });
-    const auth = await strategyAuth(ctx, strategy.id);
-    const op = await driveClaim(ctx, strategy.id, auth.id);
+    const op = await driveClaim(ctx, strategy.id);
     expect(op.status).toBe("reverted");
     await rewardService.recordFinalized(op.id);
     expect(await db.rewardReceipt.count()).toBe(0);
     expect(await db.ledgerJournal.count({ where: { kind: "rewardReceived" } })).toBe(0);
     expect(await ledgerService.balance(acct.userStock(ctx.u.id, ctx.stock.id))).toBe(0n);
+  });
+
+
+  it("donationIsNotIncome: an unsolicited transfer creates no reward receipt or payable earnings", { timeout: 90_000 }, async () => {
+    const ctx = await setup("DON");
+    const epochKey = keccak256(toHex("stonks:task11:donation"));
+    await ctx.handle.sendTx({
+      to: ctx.handle.stockDistribution,
+      data: encodeFunctionData({
+        abi: stockDistributionAbi,
+        functionName: "createEpoch",
+        args: [epochKey, ctx.pairStock, 1],
+      }),
+    });
+    const strategy = await makeStrategy("stonks", {
+      source: "stonks",
+      distribution: ctx.handle.stockDistribution,
+      launchId: epochKey,
+      generation: 1,
+    });
+    // A quote exists so the op carries a valid strategy quote snapshot...
+    const q = await strategyService.quote(ctx.u.id, { strategyId: strategy.id, action: "claim" });
+    const quoteRow = await db.strategyQuote.findUniqueOrThrow({ where: { id: q.id } });
+    const quote = unpack((quoteRow.context as { strategyQuote?: unknown }).strategyQuote);
+    // ...but the finalized "claim" transaction is a plain unsolicited 1,000,000
+    // raw transfer of the pair stock to the execution account: a donation.
+    const donation = 1_000_000n;
+    const donationHash = await ctx.handle.sendTx({
+      to: ctx.pairStock,
+      data: encodeFunctionData({
+        abi: stockTokenAbi,
+        functionName: "transfer",
+        args: [ctx.ref.accountAddress, donation],
+      }),
+    });
+    expect(await ctx.handle.tokenBalance(ctx.pairStock, ctx.ref.accountAddress)).toBe(donation);
+    const op = await db.onchainOperation.create({
+      data: {
+        key: `donation-${randomUUID()}`,
+        requestHash: "test",
+        kind: "strategy",
+        userId: ctx.u.id,
+        walletId: ctx.ref.wallet.id,
+        custodyProfileId: ctx.ref.custodyProfileId,
+        networkId: ctx.network.id,
+        providerId: "stonks",
+        status: "finalized",
+        txHash: donationHash,
+        fingerprint: "test",
+        requiredConfirmations: 2,
+        expected: pack({ quote, recipient: ctx.ref.accountAddress }) as never,
+      },
+    });
+    await rewardService.recordFinalized(op.id);
+    // Wallet balance growth alone cannot prove income: no receipt, no credit.
+    expect(await db.rewardReceipt.count()).toBe(0);
+    expect(await db.ledgerJournal.count({ where: { kind: "rewardReceived" } })).toBe(0);
+    expect(await ledgerService.balance(acct.userStock(ctx.u.id, ctx.stock.id))).toBe(0n);
+    expect(await ledgerService.balance(acct.userEarnings(ctx.u.id, "testnet"))).toBe(0n);
   });
 
   it("hookFeeClaimCreditsEarningsOnce", { timeout: 90_000 }, async () => {
@@ -217,8 +266,7 @@ describe("confirmed reward receipts from finalized source proceeds", () => {
       data: encodeFunctionData({ abi: hookFeeAbi, functionName: "accrueFees", args: [launchId, 50_000n] }),
     });
     const strategy = await makeStrategy("basestonk", { source: "basestonk", hook, launchId });
-    const auth = await strategyAuth(ctx, strategy.id);
-    const op = await driveClaim(ctx, strategy.id, auth.id);
+    const op = await driveClaim(ctx, strategy.id);
     expect(op.status).toBe("finalized");
     const receipts = await db.rewardReceipt.findMany();
     expect(receipts.length).toBe(1);

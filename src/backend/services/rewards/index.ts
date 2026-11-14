@@ -357,9 +357,27 @@ class RewardService {
     if (receipt.state !== "received_asset") {
       throw new ConflictException("Receipt is not awaiting conversion", "CONVERSION_PENDING");
     }
+    const stock = await db.stock.findFirst({ where: { assetKey: receipt.asset } });
+    if (!stock) {
+      throw new UnprocessableEntityException(
+        "Receipt asset is already the settlement asset; recognize it instead of converting",
+        "CAPABILITY_UNAVAILABLE",
+      );
+    }
     const auth = await db.investmentAuthorization.findUniqueOrThrow({ where: { id: authorizationId } });
     if (auth.revokedAt || auth.expiresAt <= now()) {
       throw new ConflictException("Authorization is no longer active", "AUTHORIZATION_REVOKED");
+    }
+    // Background conversion requires an explicit standing reward_conversion consent.
+    if (
+      auth.kind !== "standing" ||
+      !auth.actions.includes("reward_conversion") ||
+      !auth.stockIds.includes(stock.id)
+    ) {
+      throw new UnprocessableEntityException(
+        "Authorization does not cover reward conversion for this stock",
+        "AUTHORIZATION_EXCEEDED",
+      );
     }
     const wallets = await db.wallet.findMany({ where: { userId: auth.userId } });
     const addresses = new Set<string>();
@@ -375,20 +393,15 @@ class RewardService {
     if (!addresses.has(receipt.beneficiary)) {
       throw new NotFoundException("Receipt not found", "NOT_FOUND");
     }
-    const stock = await db.stock.findFirst({ where: { assetKey: receipt.asset } });
-    if (!stock) {
-      throw new UnprocessableEntityException(
-        "Receipt asset is already the settlement asset; recognize it instead of converting",
-        "CAPABILITY_UNAVAILABLE",
-      );
-    }
     const key = `convert:${receiptId}`;
     const quote = await investmentService.quote(auth.userId, {
       stockId: stock.id,
       side: "sell",
       inputRaw: fromDbRaw(receipt.amountRaw),
     });
-    const investment = await investmentService.confirm(auth.userId, quote.id, authorizationId, key);
+    const investment = await investmentService.confirm(auth.userId, quote.id, authorizationId, key, {
+      standingAction: "reward_conversion",
+    });
     if (!investment.operation_id) {
       throw new ConflictException("Conversion needs a fresh quote and confirmation", "NEEDS_CONFIRMATION");
     }

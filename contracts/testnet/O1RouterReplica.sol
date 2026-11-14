@@ -83,8 +83,9 @@ contract O1RouterReplica {
         uint256 amountIn,
         uint256 minOut,
         address recipient,
-        uint64 deadline
-    ) external returns (uint256 amountOut) {
+        uint64 deadline,
+        bool allowPartialFill
+    ) external returns (uint256 amountOut, uint256 amountInUsed) {
         require(block.timestamp <= deadline, "deadline exceeded");
         require(amountIn > 0, "zero in");
         require(recipient != address(0), "zero recipient");
@@ -94,22 +95,31 @@ contract O1RouterReplica {
         bool settlementIn = tokenIn == pool.settlement;
         require(settlementIn || tokenIn == pool.stock, "unknown pair asset");
         require(tokenOut == (settlementIn ? pool.stock : pool.settlement), "bad tokenOut");
-        uint256 fee = (amountIn * FEE_BPS) / 10_000;
-        uint256 net = amountIn - fee;
-        amountOut = quoteOut(key, net, settlementIn);
+        // Input-side partial fill: only the filled portion is pulled from the sender.
+        uint256 fillIn = amountIn;
         if (partialFillBps < 10_000) {
-            amountOut = (amountOut * partialFillBps) / 10_000;
+            fillIn = (amountIn * partialFillBps) / 10_000;
+            if (fillIn < amountIn && !allowPartialFill) {
+                revert("MIN_OUTPUT_BREACH");
+            }
         }
-        require(amountOut >= minOut, "insufficient output");
-        require(IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn), "pull in failed");
+        require(fillIn > 0, "zero in");
+        uint256 fee = (fillIn * FEE_BPS) / 10_000;
+        uint256 net = fillIn - fee;
+        amountOut = quoteOut(key, net, settlementIn);
+        // Pro-rata minimum output for the filled portion, rounded up.
+        uint256 requiredOut = (minOut * fillIn + amountIn - 1) / amountIn;
+        require(amountOut >= requiredOut, "insufficient output");
+        require(IERC20(tokenIn).transferFrom(msg.sender, address(this), fillIn), "pull in failed");
         if (settlementIn) {
-            pool.reserveSettlement += amountIn;
+            pool.reserveSettlement += fillIn;
             pool.reserveStock -= amountOut;
         } else {
-            pool.reserveStock += amountIn;
+            pool.reserveStock += fillIn;
             pool.reserveSettlement -= amountOut;
         }
         require(IERC20(tokenOut).transfer(recipient, amountOut), "push out failed");
-        emit SwapExecuted(msg.sender, key, amountIn, fee, amountOut, recipient);
+        emit SwapExecuted(msg.sender, key, fillIn, fee, amountOut, recipient);
+        return (amountOut, fillIn);
     }
 }

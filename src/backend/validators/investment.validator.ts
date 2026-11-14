@@ -11,6 +11,7 @@ export const investmentQuoteBodySchema = z
     input_raw: rawAmountSchema.optional(),
     budget_ngn: rawAmountSchema.optional(),
     slippage_bps: z.number().int().min(0).max(10_000).optional(),
+    allow_partial_fill: z.boolean().optional(),
   })
   .strict()
   .superRefine((val, ctx) => {

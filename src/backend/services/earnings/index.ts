@@ -9,6 +9,7 @@ import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
 import { ratesService } from "@/backend/services/rates";
 import { stockService } from "@/backend/services/stocks";
+import { authorizationService } from "@/backend/services/authorizations";
 import { strategyService } from "@/backend/services/strategies";
 import { unpack } from "@/backend/services/execution";
 import type { AssetAmount } from "@/backend/services/onchain/types";
@@ -32,9 +33,12 @@ class EarningsService {
       // Embedded-fee strategies realize on exit only; there is no claim to schedule.
       if (!strategy?.separateClaim) continue;
       if (!position.operationId) continue;
-      const entryOp = await db.onchainOperation.findUnique({ where: { id: position.operationId } });
-      const authorizationId = entryOp?.authorizationId;
-      if (!authorizationId) continue;
+      // Claims ride a standing authorization with the claim action; without one the
+      // harvest schedules nothing rather than inventing consent.
+      const standing = await authorizationService.findStanding(position.userId, "claim", {
+        strategyId: strategy.id,
+      });
+      if (!standing) continue;
       const key = `harvest:${position.id}:${week}`;
       if (await db.onchainOperation.findUnique({ where: { key: `strat-op:${key}` } })) continue;
       try {
@@ -42,7 +46,9 @@ class EarningsService {
           positionId: position.id,
           action: "claim",
         });
-        await strategyService.confirm(position.userId, quote.id, authorizationId, key);
+        await strategyService.confirm(position.userId, quote.id, standing.id, key, {
+          standingAction: "claim",
+        });
         recorded += 1;
       } catch {
         // A revoked/expired authorization or an unavailable claim pauses new

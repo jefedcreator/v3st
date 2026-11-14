@@ -1,12 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
 import { createPublicClient, createWalletClient, custom, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
+import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { assertChainIdAllowed, parseRpcEndpoint } from "@/backend/integrations/onchain-policy";
 import type { BetaContext, StockProviderId } from "@/backend/services/onchain/types";
@@ -31,9 +32,12 @@ export type TestnetManifest = {
 };
 
 export class TestnetError extends Error {
-  constructor(message: string) {
+  data?: unknown;
+
+  constructor(message: string, data?: unknown) {
     super(message);
     this.name = "TestnetError";
+    this.data = data;
   }
 }
 
@@ -57,8 +61,14 @@ export function rpcRequest<T = unknown>(url: string, method: string, params: unk
               result?: T;
               error?: { message: string };
             };
-            if (parsed.error) reject(new TestnetError(`RPC ${method} failed: ${parsed.error.message}`));
-            else resolve(parsed.result as T);
+            if (parsed.error) {
+              reject(
+                new TestnetError(
+                  `RPC ${method} failed: ${parsed.error.message}`,
+                  (parsed.error as { data?: unknown }).data,
+                ),
+              );
+            } else resolve(parsed.result as T);
           } catch (error) {
             reject(error);
           }
@@ -103,10 +113,61 @@ export async function chainDeadlineFromNow(extraSeconds?: number): Promise<Date>
   return new Date((Number(block.timestamp) + window) * 1000);
 }
 
+// The quote expiry is the latest permitted acceptance and broadcast bound, so a
+// plan/contract deadline is derived from the chain clock but never extends past it.
+export async function chainDeadlineBounded(latestMs: number, extraSeconds?: number): Promise<Date> {
+  const chainDeadline = await chainDeadlineFromNow(extraSeconds);
+  return new Date(Math.min(chainDeadline.getTime(), latestMs));
+}
+
+export async function chainNowMs(): Promise<number> {
+  const block = await publicClientFor().getBlock({ blockTag: "latest" });
+  return Number(block.timestamp) * 1000;
+}
+
+// Onchain quote expiry anchors to the later of the app and chain clocks: the
+// contract deadline copied from this expiry is enforced against block.timestamp,
+// while acceptance checks compare it against the app clock, so the bound must
+// satisfy both (rapid local mining can run the chain clock ahead of the wall
+// clock, and evm_revert can run it behind).
+export async function onchainExpiryMs(ttlSeconds: number): Promise<number> {
+  const chain = await chainNowMs();
+  return Math.max(now().getTime(), chain) + ttlSeconds * 1000;
+}
+
+// Test signing keys live in a restricted local keystore per deployment directory,
+// never only in process memory: a restart reloads the same account owner, and a
+// missing key with an existing deployment holds the deployment instead of
+// silently assigning a new owner.
+export function keystorePath(dir: string = manifestDir()): string {
+  return path.join(dir, "relayer-key.json");
+}
+
+export function keystoreRelayerKey(dir: string = manifestDir()): Hex {
+  const file = keystorePath(dir);
+  if (existsSync(file)) {
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { privateKey?: string };
+    if (!raw.privateKey) throw new TestnetError("Relayer keystore entry is malformed");
+    return raw.privateKey as Hex;
+  }
+  if (existsSync(path.join(dir, "manifest.json"))) {
+    throw new TestnetError(
+      "Relayer key missing for an existing deployment; holding the deployment instead of reassigning the account owner",
+    );
+  }
+  const key = generatePrivateKey();
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, JSON.stringify({ privateKey: key, createdAt: new Date().toISOString() }, null, 2), {
+    mode: 0o600,
+  });
+  chmodSync(file, 0o600);
+  return key;
+}
+
 export function relayerAccount(): ReturnType<typeof privateKeyToAccount> {
   const key = process.env.TESTNET_SIGNER_PRIVATE_KEY;
   if (key) return privateKeyToAccount(key as Hex);
-  return privateKeyToAccount(generatePrivateKey());
+  return privateKeyToAccount(keystoreRelayerKey());
 }
 
 export function walletClientFor(account: ReturnType<typeof privateKeyToAccount>, url: string = testnetRpcUrl()) {
@@ -188,7 +249,7 @@ export function loadArtifact(name: string): ContractArtifact {
       if (!bytecode || bytecode === "0x") {
         throw new TestnetError(`Artifact ${name} has no bytecode; run forge build first`);
       }
-      return { abi: raw.abi, bytecode: bytecode.startsWith("0x") ? (bytecode as string) : `0x${bytecode}` };
+      return { abi: raw.abi, bytecode: bytecode.startsWith("0x") ? (bytecode) : `0x${bytecode}` };
     }
   }
   throw new TestnetError(`Artifact ${name} not found; run forge build first`);
@@ -263,7 +324,7 @@ class TestnetService {
       const hash = await client.deployContract({
         abi: artifact.abi as never,
         bytecode: artifact.bytecode as Hex,
-        args: spec.args as never,
+        args: spec.args,
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       const address = receipt.contractAddress;

@@ -1,10 +1,10 @@
 import { type Address } from "viem";
 
-import { type Investment, type InvestmentQuote, type TradePurpose, type TradeSide, Prisma } from "@/server/prisma";
+import { type Investment, type InvestmentQuote, type TradePurpose, type TradeSide, type Prisma } from "@/server/prisma";
 import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
-import { authorizationService } from "@/backend/services/authorizations";
+import { authorizationService, type StandingAction } from "@/backend/services/authorizations";
 import { eventService } from "@/backend/services/events";
 import { executionService, pack, unpack } from "@/backend/services/execution";
 import { jobService } from "@/backend/services/jobs";
@@ -31,6 +31,7 @@ export type InvestmentQuoteInput = {
   inputRaw: bigint;
   budgetNgn?: bigint;
   slippageBps?: number;
+  allowPartialFill?: boolean;
 };
 
 export type InvestmentQuoteDto = {
@@ -46,6 +47,7 @@ export type InvestmentQuoteDto = {
   fx_fee_usdc_raw: string;
   venue_fee_usdc_raw: string;
   price_impact_bps: number;
+  allow_partial_fill: boolean;
   provider_id: string;
   expires_at: string;
   created_at: string;
@@ -81,6 +83,7 @@ function quoteToDto(q: InvestmentQuote, providerId: string): InvestmentQuoteDto 
     fx_fee_usdc_raw: fromDbRaw(q.fxFeeUsdc).toString(),
     venue_fee_usdc_raw: fromDbRaw(q.venueFeeUsdc).toString(),
     price_impact_bps: q.priceImpactBps,
+    allow_partial_fill: q.allowPartialFill,
     provider_id: providerId,
     expires_at: q.expiresAt.toISOString(),
     created_at: q.createdAt.toISOString(),
@@ -166,6 +169,7 @@ class InvestmentService {
               },
               outputAsset: side === "buy" ? stock.assetKey! : settlement,
               slippageBps,
+              allowPartialFill: input.allowPartialFill ?? false,
               context,
             }),
             QUOTE_TIMEOUT_MS,
@@ -199,7 +203,10 @@ class InvestmentService {
       return a.providerId < b.providerId ? -1 : 1;
     });
     const best = viable[0]!;
-    const expiresAt = new Date(Math.min(best.quote.expiresAt.getTime(), now().getTime() + 30_000));
+    const { onchainExpiryMs } = await import("@/backend/services/onchain/testnet");
+    // The contract deadline is copied from this expiry and enforced onchain, so
+    // the bound must hold on both the app and chain clocks.
+    const expiresAt = new Date(Math.min(best.quote.expiresAt.getTime(), await onchainExpiryMs(30)));
     const row = await db.investmentQuote.create({
       data: {
         userId,
@@ -211,6 +218,7 @@ class InvestmentService {
         expectedOutputRaw: toDbRaw(best.quote.expectedOutput.raw),
         minOutputRaw: toDbRaw(best.quote.minOutput.raw),
         budgetNgn: input.budgetNgn ?? null,
+        allowPartialFill: input.allowPartialFill ?? false,
         feeUsdc: toDbRaw(0n),
         fxFeeUsdc: toDbRaw(0n),
         venueFeeUsdc: toDbRaw(0n),
@@ -224,12 +232,14 @@ class InvestmentService {
             userId,
             walletId: best.quote.walletId,
             stockId: input.stockId,
+            side: input.side,
             context: best.context,
             input: { asset: best.quote.input.asset, raw: best.quote.input.raw.toString() },
             expectedOutput: { asset: best.quote.expectedOutput.asset, raw: best.quote.expectedOutput.raw.toString() },
             minOutput: { asset: best.quote.minOutput.asset, raw: best.quote.minOutput.raw.toString() },
             userFeeUsdc: "0",
             sponsorCostWei: "0",
+            allowPartialFill: best.quote.allowPartialFill,
             priceImpactBps: best.quote.priceImpactBps,
             expiresAt: expiresAt.toISOString(),
             sourceBlock: best.quote.sourceBlock.toString(),
@@ -249,6 +259,7 @@ class InvestmentService {
     quoteId: string,
     authorizationId: string,
     key: string,
+    opts?: { standingAction?: StandingAction },
   ): Promise<InvestmentDto> {
     const requestHash = sha256Hex(canonicalJson({ quoteId, authorizationId, key }));
     return withTx(async (tx) => {
@@ -283,16 +294,27 @@ class InvestmentService {
         });
         return investmentToDto(inv, quote.providerId);
       }
-      await authorizationService.check(tx, userId, authorizationId, {
-        scope: "investments",
-        stockId: quote.stockId,
-        amountUsdc: fromDbRaw(quote.inputRaw),
+      const usageNgnKobo = await authorizationService.check(tx, userId, authorizationId, {
+        action: opts?.standingAction,
+        quote: {
+          kind: "investment",
+          id: quote.id,
+          stockId: quote.stockId,
+          // Value basis: buys spend settlement input; sells are valued at the
+          // expected settlement output of the accepted quote.
+          valueMicroUsd:
+            quote.side === "buy" ? fromDbRaw(quote.inputRaw) : fromDbRaw(quote.expectedOutputRaw),
+          budgetNgnKobo: quote.budgetNgn === null ? null : BigInt(quote.budgetNgn),
+          feeMicroUsd: fromDbRaw(quote.feeUsdc) + fromDbRaw(quote.fxFeeUsdc) + fromDbRaw(quote.venueFeeUsdc),
+        },
       });
       const context = quote.context as {
         betaContext: BetaContext;
         executionQuote: {
           id: string;
           walletId: string;
+          side: "buy" | "sell";
+          allowPartialFill: boolean;
           input: { asset: string; raw: string };
           expectedOutput: { asset: string; raw: string };
           minOutput: { asset: string; raw: string };
@@ -310,12 +332,14 @@ class InvestmentService {
         userId,
         walletId: eq.walletId,
         stockId: quote.stockId,
+        side: eq.side,
         context: context.betaContext,
         input: { asset: eq.input.asset, raw: BigInt(eq.input.raw) },
         expectedOutput: { asset: eq.expectedOutput.asset, raw: BigInt(eq.expectedOutput.raw) },
         minOutput: { asset: eq.minOutput.asset, raw: BigInt(eq.minOutput.raw) },
         userFeeUsdc: BigInt(eq.userFeeUsdc ?? "0"),
         sponsorCostWei: BigInt(eq.sponsorCostWei ?? "0"),
+        allowPartialFill: eq.allowPartialFill,
         priceImpactBps: eq.priceImpactBps,
         expiresAt: quote.expiresAt,
         sourceBlock: BigInt(eq.sourceBlock),
@@ -371,6 +395,9 @@ class InvestmentService {
         data: { operationId: op.id, status: "executing" },
       });
       await tx.investmentQuote.update({ where: { id: quoteId }, data: { consumedAt: now() } });
+      if (opts?.standingAction) {
+        await authorizationService.recordUsage(tx, op.id, usageNgnKobo);
+      }
       await jobService.enqueue(tx, { kind: "operation.progress", subjectId: op.id });
       await jobService.enqueue(tx, { kind: "investment.progress", subjectId: inv.id });
       return investmentToDto(updated, quote.providerId);
@@ -420,6 +447,7 @@ class InvestmentService {
         if (current.status === "filled") return;
         const amountOut = actual.output?.raw ?? 0n;
         await positionService.applyFill(tx, op.id);
+        const actualIn = actual.input?.raw ?? fromDbRaw(current.amountIn);
         await ledgerService.post(
           tx,
           tradeFilled({
@@ -429,10 +457,25 @@ class InvestmentService {
             venueId: op.providerId,
             stockId: current.stockId,
             side: current.side,
-            amountIn: actual.input?.raw ?? fromDbRaw(current.amountIn),
+            amountIn: actualIn,
             amountOut,
           }),
         );
+        // A partial input fill releases only the unused remainder of the reservation.
+        const reservedIn = fromDbRaw(current.amountIn);
+        if (actualIn < reservedIn) {
+          if (current.side === "buy") {
+            await ledgerService.post(
+              tx,
+              cashReleased({ key: current.key, userId: current.userId, chain: stock.chain, amount: reservedIn - actualIn, to: "cash" }),
+            );
+          } else {
+            await ledgerService.post(
+              tx,
+              stockReleased({ key: current.key, userId: current.userId, stockId: current.stockId, quantity: reservedIn - actualIn }),
+            );
+          }
+        }
         // Actual output below the quoted expectation is a partial fill; only the
         // actual input is spent and the remainder needs a fresh quote (single-use).
         const expectedOut = expectedQuote.expectedOutput.raw;

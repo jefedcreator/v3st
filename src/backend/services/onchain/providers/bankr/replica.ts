@@ -16,12 +16,13 @@ import type {
 } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
 import { planFingerprint } from "@/backend/services/execution/policy";
-import {
+import { onchainExpiryMs, 
+  chainDeadlineBounded,
   chainDeadlineFromNow,
   publicClientFor,
   readManifest,
   settlementAssetKey,
-} from "@/backend/services/onchain/testnet";
+ } from "@/backend/services/onchain/testnet";
 import { db } from "@/server/db";
 import { UnprocessableEntityException } from "@/utils/exceptions";
 
@@ -86,12 +87,12 @@ async function localQuoteTransport(
 ): Promise<BankrQuoteResponse> {
   const { reserveIn, reserveOut } = await poolReserves(tokenIn, tokenOut);
   const partial = await partialFillBps();
-  const fee = (input.input.raw * BigInt(BANKR_FIXTURE_FEE_BPS)) / 10_000n;
-  const net = input.input.raw - fee;
-  let expectedOut = fixtureQuoteOut(reserveIn, reserveOut, net);
-  if (partial < 10_000n) {
-    expectedOut = (expectedOut * partial) / 10_000n;
-  }
+  // Mirror the router: with a partial-fill fixture only the filled portion of the
+  // input is pulled, and the fee is charged on that portion.
+  const fillIn = partial < 10_000n ? (input.input.raw * partial) / 10_000n : input.input.raw;
+  const fee = (fillIn * BigInt(BANKR_FIXTURE_FEE_BPS)) / 10_000n;
+  const net = fillIn - fee;
+  const expectedOut = fixtureQuoteOut(reserveIn, reserveOut, net);
   const minOut = (expectedOut * (10_000n - BigInt(input.slippageBps))) / 10_000n;
   const impactBps = reserveIn === 0n ? 10_000 : Number((net * 10_000n) / reserveIn);
   const payload = {
@@ -108,7 +109,7 @@ async function localQuoteTransport(
       bps: BANKR_FIXTURE_FEE_BPS,
     },
     priceImpactBps: Math.min(impactBps, 10_000),
-    expiresAt: new Date(now().getTime() + policy.onchain.quoteTtlSeconds * 1000).toISOString(),
+    expiresAt: new Date(await onchainExpiryMs(policy.onchain.quoteTtlSeconds)).toISOString(),
     locationClearance: "required_separately" as const,
   };
   return parseBankrQuote(payload);
@@ -134,24 +135,29 @@ class BankrReplicaAdapter implements SpotAdapter {
     if (parsed.input.asset !== input.input.asset || parsed.input.raw !== input.input.raw) {
       throw new BankrReplicaError("Quote input does not match the request");
     }
-    if (parsed.fee.raw !== (input.input.raw * BigInt(BANKR_FIXTURE_FEE_BPS)) / 10_000n) {
+    const partialNow = await partialFillBps();
+    const pulledRaw =
+      partialNow < 10_000n ? (BigInt(parsed.input.raw) * partialNow) / 10_000n : BigInt(parsed.input.raw);
+    if (parsed.fee.raw !== (pulledRaw * BigInt(BANKR_FIXTURE_FEE_BPS)) / 10_000n) {
       throw new BankrReplicaError("Hidden or unexpected output fee in gateway quote");
     }
     const expiryMs = Math.min(
       new Date(parsed.expiresAt).getTime(),
-      now().getTime() + policy.onchain.quoteTtlSeconds * 1000,
+      await onchainExpiryMs(policy.onchain.quoteTtlSeconds),
     );
     return {
       id: parsed.quoteId,
       userId: input.userId,
       walletId: input.walletId,
       stockId: input.stockId,
+      side: input.side,
       context: input.context,
       input: { asset: parsed.input.asset, raw: parsed.input.raw },
       expectedOutput: { asset: parsed.output.asset, raw: parsed.output.raw },
       minOutput: { asset: parsed.minOutput.asset, raw: parsed.minOutput.raw },
       userFeeUsdc: 0n,
       sponsorCostWei: 0n,
+      allowPartialFill: input.allowPartialFill ?? false,
       priceImpactBps: parsed.priceImpactBps,
       expiresAt: new Date(expiryMs),
       sourceBlock: await publicClientFor().getBlockNumber(),
@@ -178,11 +184,19 @@ class BankrReplicaAdapter implements SpotAdapter {
     const buy = quote.input.asset === settlement;
     const tokenIn = (buy ? parseAssetKey(settlement).address : parseAssetKey(stock.assetKey).address) as Address;
     const tokenOut = (buy ? parseAssetKey(stock.assetKey).address : parseAssetKey(settlement).address) as Address;
-    const deadline = await chainDeadlineFromNow();
+    const deadline = await chainDeadlineBounded(quote.expiresAt.getTime());
     const swapData = encodeFunctionData({
       abi: o1RouterAbi,
       functionName: "swapExactIn",
-      args: [tokenIn, tokenOut, quote.input.raw, quote.minOutput.raw, managedAddress, BigInt(Math.floor(deadline.getTime() / 1000))],
+      args: [
+        tokenIn,
+        tokenOut,
+        quote.input.raw,
+        quote.minOutput.raw,
+        managedAddress,
+        BigInt(Math.floor(deadline.getTime() / 1000)),
+        quote.allowPartialFill ?? false,
+      ],
     });
     const approveData = encodeFunctionData({
       abi: buy ? settlementTokenAbi : stockTokenAbi,
