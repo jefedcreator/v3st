@@ -802,6 +802,7 @@ model CustodyProfile {
     label             String
     walletId          String?
     externalProfileId String?
+    managedAddress    String?
     createdAt         DateTime         @default(now())
 
     operations OnchainOperation[]

@@ -104,6 +104,23 @@ export type CreateOperationInput = {
   recipient: Address;
 };
 
+// The executing account comes from the operation's custody profile: a
+// provider_managed profile (e.g. Bankr) uses its own managed account, anything
+// else uses the wallet's application execution account.
+async function accountAddressFor(
+  prisma: Pick<Tx, "custodyProfile" | "wallet">,
+  op: OnchainOperation,
+): Promise<Address> {
+  const profile = await prisma.custodyProfile.findUnique({ where: { id: op.custodyProfileId } });
+  if (profile?.kind === "provider_managed") {
+    if (!profile.managedAddress) throw new NotFoundException("Managed account missing", "WALLET_NOT_READY");
+    return profile.managedAddress as Address;
+  }
+  const wallet = await prisma.wallet.findUniqueOrThrow({ where: { id: op.walletId } });
+  if (!wallet.executionAddress) throw new NotFoundException("Execution account missing", "WALLET_NOT_READY");
+  return wallet.executionAddress as Address;
+}
+
 function planAssets(plan: ExecutionPlan | StrategyPlan): string[] {
   if ("expectedInput" in plan) {
     return [plan.expectedInput.asset, plan.minimumOutput.asset];
@@ -330,9 +347,7 @@ class ExecutionService {
         const gasPrice = BigInt(await rpcRequest<Hex>(testnetRpcUrl(), "eth_gasPrice"));
         const estWei = gasPrice * 1_500_000n + 1n;
         await this.reserveSponsorBudget(tx, op.id, estWei);
-        const wallet = await tx.wallet.findUniqueOrThrow({ where: { id: current.walletId } });
-        const accountAddress = wallet.executionAddress as Address;
-        if (!accountAddress) throw new NotFoundException("Execution account missing", "WALLET_NOT_READY");
+        const accountAddress = await accountAddressFor(tx, current);
         const signerNonce = await allocateSignerNonce(tx, current.id, relayerAccount().address);
         const pre = await captureBalances(planAssets(plan), accountAddress);
         const signed = await this.signOperation(current, plan, signerNonce, accountAddress);
@@ -408,8 +423,7 @@ class ExecutionService {
       const assets = planAssets(plan);
       const inputAsset = "expectedInput" in plan ? plan.expectedInput.asset : plan.maximumInputs[0]?.asset;
       const outputAsset = "minimumOutput" in plan ? plan.minimumOutput.asset : plan.minimumOutputs[0]?.asset;
-      const wallet = await db.wallet.findUniqueOrThrow({ where: { id: op.walletId } });
-      const accountAddress = wallet.executionAddress as Address;
+      const accountAddress = await accountAddressFor(db, op);
       const post: Record<string, string> = {};
       for (const asset of assets) {
         post[asset] = (await captureBalances([asset], accountAddress))[asset]!;

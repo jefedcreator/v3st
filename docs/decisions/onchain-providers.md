@@ -41,3 +41,19 @@ Date: 2026-11-14. Scope: backend/API only. This record is the source of truth fo
 Enabling a verified provider testnet later requires affirmative endpoint/account/network/
 asset/sponsorship evidence plus a reviewed configuration change — never an operator toggle
 or a caller-supplied mode flag.
+
+## Bankr managed-wallet profile (beta)
+
+Bankr is modeled as `custody: provider_managed`, not as an application-account route.
+`bankrReplicaGateway.provision(ownerKey)` deploys one local managed execution account per
+synthetic customer and persists only a scoped server-key *reference*
+(`bankr-server-key:<address>`) on a `provider_managed` custody profile — the key itself is
+ephemeral and never stored, exported or imported, and Privy keys are never touched. Customers
+are never pooled into one wallet. Ordinary application-account orders cannot route through
+the gateway: the adapter and the gateway both require the operation's custody profile to be
+`provider_managed`. The gateway always uses the loopback testnet execution path and never
+Bankr's real hostname; HTTP 200 with `success:false` is normalized as a revert, and a
+timeout/ambiguous response stays unresolved with the original operation hash until onchain
+evidence is reconciled (no resend). A successful quote never grants stock eligibility or
+location clearance, and Bankr gas limits are not an unlimited sponsorship guarantee — the
+shared local sponsor budgets model exhaustion.

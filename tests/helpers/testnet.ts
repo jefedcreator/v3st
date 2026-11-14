@@ -56,7 +56,7 @@ export type TestnetHandle = {
   o1Router: Address;
   seedO1Pool(stock: Address, settlementAmount: bigint, stockAmount: bigint): Promise<Hex>;
   setO1PartialFillBps(bps: bigint): Promise<Hex>;
-  o1SwapEvents(): Promise<{ amountIn: bigint; fee: bigint; amountOut: bigint; recipient: string }[]>;
+  o1SwapEvents(fromBlock?: bigint): Promise<{ amountIn: bigint; fee: bigint; amountOut: bigint; recipient: string }[]>;
 };
 
 let cached: TestnetHandle | null = null;
@@ -260,11 +260,11 @@ export async function testnet(): Promise<TestnetHandle> {
         data: encodeFunctionData({ abi: o1RouterAbi, functionName: "setPartialFillBps", args: [bps] }),
       });
     },
-    async o1SwapEvents() {
+    async o1SwapEvents(fromBlock = 0n) {
       const logs = await publicClient.getLogs({
         address: manifest.contracts.O1RouterReplica!.address,
         event: o1RouterAbi.find((item) => (item as { name?: string }).name === "SwapExecuted") as never,
-        fromBlock: 0n,
+        fromBlock,
       });
       return logs.map((log) => {
         const args = (log as unknown as { args: { amountIn: bigint; fee: bigint; amountOut: bigint; recipient: string } }).args;

@@ -27,7 +27,8 @@ async function setup() {
   await handle.seedO1Pool(token, 1_000_000_000_000n, 500_000n * 10n ** 18n);
   await handle.mintSettlement(ref.accountAddress, 10_000_000n);
   const context = await testnetService.defaultContext("o1", "replica-1.0.0", ref.custodyProfileId);
-  return { handle, network, u, ref, stock, token, context };
+  const startBlock = await handle.blockNumber();
+  return { handle, network, u, ref, stock, token, context, startBlock };
 }
 
 async function makeQuote(ctx: Awaited<ReturnType<typeof setup>>, raw = 10_000_000n): Promise<ExecutionQuote> {
@@ -68,7 +69,7 @@ describe("o1 replica on the local testnet", () => {
       recipient: ctx.ref.accountAddress,
     });
     await executionService.prepare(op.id);
-    expect((await ctx.handle.o1SwapEvents()).length).toBe(0);
+    expect((await ctx.handle.o1SwapEvents(ctx.startBlock)).length).toBe(0);
 
     await executionService.progress(op.id);
     await ctx.handle.mine(3);

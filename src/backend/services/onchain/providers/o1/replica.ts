@@ -11,6 +11,7 @@ import {
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { o1RouterAbi, settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
+import { fixtureQuoteOut, partialFillBps, poolReserves, routerAddress } from "../router-pool";
 import type {
   ExecutionPlan,
   ExecutionQuote,
@@ -53,45 +54,6 @@ export const o1Capabilities: ProviderCapabilities = {
   exactOutput: false,
 };
 
-function routerAddress(): Address {
-  const manifest = readManifest();
-  const entry = manifest.contracts.O1RouterReplica;
-  if (!entry) throw new O1ReplicaError("O1RouterReplica is not in the testnet manifest");
-  return entry.address;
-}
-
-function pairKey(a: Address, b: Address): Hex {
-  // Solidity compares addresses numerically; mirror that ordering exactly.
-  const [x, y] = BigInt(a) < BigInt(b) ? [a, b] : [b, a];
-  return keccak256(encodePacked(["address", "address"], [x, y]));
-}
-
-async function poolReserves(tokenIn: Address, tokenOut: Address): Promise<{
-  settlementIn: boolean;
-  reserveIn: bigint;
-  reserveOut: bigint;
-}> {
-  const client = publicClientFor();
-  const key = pairKey(tokenIn, tokenOut);
-  const pool = (await client.readContract({
-    address: routerAddress(),
-    abi: o1RouterAbi,
-    functionName: "pools",
-    args: [key],
-  })) as unknown as [Address, Address, bigint, bigint];
-  const settlementIn = tokenIn.toLowerCase() === pool[0].toLowerCase();
-  return {
-    settlementIn,
-    reserveIn: settlementIn ? pool[2] : pool[3],
-    reserveOut: settlementIn ? pool[3] : pool[2],
-  };
-}
-
-export function fixtureQuoteOut(reserveIn: bigint, reserveOut: bigint, amountInNet: bigint): bigint {
-  if (reserveIn === 0n || reserveOut === 0n) return 0n;
-  return (amountInNet * reserveOut) / (reserveIn + amountInNet);
-}
-
 // A provider plan with a hidden fee must be rejected even with HTTP 200.
 export function assertFeeConsistency(parsed: O1QuoteResponse, inputRaw: bigint): void {
   const expectedFee = (inputRaw * BigInt(O1_FIXTURE_FEE_BPS)) / 10_000n;
@@ -107,17 +69,12 @@ export function assertFeeConsistency(parsed: O1QuoteResponse, inputRaw: bigint):
 // pool state; the response is then parsed strictly by the schema (untrusted input).
 async function localQuoteTransport(input: QuoteRequest, tokenIn: Address, tokenOut: Address): Promise<O1QuoteResponse> {
   const { reserveIn, reserveOut, settlementIn } = await poolReserves(tokenIn, tokenOut);
-  const client = publicClientFor();
-  const partialBps = (await client.readContract({
-    address: routerAddress(),
-    abi: o1RouterAbi,
-    functionName: "partialFillBps",
-  })) as bigint;
+  const partial = await partialFillBps();
   const fee = (input.input.raw * BigInt(O1_FIXTURE_FEE_BPS)) / 10_000n;
   const net = input.input.raw - fee;
   let expectedOut = fixtureQuoteOut(reserveIn, reserveOut, net);
-  if (partialBps < 10_000n) {
-    expectedOut = (expectedOut * partialBps) / 10_000n;
+  if (partial < 10_000n) {
+    expectedOut = (expectedOut * partial) / 10_000n;
   }
   const minOut = (expectedOut * (10_000n - BigInt(input.slippageBps))) / 10_000n;
   const impactBps = reserveIn === 0n ? 10_000 : Number((net * 10_000n) / reserveIn);

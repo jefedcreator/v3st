@@ -9,7 +9,7 @@ import { executionService, registerOperationFinalizer } from "@/backend/services
 import { planFingerprint } from "@/backend/services/execution/policy";
 import { settlementTokenAbi } from "@/backend/services/onchain/abis";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
-import { settlementAssetKey, testnetService, readManifest } from "@/backend/services/onchain/testnet";
+import { chainDeadlineFromNow, settlementAssetKey, testnetService, readManifest } from "@/backend/services/onchain/testnet";
 import type {
   ExecutionPlan,
   ExecutionQuote,
@@ -51,7 +51,7 @@ const testSpotAdapter: SpotAdapter = {
     const wallet = await db.wallet.findUniqueOrThrow({ where: { id: quote.walletId } });
     const accountAddress = wallet.executionAddress as Address;
     const recipient = manifest.relayerAddress;
-    const deadline = new Date(now().getTime() + 60_000);
+    const deadline = await chainDeadlineFromNow();
     const calls = [
       {
         to: settlement as Address,
@@ -211,7 +211,7 @@ describe("testnet execution", () => {
       expectedInput: { asset: settlementAssetKey(manifest), raw: 100n },
       minimumOutput: { asset: settlementAssetKey(manifest), raw: 0n },
       recipient: manifest.relayerAddress,
-      deadline: new Date(now().getTime() + 60_000),
+      deadline: await chainDeadlineFromNow(),
       fingerprint: "",
     };
     const wrongRecipient: ExecutionPlan = {

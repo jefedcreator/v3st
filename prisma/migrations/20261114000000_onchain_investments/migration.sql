@@ -78,6 +78,7 @@ CREATE TABLE "custody_profiles" (
     "label" TEXT NOT NULL,
     "walletId" TEXT,
     "externalProfileId" TEXT,
+    "managedAddress" TEXT,
     "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "custody_profiles_pkey" PRIMARY KEY ("id")
 );

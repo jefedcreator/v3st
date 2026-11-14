@@ -85,18 +85,31 @@ class TestnetWalletService {
     return { nonce, epoch };
   }
 
+  // Revocation must invalidate every execution account the user controls: the
+  // application account and each provider_managed (Bankr-style) managed account.
   async bumpAuthorizationEpoch(userId: string): Promise<void> {
-    const wallet = await db.wallet.findUnique({
-      where: { userId_family: { userId, family: "evm" } },
-    });
-    if (!wallet?.executionAddress) return;
+    const wallets = await db.wallet.findMany({ where: { userId } });
+    if (wallets.length === 0) return;
+    const targets = new Set<string>();
+    for (const wallet of wallets) {
+      if (wallet.executionAddress) targets.add(wallet.executionAddress.toLowerCase());
+      const managed = await db.custodyProfile.findMany({
+        where: { walletId: wallet.id, kind: "provider_managed" },
+      });
+      for (const profile of managed) {
+        if (profile.managedAddress) targets.add(profile.managedAddress.toLowerCase());
+      }
+    }
+    if (targets.size === 0) return;
     const account = relayerAccount();
     const walletClient = walletClientFor(account);
-    await walletClient.writeContract({
-      address: wallet.executionAddress as Address,
-      abi: executionAccountAbi,
-      functionName: "bumpAuthorizationEpoch",
-    });
+    for (const address of targets) {
+      await walletClient.writeContract({
+        address: address as Address,
+        abi: executionAccountAbi,
+        functionName: "bumpAuthorizationEpoch",
+      });
+    }
   }
 }
 
