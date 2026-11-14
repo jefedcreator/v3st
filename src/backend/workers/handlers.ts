@@ -10,6 +10,7 @@ import { now } from "@/backend/clock";
 import { depositService } from "@/backend/services/deposits";
 import { earningsBatchService } from "@/backend/services/earnings/batch";
 import { earningsService } from "@/backend/services/earnings";
+import { executionService } from "@/backend/services/execution";
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
 import { pollOpenWork } from "@/backend/services/orders/poller";
 import { reconciliationService } from "@/backend/services/reconciliation";
@@ -28,6 +29,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "trade.progress": async (job) => {
     await tradeService.progress(job.subjectId);
+  },
+  "operation.progress": async (job) => {
+    await executionService.progress(job.subjectId);
   },
   "deposit.progress": async (job) => {
     await depositService.progress(job.subjectId);

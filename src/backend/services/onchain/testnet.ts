@@ -83,6 +83,8 @@ export function localChain() {
 
 export function publicClientFor(url: string = testnetRpcUrl()) {
   return createPublicClient({
+    pollingInterval: 250,
+    cacheTime: 0,
     chain: localChain(),
     transport: custom({
       async request({ method, params }) {
@@ -101,6 +103,8 @@ export function relayerAccount(): ReturnType<typeof privateKeyToAccount> {
 export function walletClientFor(account: ReturnType<typeof privateKeyToAccount>, url: string = testnetRpcUrl()) {
   return createWalletClient({
     account,
+    pollingInterval: 250,
+    cacheTime: 0,
     chain: localChain(),
     transport: custom({
       async request({ method, params }) {

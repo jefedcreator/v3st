@@ -4,7 +4,7 @@ import { db, withTx } from "@/server/db";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { openingBalance } from "@/backend/services/ledger/postings";
-import { toDbRaw } from "@/utils/asset-units";
+import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 
 import { useTestDatabase } from "../helpers/db";
 import { makeStock, makeUser } from "../helpers/factories";
@@ -74,7 +74,7 @@ describe("onchain schema", () => {
         state: "received_asset",
       },
     });
-    expect(receipt.amountRaw.toString()).toBe(raw.toString());
+    expect(fromDbRaw(receipt.amountRaw).toString()).toBe(raw.toString());
   });
 
   it("rejects duplicate source receipts on the (network, source, txHash, logIndex, beneficiary) identity", async () => {

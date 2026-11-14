@@ -31,6 +31,8 @@ describe("asset-units", () => {
     expect(() => parseRaw(" 1")).toThrow();
     expect(() => assertRaw(-1n)).toThrow();
     expect(() => assertRaw(2n ** 256n)).toThrow();
-    expect(() => toDbRaw(10n ** 30n * 10n ** 30n)).toThrow();
+    expect(() => toDbRaw(2n ** 256n)).toThrow();
+    expect(() => fromDbRaw("1.5")).toThrow();
+    expect(fromDbRaw("1.15792089237316195423570985008687907853269984665640564039457584007913129639935e+77")).toBe(RAW_MAX);
   });
 });

@@ -81,7 +81,7 @@ export async function testnet(): Promise<TestnetHandle> {
     settlement,
     registry,
     async mine(blocks) {
-      await rpcRequest(url, "evm_mine", [blocks]);
+      await rpcRequest(url, "anvil_mine", [`0x${blocks.toString(16)}`]);
     },
     async snapshot() {
       return rpcRequest<string>(url, "evm_snapshot");
@@ -91,7 +91,7 @@ export async function testnet(): Promise<TestnetHandle> {
     },
     async advanceTime(seconds) {
       await rpcRequest(url, "evm_increaseTime", [seconds]);
-      await rpcRequest(url, "evm_mine", [1]);
+      await rpcRequest(url, "anvil_mine", ["0x1"]);
     },
     async setBalanceWei(address, wei) {
       await rpcRequest(url, "anvil_setBalance", [address, `0x${wei.toString(16)}`]);
@@ -233,19 +233,13 @@ export const executionAccountAbi = parseAbi([
   "function relayer() view returns (address)",
 ]);
 
-let networkRow: { id: string } | null = null;
-
 export async function ensureTestnetNetwork(): Promise<{ id: string }> {
-  if (networkRow) return networkRow;
   const { db } = await import("@/server/db");
   const handle = await testnet();
   const existing = await db.onchainNetwork.findUnique({
     where: { deploymentId: handle.manifest.deploymentId },
   });
-  if (existing) {
-    networkRow = { id: existing.id };
-    return networkRow;
-  }
+  if (existing) return { id: existing.id };
   const created = await db.onchainNetwork.create({
     data: {
       networkId: handle.manifest.networkId,
@@ -257,8 +251,7 @@ export async function ensureTestnetNetwork(): Promise<{ id: string }> {
       rpcLoopback: true,
     },
   });
-  networkRow = { id: created.id };
-  return networkRow;
+  return { id: created.id };
 }
 
 export async function makeTestnetStock(input: {
@@ -275,12 +268,14 @@ export async function makeTestnetStock(input: {
   const supply = input.supply ?? 1_000_000n * 10n ** 18n;
   const token = await handle.deployStockToken(input.name ?? `Test ${input.symbol}`, input.symbol, supply);
   const assetKeyValue = stockAssetKey(handle.manifest, token);
-  const registryKey = await handle.registerStock({
+  await handle.registerStock({
     token,
     assetKey: assetKeyValue,
     symbol: input.symbol,
     name: input.name ?? `Test ${input.symbol}`,
   });
+  const { keccak256, toHex } = await import("viem");
+  const registryKey = keccak256(toHex(assetKeyValue)) as Hex;
   if (input.referencePriceMicroUsd !== undefined) {
     await handle.setReferencePrice(
       registryKey,

@@ -33,8 +33,34 @@ export function toDbRaw(value: bigint): Prisma.Decimal {
   return new Prisma.Decimal(assertRaw(value).toString());
 }
 
+export function decimalTextToBigInt(text: string): bigint {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]\+?(\d+))?$/.exec(text);
+  if (!match) {
+    throw new RawAmountError(`Not a decimal integer string: ${JSON.stringify(text)}`);
+  }
+  const negative = match[1] === "-";
+  const intPart = match[2]!;
+  const fracPart = match[3] ?? "";
+  const exponent = Number(match[4] ?? "0");
+  const allDigits = intPart + fracPart;
+  const point = intPart.length + exponent;
+  let digits: string;
+  if (point >= allDigits.length) {
+    digits = allDigits + "0".repeat(point - allDigits.length);
+  } else {
+    const remainingFraction = allDigits.slice(point);
+    if (/[1-9]/.test(remainingFraction)) {
+      throw new RawAmountError(`Fractional raw quantity: ${JSON.stringify(text)}`);
+    }
+    digits = allDigits.slice(0, Math.max(point, 1));
+  }
+  const magnitude = BigInt(digits);
+  return negative ? -magnitude : magnitude;
+}
+
 export function fromDbRaw(value: Prisma.Decimal | string): bigint {
-  return BigInt(value.toString());
+  const text = typeof value === "string" ? value : value.toFixed();
+  return decimalTextToBigInt(text);
 }
 
 export function fromDbRawNullable(value: Prisma.Decimal | string | null): bigint | null {

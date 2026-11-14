@@ -33,7 +33,12 @@ const actionCancelledEvent = parseAbiItem("event ActionCancelled(uint256 indexed
 const MULTIPLIER_SCHEDULED_TOPIC = getEventSelector(multiplierScheduledEvent);
 const ACTION_CANCELLED_TOPIC = getEventSelector(actionCancelledEvent);
 
-function decodeActionLog(log: Log): { kind: string; multiplierWad: bigint | null; effectiveAt: Date | null } | null {
+function decodeActionLog(log: Log): {
+  kind: string;
+  actionId: bigint;
+  multiplierWad: bigint | null;
+  effectiveAt: Date | null;
+} | null {
   if (log.topics[0] === MULTIPLIER_SCHEDULED_TOPIC) {
     try {
       const decoded = decodeEventLog({
@@ -41,9 +46,10 @@ function decodeActionLog(log: Log): { kind: string; multiplierWad: bigint | null
         data: log.data,
         topics: log.topics as [Hex, ...Hex[]],
       });
-      const args = decoded.args as unknown as { toWad: bigint; effectiveAt: bigint };
+      const args = decoded.args as unknown as { actionId: bigint; toWad: bigint; effectiveAt: bigint };
       return {
         kind: "multiplier_scheduled",
+        actionId: args.actionId,
         multiplierWad: args.toWad,
         effectiveAt: new Date(Number(args.effectiveAt) * 1000),
       };
@@ -52,7 +58,17 @@ function decodeActionLog(log: Log): { kind: string; multiplierWad: bigint | null
     }
   }
   if (log.topics[0] === ACTION_CANCELLED_TOPIC) {
-    return { kind: "action_cancelled", multiplierWad: null, effectiveAt: null };
+    try {
+      const decoded = decodeEventLog({
+        abi: [actionCancelledEvent],
+        data: log.data,
+        topics: log.topics as [Hex, ...Hex[]],
+      });
+      const args = decoded.args as unknown as { actionId: bigint };
+      return { kind: "action_cancelled", actionId: args.actionId, multiplierWad: null, effectiveAt: null };
+    } catch {
+      return null;
+    }
   }
   return null;
 }
@@ -66,9 +82,17 @@ class StockActionService {
       where: { networkId: stock.networkId, stockId },
       orderBy: [{ blockNumber: "asc" }, { logIndex: "asc" }],
     });
+    const cancelled = new Set<bigint>();
+    for (const action of actions) {
+      if (action.kind !== "action_cancelled") continue;
+      const payload = action.payload as { actionId?: string } | null;
+      if (payload?.actionId) cancelled.add(BigInt(payload.actionId));
+    }
     let wad = WAD;
     for (const action of actions) {
-      if (action.cancelledAt) continue;
+      if (action.kind !== "multiplier_scheduled") continue;
+      const payload = action.payload as { actionId?: string } | null;
+      if (payload?.actionId && cancelled.has(BigInt(payload.actionId))) continue;
       if (action.effectiveAt && action.effectiveAt > at) continue;
       if (action.multiplierWad) wad = fromDbRaw(action.multiplierWad);
     }
@@ -76,7 +100,7 @@ class StockActionService {
   }
 
   async ingest(networkId: string, throughBlock: bigint): Promise<number> {
-    const network = await db.onchainNetwork.findUnique({ where: { networkId } });
+    const network = await db.onchainNetwork.findUnique({ where: { id: networkId } });
     if (!network) throw new StockActionError(`Unknown network ${networkId}`);
     const stocks = await db.stock.findMany({ where: { networkId } });
     if (stocks.length === 0) return 0;
@@ -105,6 +129,7 @@ class StockActionService {
             multiplierWad: decoded.multiplierWad === null ? null : toDbRaw(decoded.multiplierWad),
             effectiveAt: decoded.effectiveAt,
             cancelledAt: decoded.kind === "action_cancelled" ? now() : null,
+            payload: { actionId: decoded.actionId.toString() },
           },
         });
         inserted += 1;
@@ -121,7 +146,7 @@ class StockActionService {
       });
     }
     await db.onchainNetwork.update({
-      where: { networkId },
+      where: { id: networkId },
       data: { finalizedBlock: toDbRaw(throughBlock) },
     });
     return inserted;
@@ -132,7 +157,7 @@ class StockActionService {
       where: { networkId, blockNumber: { gt: toDbRaw(finalizedBlock) } },
     });
     await db.onchainNetwork.update({
-      where: { networkId },
+      where: { id: networkId },
       data: { finalizedBlock: toDbRaw(finalizedBlock) },
     });
     return result.count;

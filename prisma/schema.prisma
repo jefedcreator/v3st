@@ -1117,3 +1117,17 @@ model SponsorBudget {
 
     @@map("sponsor_budgets")
 }
+
+// Private, never exposed through APIs/logs: lets a crash replay the exact signed
+// bytes instead of creating a replacement economic action.
+model SignedPayload {
+    id           String   @id @default(cuid())
+    operationId  String   @unique
+    approveTx    String
+    executeTx    String
+    approveHash  String
+    executeHash  String
+    createdAt    DateTime @default(now())
+
+    @@map("signed_payloads")
+}

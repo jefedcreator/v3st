@@ -356,6 +356,18 @@ CREATE TABLE "sponsor_budgets" (
 );
 CREATE UNIQUE INDEX "sponsor_budgets_scope_key" ON "sponsor_budgets"("scope");
 
+CREATE TABLE "signed_payloads" (
+    "id" TEXT NOT NULL,
+    "operationId" TEXT NOT NULL,
+    "approveTx" TEXT NOT NULL,
+    "executeTx" TEXT NOT NULL,
+    "approveHash" TEXT NOT NULL,
+    "executeHash" TEXT NOT NULL,
+    "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "signed_payloads_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "signed_payloads_operationId_key" ON "signed_payloads"("operationId");
+
 -- Foreign keys.
 ALTER TABLE "stocks" ADD CONSTRAINT "stocks_networkId_fkey" FOREIGN KEY ("networkId") REFERENCES "onchain_networks"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "investments" ADD CONSTRAINT "investments_quoteId_fkey" FOREIGN KEY ("quoteId") REFERENCES "investment_quotes"("id") ON DELETE SET NULL ON UPDATE CASCADE;

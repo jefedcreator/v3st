@@ -11,7 +11,10 @@ export type JobKind =
   | "earnings.float_precheck"
   | "earnings.payout_batch"
   | "reconcile.run"
-  | "poll.open_work";
+  | "poll.open_work"
+  | "operation.progress"
+  | "investment.progress"
+  | "strategy.progress";
 
 export type JobInput = {
   kind: JobKind;

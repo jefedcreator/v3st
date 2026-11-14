@@ -4,6 +4,9 @@ pragma solidity 0.8.30;
 
 interface Vm {
     function warp(uint256 newTimestamp) external;
+    function prank(address who) external;
+    function expectRevert(bytes4 selector) external;
+    function expectRevert(bytes calldata reason) external;
 }
 
 abstract contract Cheats {

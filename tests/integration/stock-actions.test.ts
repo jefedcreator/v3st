@@ -1,3 +1,4 @@
+import type { Address } from "viem";
 import { describe, expect, it } from "vitest";
 
 import { db } from "@/server/db";
@@ -21,7 +22,7 @@ describe("stock corporate actions on the local testnet", () => {
     const network = await ensureTestnetNetwork();
     const { stock, token } = await makeTestnetStock({ symbol: "SPLT", referencePriceMicroUsd: 100_000_000n });
 
-    const holder = handle.account.address;
+    const holder = "0x000000000000000000000000000000000000dead" as Address;
     await handle.sendTx({
       to: token,
       data: (await import("viem")).encodeFunctionData({
@@ -32,7 +33,7 @@ describe("stock corporate actions on the local testnet", () => {
     });
     expect(await handle.tokenBalance(token, holder)).toBe(2n * 10n ** 18n);
 
-    const effectiveAt = Math.floor(Date.now() / 1000) + 1;
+    const effectiveAt = Math.floor(Date.now() / 1000) - 1;
     await handle.scheduleMultiplier(token, 2n * WAD, effectiveAt);
     await handle.advanceTime(5);
     await handle.applyDueActions(token);
@@ -59,7 +60,7 @@ describe("stock corporate actions on the local testnet", () => {
     const handle = await testnet();
     const network = await ensureTestnetNetwork();
     const { stock, token } = await makeTestnetStock({ symbol: "CNCL" });
-    const effectiveAt = Math.floor(Date.now() / 1000) + 1;
+    const effectiveAt = Math.floor(Date.now() / 1000) - 1;
     await handle.scheduleMultiplier(token, 3n * WAD, effectiveAt);
     await handle.cancelAction(token, 0n);
     await handle.advanceTime(5);
@@ -72,7 +73,8 @@ describe("stock corporate actions on the local testnet", () => {
     const handle = await testnet();
     const network = await ensureTestnetNetwork();
     const { token } = await makeTestnetStock({ symbol: "DUPL" });
-    await handle.scheduleMultiplier(token, 2n * WAD, Math.floor(Date.now() / 1000));
+    await handle.scheduleMultiplier(token, 2n * WAD, Math.floor(Date.now() / 1000) - 1);
+    await handle.advanceTime(5);
     await handle.applyDueActions(token);
     const block = await handle.blockNumber();
     const first = await stockActionService.ingest(network.id, block);
@@ -88,7 +90,8 @@ describe("stock corporate actions on the local testnet", () => {
     const { stock, token } = await makeTestnetStock({ symbol: "REORG" });
     const snapshot = await handle.snapshot();
     const finalized = await handle.blockNumber();
-    await handle.scheduleMultiplier(token, 2n * WAD, Math.floor(Date.now() / 1000));
+    await handle.scheduleMultiplier(token, 2n * WAD, Math.floor(Date.now() / 1000) - 1);
+    await handle.advanceTime(5);
     await handle.applyDueActions(token);
     const reorgedBlock = await handle.blockNumber();
     await stockActionService.ingest(network.id, reorgedBlock);

@@ -41,12 +41,14 @@ contract StockActionsTest is TestBase, Cheats {
     }
 
     function test_scheduledMultiplierDoesNotApplyBeforeEffectiveTime() public {
-        token.scheduleMultiplier(3e18, uint64(block.timestamp + 1000));
+        uint64 t0 = 1_000_000;
+        vm.warp(t0);
+        token.scheduleMultiplier(3e18, t0 + 1000);
         token.applyDueActions();
         assertEqU(token.multiplierWad(), 1e18);
-        assertEqU(token.effectiveMultiplierAt(uint64(block.timestamp)), 1e18);
-        vm.warp(block.timestamp + 1001);
-        assertEqU(token.effectiveMultiplierAt(uint64(block.timestamp)), 3e18);
+        assertEqU(token.effectiveMultiplierAt(t0), 1e18);
+        vm.warp(t0 + 1001);
+        assertEqU(token.effectiveMultiplierAt(t0 + 1001), 3e18);
     }
 
     function test_cancelledScheduledUpdateNeverApplies() public {
