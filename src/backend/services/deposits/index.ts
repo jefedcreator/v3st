@@ -25,6 +25,7 @@ import { stockService } from "@/backend/services/stocks";
 import { tradeService } from "@/backend/services/trades";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
+import type { Chain as RampChain } from "@/backend/services/ramp/types";
 import { walletService } from "@/backend/services/wallets";
 import { canonicalJson, sha256Hex } from "@/utils";
 import { fromDbRaw } from "@/utils/asset-units";
@@ -163,7 +164,7 @@ class DepositService {
             where: { userId: order.userId, status: "active" },
           });
           const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
-          let recipient: { chain: Chain; address: string } | null = null;
+          let recipient: { chain: RampChain; address: string } | null = null;
           if (order.settlementModel === "direct_chain") {
             const chain = (order.chain ?? policy.defaultChain) as Chain;
             const wallet = await tx.wallet.findUnique({
@@ -172,7 +173,7 @@ class DepositService {
             if (!wallet) {
               throw new RetryableError("WALLET_NOT_READY");
             }
-            recipient = { chain, address: wallet.address };
+            recipient = { chain: chain as RampChain, address: wallet.address };
           }
           try {
             collection = await provider.createCollection({

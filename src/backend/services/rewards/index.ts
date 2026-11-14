@@ -400,6 +400,26 @@ class RewardService {
     return investment.operation_id;
   }
 
+  // Owner-scoped receipt lookup; cross-user receipt IDs are a 404.
+  async getOwned(userId: string, receiptId: string): Promise<RewardReceiptDto> {
+    const wallets = await db.wallet.findMany({ where: { userId } });
+    const addresses = new Set<string>();
+    for (const w of wallets) {
+      if (w.executionAddress) addresses.add(w.executionAddress.toLowerCase());
+    }
+    const profiles = await db.custodyProfile.findMany({
+      where: { walletId: { in: wallets.map((w) => w.id) }, kind: "provider_managed" },
+    });
+    for (const p of profiles) {
+      if (p.managedAddress) addresses.add(p.managedAddress.toLowerCase());
+    }
+    const row = await db.rewardReceipt.findUnique({ where: { id: receiptId } });
+    if (!row || !addresses.has(row.beneficiary)) {
+      throw new NotFoundException("Receipt not found", "NOT_FOUND");
+    }
+    return rewardReceiptToDto(row);
+  }
+
   // Owner-scoped receipt list: a receipt belongs to the user through their
   // execution/managed account addresses, never through a raw beneficiary input.
   async listForUser(userId: string): Promise<RewardReceiptDto[]> {

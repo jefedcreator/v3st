@@ -399,3 +399,10 @@ ALTER TABLE "strategy_quotes" ADD COLUMN "context" JSONB;
 -- (receiptId unique; legacy fixture rows keep NULL receiptId and stay payable).
 ALTER TABLE "earnings" ALTER COLUMN "stockId" DROP NOT NULL;
 CREATE UNIQUE INDEX "earnings_receiptId_key" ON "earnings"("receiptId");
+
+-- Versioned consent limits on the earnings preference (background conversion of
+-- reward assets plus fee/FX ceilings); existing users keep conversion off.
+ALTER TABLE "users" ADD COLUMN "earningsConsentVersion" TEXT;
+ALTER TABLE "users" ADD COLUMN "allowBackgroundConversion" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "users" ADD COLUMN "maxConversionFeeBps" INTEGER;
+ALTER TABLE "users" ADD COLUMN "maxFxBps" INTEGER;

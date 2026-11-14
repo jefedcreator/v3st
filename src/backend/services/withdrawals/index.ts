@@ -26,7 +26,7 @@ import { orderService } from "@/backend/services/orders";
 import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
 import { paycrestFundingAddress } from "@/backend/services/ramp/paycrest";
-import type { Quote } from "@/backend/services/ramp/types";
+import type { Chain as RampChain, Quote } from "@/backend/services/ramp/types";
 import { refForKey } from "@/backend/services/simulator/ramp";
 import { simulatedVenue } from "@/backend/services/simulator/venue";
 import { stockService } from "@/backend/services/stocks";
@@ -408,7 +408,7 @@ class WithdrawalService {
           customer: customerFor(user),
           key: order.id,
           maxUsd,
-          chain,
+          chain: chain as RampChain,
         });
         const funding = result.funding;
         if (funding.kind !== "chain") {
@@ -430,7 +430,7 @@ class WithdrawalService {
           throw new RetryableError(error.code);
         }
         if (error instanceof ProviderError && error.kind === "duplicate") {
-          const fundingAddress = paycrestFundingAddress(chain, order.id);
+          const fundingAddress = paycrestFundingAddress(chain as RampChain, order.id);
           await orderService.transition(tx, {
             order,
             to: "created",

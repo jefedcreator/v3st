@@ -1,4 +1,5 @@
 import type { ProviderMode } from "@/backend/integrations/beta-policy";
+import type { RewardReceiptDto } from "@/backend/services/rewards";
 import type { EarningsMode, KycStatus, UserRole, WalletFamily } from "@/server/prisma";
 
 export type BetaDto = { stage: "beta"; mode: ProviderMode; test_funds_only: true };
@@ -42,7 +43,14 @@ export type MeDto = {
   kyc: KycDto;
   wallets: { family: WalletFamily; address: string }[];
   bank_account: BankAccountDto | null;
-  earnings_preference: { mode: EarningsMode; stock_id: string | null };
+  earnings_preference: {
+    mode: EarningsMode;
+    stock_id: string | null;
+    consent_version: string | null;
+    allow_background_conversion: boolean;
+    max_conversion_fee_bps: number | null;
+    max_fx_bps: number | null;
+  };
   beta: { stage: "beta"; test_funds_only: true };
 };
 
@@ -66,6 +74,7 @@ export type StockDto = {
   reference_basis: string | null;
   reference_as_of: string | null;
   provenance: unknown;
+  tradable: boolean;
 };
 
 export type TradeDto = {
@@ -126,6 +135,7 @@ export type PortfolioDto = {
   valuation: "ok" | "partial" | "unavailable";
   as_of: string;
   beta: BetaDto;
+  receipts: RewardReceiptDto[];
 };
 
 export type EarningsWeekDto = {
@@ -143,6 +153,10 @@ export type EarningsPreferenceDto = {
   stock_id: string | null;
   minimum_payout_ngn: string;
   payout_fee_ngn: string | null;
+  consent_version: string | null;
+  allow_background_conversion: boolean;
+  max_conversion_fee_bps: number | null;
+  max_fx_bps: number | null;
 };
 
 export type ControlDto = {

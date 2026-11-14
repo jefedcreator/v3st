@@ -287,7 +287,7 @@ class TreasuryService {
   }
 
   async seedOpeningBalances(i: {
-    treasuryMicroUsdc: Record<Chain, bigint>;
+    treasuryMicroUsdc: Partial<Record<Chain, bigint>>;
     floatMicroUsd: bigint;
   }): Promise<void> {
     const mode = integrationModes().wallets;

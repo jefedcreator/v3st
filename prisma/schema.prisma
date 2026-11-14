@@ -291,6 +291,12 @@ model User {
     kycMode         ProviderMode?
     earningsMode    EarningsMode @default(unset)
     reinvestStockId String?
+    // Versioned consent limits attached to the payout/reinvest preference: optional
+    // background conversion of reward assets plus fee/FX ceilings for that path.
+    earningsConsentVersion    String?
+    allowBackgroundConversion Boolean @default(false)
+    maxConversionFeeBps       Int?
+    maxFxBps                  Int?
     createdAt       DateTime     @default(now())
     updatedAt       DateTime     @updatedAt
 

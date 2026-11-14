@@ -11,6 +11,7 @@ import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { authorizationService } from "@/backend/services/authorizations";
+import { eventService } from "@/backend/services/events";
 import {
   accountAddressFor,
   executionService,
@@ -185,6 +186,12 @@ class StrategyService {
   async list(_userId: string): Promise<StrategyDto[]> {
     const rows = await db.strategy.findMany({ where: { enabled: true }, orderBy: { createdAt: "asc" } });
     return rows.map(strategyToDto);
+  }
+
+  async get(_userId: string, id: string): Promise<StrategyDto> {
+    const row = await db.strategy.findUnique({ where: { id } });
+    if (!row?.enabled) throw new NotFoundException("Strategy not found", "NOT_FOUND");
+    return strategyToDto(row);
   }
 
   async positions(userId: string): Promise<StrategyPositionDto[]> {
@@ -620,12 +627,22 @@ class StrategyService {
     const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
     if (op.kind !== "strategy") return;
     if (["finalized", "reverted", "failed"].includes(op.status)) return;
+    // Re-arm the worker on every non-final exit so a preparatory swap that is still
+    // in flight does not stall the parent operation (enqueue dedupes on
+    // kind:subjectId and keeps the earliest runAt).
+    const rearm = (): Promise<void> =>
+      jobService.enqueue(db, {
+        kind: "strategy.progress",
+        subjectId: operationId,
+        runAt: new Date(now().getTime() + 2_000),
+      });
     const expected = (op.expected ?? {}) as { preparatoryOperationId?: string | null };
     if (expected.preparatoryOperationId) {
       const prep = await db.onchainOperation.findUnique({ where: { id: expected.preparatoryOperationId } });
       if (!prep) throw new NotFoundException("Preparatory operation missing", "OPERATION_UNRESOLVED");
       if (!["finalized", "reverted", "failed"].includes(prep.status)) {
         await executionService.progress(prep.id);
+        await rearm();
         return;
       }
       const prepNow = await db.onchainOperation.findUniqueOrThrow({ where: { id: prep.id } });
@@ -657,6 +674,16 @@ class StrategyService {
           },
         });
         await this.settleOperation(tx, current);
+      });
+    }
+    const latest = await db.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
+    if (!["finalized", "reverted", "failed"].includes(latest.status)) {
+      // Keep driving until the operation (and its preparatory swap) reaches a
+      // proved final state.
+      await jobService.enqueue(db, {
+        kind: "strategy.progress",
+        subjectId: operationId,
+        runAt: new Date(now().getTime() + 2_000),
       });
     }
   }
@@ -730,11 +757,13 @@ class StrategyService {
         : await tx.strategyPosition.findFirst({ where: { operationId: op.id } });
       if (position) {
         await tx.strategyPosition.update({ where: { id: position.id }, data: { state: "needs_review" } });
+        await eventService.emit(tx, current.userId, "strategy.position.updated", position.id, "needs_review");
       }
       await tx.onchainOperation.update({
         where: { id: op.id },
         data: { status: "failed", errorReason: reason },
       });
+      await eventService.emit(tx, current.userId, "strategy.operation.updated", current.id, "failed");
     });
   }
 
@@ -836,6 +865,7 @@ class StrategyService {
               valueUsdc: toDbRaw(principal),
             },
           });
+          await eventService.emit(tx, op.userId, "strategy.position.updated", position.id, "active");
         }
       } else if (action === "exit") {
         const shares = await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Withdrawn");
@@ -863,10 +893,12 @@ class StrategyService {
               valueUsdc: toDbRaw(value),
             },
           });
+          await eventService.emit(tx, op.userId, "strategy.position.updated", position.id, "exited");
         }
       }
       // Claims (and exit-realized fees) become confirmed reward receipts.
       await rewardService.recordFinalized(op.id, tx);
+      await eventService.emit(tx, op.userId, "strategy.operation.updated", op.id, op.status);
       return;
     }
     if (op.status === "reverted") {
@@ -876,11 +908,14 @@ class StrategyService {
         await this.releaseReservations(tx, op, expected.reserved ?? {});
         if (position) {
           await tx.strategyPosition.update({ where: { id: position.id }, data: { state: "needs_review" } });
+          await eventService.emit(tx, op.userId, "strategy.position.updated", position.id, "needs_review");
         }
       } else if (action === "exit" && position) {
         // Exit can proceed later with a new explicit authorization.
         await tx.strategyPosition.update({ where: { id: position.id }, data: { state: "needs_review" } });
+        await eventService.emit(tx, op.userId, "strategy.position.updated", position.id, "needs_review");
       }
+      await eventService.emit(tx, op.userId, "strategy.operation.updated", op.id, op.status);
     }
   }
 

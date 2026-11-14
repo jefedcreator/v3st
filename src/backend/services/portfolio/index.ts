@@ -7,6 +7,7 @@ import { acct } from "@/backend/services/ledger/accounts";
 import { ratesService } from "@/backend/services/rates";
 import { tradeRouter } from "@/backend/services/trades/router";
 import { positionService } from "@/backend/services/positions";
+import { rewardService } from "@/backend/services/rewards";
 import { betaDto, type PortfolioDto, type PortfolioHoldingDto } from "@/types/dto";
 import { formatMinor, rateToDto, usdToNgn, type Rate } from "@/utils/money";
 
@@ -77,6 +78,7 @@ class PortfolioService {
       valuation,
       as_of: now().toISOString(),
       beta: betaDto(integrationModes().yellowcard),
+      receipts: await rewardService.listForUser(userId),
     };
   }
 }

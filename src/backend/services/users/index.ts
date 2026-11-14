@@ -22,6 +22,10 @@ class UserService {
       earnings_preference: {
         mode: user.earningsMode,
         stock_id: user.reinvestStockId,
+        consent_version: user.earningsConsentVersion,
+        allow_background_conversion: user.allowBackgroundConversion,
+        max_conversion_fee_bps: user.maxConversionFeeBps,
+        max_fx_bps: user.maxFxBps,
       },
       beta: { stage: "beta", test_funds_only: true },
     };

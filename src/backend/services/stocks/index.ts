@@ -2,7 +2,7 @@ import type { Prisma, Stock } from "@/server/prisma";
 import { db } from "@/server/db";
 import type { StockDto } from "@/types/dto";
 import { fromDbRaw } from "@/utils/asset-units";
-import { BadRequestException, UnprocessableEntityException } from "@/utils/exceptions";
+import { BadRequestException, NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 import { formatMinor } from "@/utils/money";
 
 export function isTestnetStock(stock: Stock): boolean {
@@ -29,6 +29,7 @@ function toDto(stock: Stock): StockDto {
     reference_basis: stock.referenceBasis,
     reference_as_of: stock.referenceAsOf?.toISOString() ?? null,
     provenance: stock.provenance,
+    tradable: stock.enabled && !stock.paused && !stock.delisted && stock.assetKey !== null,
   };
 }
 
@@ -52,6 +53,16 @@ class StockService {
       throw new UnprocessableEntityException("Stock unavailable", "STOCK_UNAVAILABLE");
     }
     return stock;
+  }
+
+  // Catalog detail: unknown IDs are 404; paused/delisted rows stay visible with
+  // their flags so clients can explain why quoting is unavailable.
+  async getDto(id: string): Promise<StockDto> {
+    const stock = await db.stock.findUnique({ where: { id } });
+    if (!stock) {
+      throw new NotFoundException("Stock not found", "NOT_FOUND");
+    }
+    return toDto(stock);
   }
 
   async upsertCatalog(stocks: Prisma.StockCreateInput[]): Promise<void> {

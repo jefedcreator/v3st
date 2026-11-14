@@ -1,14 +1,115 @@
+import { type OperationStatus } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
+import { policy } from "@/backend/config/policy";
+import { listProviderEvidence } from "@/backend/integrations/provider-evidence";
 import { alertService } from "@/backend/services/alerts";
 import { controlsService, type ControlScope } from "@/backend/services/controls";
 import { depositService } from "@/backend/services/deposits";
 import { jobService } from "@/backend/services/jobs";
+import { onchainRegistry } from "@/backend/services/onchain/registry";
+import "@/backend/services/onchain/providers";
+import { readManifest, testnetService } from "@/backend/services/onchain/testnet";
+import type { ProviderCapabilities } from "@/backend/services/onchain/types";
 import { walletService } from "@/backend/services/wallets";
+import type { IntegrationEvidenceDto, OnchainOpsDto } from "@/types/contract";
 import type { ControlDto, OpsStatusDto, TransferDto } from "@/types/dto";
+import { fromDbRaw } from "@/utils/asset-units";
 import { ConflictException, NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 
+// Operations that have not reached a final proved state keep operator attention.
+const UNRESOLVED: OperationStatus[] = [
+  "pending",
+  "prepared",
+  "signed",
+  "broadcast",
+  "confirmed",
+  "unknown",
+  "needs_review",
+];
+
 class OperationsService {
+  // Audited provider evidence: every enabled beta adapter is a local testnet
+  // replica; actual provider factories stay disabled and are counted.
+  async integrations(): Promise<IntegrationEvidenceDto[]> {
+    const out: IntegrationEvidenceDto[] = [];
+    for (const evidence of listProviderEvidence()) {
+      const spot = onchainRegistry.describe(evidence.id, "spot");
+      const strategy = onchainRegistry.describe(evidence.id, "strategy");
+      let capabilities: ProviderCapabilities | null = spot ?? strategy;
+      if (spot && strategy) {
+        capabilities = {
+          ...spot,
+          liquidity: spot.liquidity || strategy.liquidity,
+          distributions: spot.distributions || strategy.distributions,
+          separateClaim: strategy.separateClaim,
+          exactOutput: spot.exactOutput || strategy.exactOutput,
+        };
+      }
+      if (!capabilities) continue;
+      out.push({
+        provider_id: evidence.id,
+        integration_kind: capabilities.kind,
+        beta_adapter: "local_testnet_replica",
+        actual_integration: "disabled_unverified",
+        capabilities,
+        evidence_id: capabilities.evidenceId,
+        testnet_evidence: evidence.testnetEvidence.status,
+        real_provider_calls: onchainRegistry.actualFactoryCalls,
+        limitation: evidence.note,
+      });
+    }
+    return out;
+  }
+
+  async onchainStatus(): Promise<OnchainOpsDto> {
+    const network = await db.onchainNetwork.findFirst({ orderBy: { createdAt: "desc" } });
+    let verified = false;
+    let verificationReason: string | null = null;
+    try {
+      const result = await testnetService.verify(readManifest());
+      verified = result.ok;
+      verificationReason = result.reason ?? null;
+    } catch (error) {
+      verificationReason = error instanceof Error ? error.message : "testnet manifest unavailable";
+    }
+    const unresolvedOperations = await db.onchainOperation.count({
+      where: { status: { in: UNRESOLVED } },
+    });
+    const holds = await db.onchainOperation.findMany({
+      where: { errorReason: { not: null } },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+      select: { key: true, status: true, errorReason: true },
+    });
+    const today = now().toISOString().slice(0, 10);
+    const sponsor = await db.sponsorBudget.findUnique({ where: { scope: `daily:${today}` } });
+    const staleCutoff = new Date(now().getTime() - 10 * 60_000);
+    const staleObservations = await db.chainObservation.count({
+      where: { observedAt: { lt: staleCutoff }, operation: { status: { in: UNRESOLVED } } },
+    });
+    return {
+      network: {
+        network_id: network?.networkId ?? "unregistered",
+        chain_id: network?.chainId ?? policy.onchain.chainId,
+        deployment_id: network?.deploymentId ?? "unregistered",
+        verified,
+        verification_reason: verificationReason,
+      },
+      unresolved_operations: unresolvedOperations,
+      operation_holds: holds.map((h) => ({
+        key: h.key,
+        status: h.status,
+        error_reason: h.errorReason,
+      })),
+      sponsor_spend_today_wei: sponsor ? fromDbRaw(sponsor.spentWei).toString() : "0",
+      sponsor_daily_cap_wei: sponsor
+        ? fromDbRaw(sponsor.capWei).toString()
+        : policy.onchain.sponsor.dailyCapWei.toString(),
+      stale_observations: staleObservations,
+    };
+  }
+
   async status(): Promise<OpsStatusDto> {
     const controls = await db.operationalControl.findMany({ orderBy: { scope: "asc" } });
     const alerts = await db.operationalAlert.findMany({

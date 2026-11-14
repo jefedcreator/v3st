@@ -191,7 +191,14 @@ class EarningsService {
 
   async setPreference(
     userId: string,
-    body: { mode: "payout" | "reinvest"; stock_id?: string },
+    body: {
+      mode: "payout" | "reinvest";
+      stock_id?: string;
+      consent_version?: string;
+      allow_background_conversion?: boolean;
+      max_conversion_fee_bps?: number;
+      max_fx_bps?: number;
+    },
   ): Promise<EarningsPreferenceDto> {
     let stockId: string | null = null;
     if (body.mode === "reinvest") {
@@ -209,9 +216,17 @@ class EarningsService {
         "VALIDATION_FAILED",
       );
     }
+    // Each update is a full versioned consent snapshot: omitted limits reset.
     await db.user.update({
       where: { id: userId },
-      data: { earningsMode: body.mode, reinvestStockId: stockId },
+      data: {
+        earningsMode: body.mode,
+        reinvestStockId: stockId,
+        earningsConsentVersion: body.consent_version ?? null,
+        allowBackgroundConversion: body.allow_background_conversion ?? false,
+        maxConversionFeeBps: body.max_conversion_fee_bps ?? null,
+        maxFxBps: body.max_fx_bps ?? null,
+      },
     });
     let payoutFee: string | null = null;
     try {
@@ -227,6 +242,10 @@ class EarningsService {
       stock_id: stockId,
       minimum_payout_ngn: policy.earnings.minPayoutKobo.toString(),
       payout_fee_ngn: payoutFee,
+      consent_version: body.consent_version ?? null,
+      allow_background_conversion: body.allow_background_conversion ?? false,
+      max_conversion_fee_bps: body.max_conversion_fee_bps ?? null,
+      max_fx_bps: body.max_fx_bps ?? null,
     };
   }
 

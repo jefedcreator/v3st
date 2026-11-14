@@ -5,6 +5,7 @@ import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { authorizationService } from "@/backend/services/authorizations";
+import { eventService } from "@/backend/services/events";
 import { executionService, pack, unpack } from "@/backend/services/execution";
 import { jobService } from "@/backend/services/jobs";
 import { ledgerService } from "@/backend/services/ledger";
@@ -371,6 +372,7 @@ class InvestmentService {
       });
       await tx.investmentQuote.update({ where: { id: quoteId }, data: { consumedAt: now() } });
       await jobService.enqueue(tx, { kind: "operation.progress", subjectId: op.id });
+      await jobService.enqueue(tx, { kind: "investment.progress", subjectId: inv.id });
       return investmentToDto(updated, quote.providerId);
     }, { timeoutMs: 30_000 });
   }
@@ -400,6 +402,15 @@ class InvestmentService {
     const before = inv.status;
     await executionService.progress(inv.operationId);
     const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: inv.operationId } });
+    if (!["finalized", "reverted"].includes(op.status)) {
+      // Keep driving until the onchain operation reaches a proved final state.
+      await jobService.enqueue(db, {
+        kind: "investment.progress",
+        subjectId: id,
+        runAt: new Date(now().getTime() + 2_000),
+      });
+      return;
+    }
     if (op.status === "finalized" && before !== "filled") {
       const actual = unpack(op.actual) as { input?: AssetAmount; output?: AssetAmount };
       const expectedQuote = unpack((op.expected as { quote?: unknown }).quote) as ExecutionQuote;
@@ -425,14 +436,22 @@ class InvestmentService {
         // Actual output below the quoted expectation is a partial fill; only the
         // actual input is spent and the remainder needs a fresh quote (single-use).
         const expectedOut = expectedQuote.expectedOutput.raw;
+        const settledStatus = amountOut < expectedOut ? "partial" : "filled";
         await tx.investment.update({
           where: { id: current.id },
           data: {
-            status: amountOut < expectedOut ? "partial" : "filled",
+            status: settledStatus,
             amountOut: toDbRaw(amountOut),
           },
         });
+        await eventService.emit(tx, current.userId, "investment.updated", current.id, settledStatus);
       });
+      // A finalized reward-asset conversion sell recognizes its settlement proceeds
+      // exactly once, so Friday payouts only ever pay finalized source proceeds.
+      if (inv.key.startsWith("convert:")) {
+        const { earningsService } = await import("@/backend/services/earnings");
+        await earningsService.recognize(inv.key.slice("convert:".length));
+      }
       return;
     }
     if (op.status === "reverted" && !["failed", "cancelled"].includes(before)) {
@@ -455,6 +474,7 @@ class InvestmentService {
           where: { id: current.id },
           data: { status: "failed", failureReason: op.errorReason ?? "EXECUTION_REVERTED" },
         });
+        await eventService.emit(tx, current.userId, "investment.updated", current.id, "failed");
       });
     }
   }

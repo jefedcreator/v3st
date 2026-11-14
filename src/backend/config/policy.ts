@@ -101,7 +101,7 @@ export const policy = {
       settleSeconds: 5,
     },
     chain: {
-      confirmSeconds: { base: 4, solana: 2 },
+      confirmSeconds: { base: 4, solana: 2, testnet: 2 },
     },
   },
 } as const;
