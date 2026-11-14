@@ -136,7 +136,7 @@ export const simChain = {
       FROM "sim_chain_txs" t
       WHERE t.chain = ${chain}
         AND t.token = ${token}
-        AND t."confirmAt" <= ${now()}
+        AND t."confirmAt" <= (${now()}::timestamptz AT TIME ZONE 'UTC')
         AND NOT EXISTS (
           SELECT 1 FROM "sim_faults" f WHERE f.scope = 'chain' AND f.key = t.key
         )

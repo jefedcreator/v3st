@@ -4,7 +4,7 @@ import { now } from "@/backend/clock";
 import { jobService } from "@/backend/services/jobs";
 import { scheduler } from "@/backend/services/jobs/schedule";
 import { RetryableError } from "@/backend/services/jobs/types";
-import { db } from "@/server/db";
+import { db, withTx } from "@/server/db";
 
 import { useTestDatabase } from "../helpers/db";
 import { setNow } from "../helpers/time";
@@ -79,4 +79,20 @@ it("fires each schedule slot once across concurrent ticks", async () => {
   await Promise.all([scheduler.tick(now()), scheduler.tick(now())]);
   expect(await db.scheduleRun.count({ where: { name: "earnings.harvest" } })).toBe(1);
   expect(await db.job.count({ where: { kind: "earnings.harvest" } })).toBe(1);
+});
+
+it("stores runAt exactly when the database session is not in UTC", async () => {
+  setNow("2026-11-12T20:01:00Z");
+  const runAt = new Date("2026-11-12T20:01:04.000Z");
+  const stored = await withTx(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL TIME ZONE 'Africa/Lagos'`);
+    await jobService.enqueue(tx, { kind: "chain.progress", subjectId: "tz-check", runAt });
+    const due = await tx.$queryRawUnsafe<Array<{ due: boolean }>>(
+      `SELECT "runAt" <= ($1::timestamptz AT TIME ZONE 'UTC') AS due FROM "jobs" WHERE key = 'chain.progress:tz-check'`,
+      new Date("2026-11-12T20:01:04.000Z"),
+    );
+    return { row: await tx.job.findUniqueOrThrow({ where: { key: "chain.progress:tz-check" } }), due: due[0]?.due };
+  });
+  expect(stored.row.runAt.toISOString()).toBe("2026-11-12T20:01:04.000Z");
+  expect(stored.due).toBe(true);
 });

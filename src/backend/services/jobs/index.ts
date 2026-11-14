@@ -25,7 +25,7 @@ class JobService {
     const runAt = input.runAt ?? at;
     await client.$executeRawUnsafe(
       `INSERT INTO "jobs" (id, kind, "subjectId", key, payload, status, "runAt", attempts, "maxAttempts", "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5::jsonb, 'pending', $6, 0, $7, $8, $8)
+       VALUES ($1, $2, $3, $4, $5::jsonb, 'pending', ($6::timestamptz AT TIME ZONE 'UTC'), 0, $7, ($8::timestamptz AT TIME ZONE 'UTC'), ($8::timestamptz AT TIME ZONE 'UTC'))
        ON CONFLICT (key) DO UPDATE SET
          kind = EXCLUDED.kind,
          "subjectId" = EXCLUDED."subjectId",
@@ -64,14 +64,14 @@ class JobService {
         `UPDATE "jobs" SET
            status = 'running',
            "lockedBy" = $1,
-           "lockedUntil" = $2 + make_interval(secs => $3),
+           "lockedUntil" = ($2::timestamptz AT TIME ZONE 'UTC') + make_interval(secs => $3),
            attempts = attempts + 1,
-           "updatedAt" = $2
+           "updatedAt" = ($2::timestamptz AT TIME ZONE 'UTC')
          WHERE id IN (
            SELECT id FROM "jobs"
            WHERE status IN ('pending', 'running')
-             AND "runAt" <= $2
-             AND ("lockedUntil" IS NULL OR "lockedUntil" < $2)
+             AND "runAt" <= ($2::timestamptz AT TIME ZONE 'UTC')
+             AND ("lockedUntil" IS NULL OR "lockedUntil" < ($2::timestamptz AT TIME ZONE 'UTC'))
            ORDER BY "runAt"
            LIMIT $4
            FOR UPDATE SKIP LOCKED
