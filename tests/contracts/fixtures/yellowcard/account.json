@@ -1,0 +1,6 @@
+{
+  "_source": "docs.yellowcard.engineering — GET /business/account documented example (2026-11-13)",
+  "accounts": [
+    { "currency": "USD", "currencyType": "fiat", "available": "100000.000000", "ledger": "100000.000000" }
+  ]
+}

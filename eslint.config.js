@@ -7,7 +7,7 @@ const compat = new FlatCompat({
 
 export default tseslint.config(
   {
-    ignores: [".next"],
+    ignores: [".next", "generated", "coverage"],
   },
   ...compat.extends("next/core-web-vitals"),
   {
@@ -33,6 +33,13 @@ export default tseslint.config(
         "error",
         { checksVoidReturn: { attributes: false } },
       ],
+    },
+  },
+  {
+    files: ["tests/**/*.ts", "tests/**/*.tsx"],
+    rules: {
+      // useTestDatabase() is a Vitest setup helper, not a React hook.
+      "react-hooks/rules-of-hooks": "off",
     },
   },
   {

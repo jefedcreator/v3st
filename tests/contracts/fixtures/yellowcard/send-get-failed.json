@@ -1,0 +1,10 @@
+{
+  "_source": "docs.yellowcard.engineering — GET /business/send/{id} documented failed example (2026-11-13)",
+  "id": "snd_9a8b7c",
+  "sequenceId": "w1",
+  "status": "failed",
+  "localAmount": "4900.00",
+  "amount": "3.225807",
+  "feeLocal": "100.00",
+  "errorCode": "INSUFFICIENT_BALANCE"
+}

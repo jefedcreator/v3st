@@ -1,0 +1,13 @@
+{
+  "_source": "docs.yellowcard.engineering — GET /business/channels?country=NG documented example (2026-11-13)",
+  "data": [
+    {
+      "id": "ch_bank_ngn",
+      "type": "bank",
+      "country": "NG",
+      "active": true,
+      "min": "100.00",
+      "max": "5000000.00"
+    }
+  ]
+}
