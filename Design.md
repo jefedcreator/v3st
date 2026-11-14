@@ -2,6 +2,12 @@
 
 Nov 10, 2026 · @Someone
 
+## Backend onchain extension · November 14, 2026
+
+This document covers the fiat rails. The [onchain stocks and income specification](docs/superpowers/specs/2026-11-14-v3st-onchain-stocks-and-income-design.md) and [backend implementation plan](docs/superpowers/plans/2026-11-14-v3st-onchain-stocks-and-income.md) add stock execution, sponsored signing, positions, optional income strategies and confirmed proceeds using Bankr, Hydrex/Hydropump, Stonks Exchange, BaseStonk, Feel.cash and o1 Exchange.
+
+The current scope is backend/API only and beta throughout. Crypto execution uses clearly labelled local testnet contract replicas; actual provider adapters stay disabled until their test environments are verified. No mainnet, real funds or live fallback is authorized. The new specification takes precedence for onchain behavior and income accounting; the earlier beta plan continues to govern fiat rails. Provider and regulatory statements below are historical design inputs, not live-release approvals.
+
 ## Recommended solution
 
 Use a licensed ramp partner's API for every naira movement, and keep a pre-funded USD float with that partner so deposits and payouts settle in seconds instead of waiting on chain. Yellow Card is the primary partner, with a sandbox for testing, and Paycrest is the secondary. V3ST never touches naira itself.
