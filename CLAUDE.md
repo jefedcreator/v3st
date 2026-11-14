@@ -15,6 +15,8 @@ Instructions for Claude Code (and other AI assistants) working in this repositor
 ## Commit messages
 
 - Never add "Co-Authored-By: Claude" or any variation of it (e.g. "Co-authored-by: Claude Code", "Generated with Claude Code", etc.) to commit messages.
+- Never add any agent or tool attribution to commit messages at all (operator preference, 2026-11-13): no "Co-Authored-By" trailer of any kind, and nothing mentioning Mistral, Vibe, or any coding agent. The commit message is the subject line only.
+- Author and commit every commit as the repository owner (`jefedcreator <jefedcreator@users.noreply.github.com>`), never as the agent identity, so GitHub does not attribute commits to a bot account (e.g. `mistral-vibe`). Set `user.name`/`user.email` accordingly before committing.
 
 ## Task planning
 
