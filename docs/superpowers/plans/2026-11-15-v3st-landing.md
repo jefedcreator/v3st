@@ -64,7 +64,7 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 
 - [x] Task 1 — Establish design, assets and primitives.
 - [x] Task 2 — Build the public shell and hero choreography.
-- [ ] Task 3 — Build product storytelling and remaining reference motion.
+- [x] Task 3 — Build product storytelling and remaining reference motion.
 - [ ] Task 4 — Implement the exact local demo.
 - [ ] Task 5 — Complete accessibility, metadata and documentation.
 - [ ] Task 6 — Run final verification, visual review and handoff.
@@ -127,15 +127,15 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 - `FlowDiagram()` presents the four narrative stages; its decorative highlight state is independent of `LandingDemo`.
 - `StoryCursor()` activates only for explicitly marked story links with a visible equivalent CTA.
 
-- [ ] Add all static content in spec order with an ordered four-step walkthrough and alternating compositions. Reuse exact product/API distinctions from the feature map; do not synthesize claims from old marketing assumptions.
-- [ ] Build the first split story with a ticker containing TSTA, TSTB, naira funding, USDC settlement context, Base target context and Solana architecture context. With six unique rows, loop duration is 27s. Label the whole treatment **Illustrative examples · not live prices**. Use real marks only where the row actually describes that brand/chain/asset; fictional stocks use plain fictional labels.
-- [ ] Match ticker mask, height and linear motion. Duplicate the visual list once; hide duplicate semantics. Pause on hover, focus, offscreen/hidden state and the global pause setting. Provide a keyboard-operable visible pause/resume control and a nonduplicated accessible list.
-- [ ] Render all nine provider groups, then the separate Base/Solana/USDC row, using verified local marks. Match Katana's centered/wrapped spacing, with **Provider ecosystem** and the exact beta caption. No “trusted/partner/endorsed” claims or false links to unbuilt pages.
-- [ ] Implement original growth/flow diagram with the measured 420ms/60ms entrance, 8s/−3px float, 3.6s decorative highlight, 120/140ms hover intent and ±70px background parallax. Use progressive enhancement; the ordered text is the authoritative walkthrough.
-- [ ] Match the large story-link pointer follower timings on fine-pointer devices only. Keep native pointer/focus behavior on other controls and on reduced-motion/touch devices; never make information depend on hovering.
-- [ ] Add the Friday schedule, gross threshold, conversion requirement, zero-income possibility and rollover explanations. Add native server-rendered FAQs covering all spec topics. A disclosure toggle must still work without JavaScript.
-- [ ] Extend browser assertions for ticker pause/resume and duplicate accessibility, diagram presentation independence, FAQ keyboard/no-JS use, logo integrity and absence of unsupported claims. Do not run yet.
-- [ ] Review copy against current docs and actual provider evidence, update checklist and commit: `feat: add V3ST product stories and ecosystem presentation`.
+- [x] Add all static content in spec order with an ordered four-step walkthrough and alternating compositions. Reuse exact product/API distinctions from the feature map; do not synthesize claims from old marketing assumptions.
+- [x] Build the first split story with a ticker containing TSTA, TSTB, naira funding, USDC settlement context, Base target context and Solana architecture context. With six unique rows, loop duration is 27s. Label the whole treatment **Illustrative examples · not live prices**. Use real marks only where the row actually describes that brand/chain/asset; fictional stocks use plain fictional labels.
+- [x] Match ticker mask, height and linear motion. Duplicate the visual list once; hide duplicate semantics. Pause on hover, focus, offscreen/hidden state and the global pause setting. Provide a keyboard-operable visible pause/resume control and a nonduplicated accessible list.
+- [x] Render all nine provider groups, then the separate Base/Solana/USDC row, using verified local marks. Match Katana's centered/wrapped spacing, with **Provider ecosystem** and the exact beta caption. No “trusted/partner/endorsed” claims or false links to unbuilt pages.
+- [x] Implement original growth/flow diagram with the measured 420ms/60ms entrance, 8s/−3px float, 3.6s decorative highlight, 120/140ms hover intent and ±70px background parallax. Use progressive enhancement; the ordered text is the authoritative walkthrough.
+- [x] Match the large story-link pointer follower timings on fine-pointer devices only. Keep native pointer/focus behavior on other controls and on reduced-motion/touch devices; never make information depend on hovering.
+- [x] Add the Friday schedule, gross threshold, conversion requirement, zero-income possibility and rollover explanations. Add native server-rendered FAQs covering all spec topics. A disclosure toggle must still work without JavaScript.
+- [x] Extend browser assertions for ticker pause/resume and duplicate accessibility, diagram presentation independence, FAQ keyboard/no-JS use, logo integrity and absence of unsupported claims. Do not run yet.
+- [x] Review copy against current docs and actual provider evidence, update checklist and commit: `feat: add V3ST product stories and ecosystem presentation`.
 
 ### Task 4 — Implement the exact local demo
 

@@ -6,7 +6,7 @@ Implementation began 2026-11-15 on `codex/implement-v3st-landing` from the clean
 
 - [x] Task 1: design system, authentic assets, generated primitives and dependencies.
 - [x] Task 2: anonymous shell, hero, fluid artwork and navigation.
-- [ ] Task 3: stories, ecosystem, ticker, diagram, FAQ and Friday explanation.
+- [x] Task 3: stories, ecosystem, ticker, diagram, FAQ and Friday explanation.
 - [ ] Task 4: exact independent local demo.
 - [ ] Task 5: accessibility, metadata and documentation.
 - [ ] Task 6: final repository/browser/visual verification and handoff.
@@ -38,3 +38,7 @@ Static anonymous marketing composition replaces the starter. Native anchors, ski
 The renderer is original WebGL2: velocity/dye advection, divergence, Jacobi pressure solve (38 iterations), projection and optional viscosity diffusion (14 iterations when enabled). Named reference values map to solver timestep, resolution, density decay, radius/force, edge reflection and idle/pointer interpolation. Display DPR is capped at 1.5, grid width 160 and simulation cadence 30Hz as explicit performance adaptations. The field has no copied renderer/license dependency. Float WebGL2 failure/context loss keeps static SVG. Lazy GPU work starts after text paint, with cleanup on hidden/offscreen/unmount and pause without demo state effects. Behavioral fidelity still needs browser review.
 
 Delegated asset and renderer workers exhausted their tool session after asset downloads; root completed provenance and original renderer natively. No gate results are claimed.
+
+## Task 3 implementation (unverified)
+
+Alternating quantity/fee explanations, six-row 27s illustrative ticker, all nine provider groups with separate network/settlement row, ordered server walkthrough, independent four-node diagram, scoped fine-pointer story follower, Friday window and native FAQs are implemented. The ticker pauses hover/focus/local/global/hidden/offscreen, with one semantic list. Diagram entrance/float/highlight/hover grace and parallax follow captured constants; only presentation changes. Provider caption and risk/rights/cash distinctions follow current onchain/Friday decisions. Source/diff review completed, browser assertions are consolidated in Task 6 before execution. No external links or unsupported social proof.
