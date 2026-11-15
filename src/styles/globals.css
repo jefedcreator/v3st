@@ -74,3 +74,41 @@ div[id="top"] {
     scroll-behavior: auto;
   }
 }
+
+/* Hero track/stage choreography (160vh track, sticky stage, 45vh overlap) */
+[data-hero-motion] + .landing-sections {
+  margin-top: calc(-45vh);
+}
+
+[data-hero-motion="static"] + .landing-sections,
+[data-hero-motion][data-hero-fit="flow"] + .landing-sections {
+  margin-top: 0;
+}
+
+[data-hero-motion="static"] [data-hero-track],
+[data-hero-motion][data-hero-fit="flow"] [data-hero-track] {
+  height: auto;
+}
+
+[data-hero-motion="static"] [data-hero-stage],
+[data-hero-motion][data-hero-fit="flow"] [data-hero-stage] {
+  position: static;
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-hero-motion] + .landing-sections {
+    margin-top: 0;
+  }
+  [data-hero-motion] [data-hero-track] {
+    height: auto;
+  }
+  [data-hero-motion] [data-hero-stage] {
+    position: static;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+}

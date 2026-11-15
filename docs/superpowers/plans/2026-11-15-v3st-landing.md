@@ -63,7 +63,7 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 ## Task checklist
 
 - [x] Task 1 — Establish design, assets and primitives (implemented; unverified until Task 6).
-- [ ] Task 2 — Build the public shell and hero choreography.
+- [x] Task 2 — Build the public shell and hero choreography (implemented; unverified until Task 6).
 - [ ] Task 3 — Build product storytelling and remaining reference motion.
 - [ ] Task 4 — Implement the exact local demo.
 - [ ] Task 5 — Complete accessibility, metadata and documentation.
