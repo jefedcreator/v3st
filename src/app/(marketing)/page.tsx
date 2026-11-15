@@ -10,6 +10,7 @@ import {
 import { ProviderEcosystem } from "@/components/landing/provider-ecosystem";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { FridayProceeds } from "@/components/landing/friday-proceeds";
+import { LandingDemo } from "@/components/landing/landing-demo";
 import { Faq } from "@/components/landing/faq";
 
 export const dynamic = "error";
@@ -26,6 +27,7 @@ export default function MarketingPage() {
           <ProviderEcosystem />
           <HowItWorks />
           <ProductStories />
+          <LandingDemo />
           <FridayProceeds />
           <Faq />
         </div>

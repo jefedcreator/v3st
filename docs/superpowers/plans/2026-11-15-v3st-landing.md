@@ -65,7 +65,7 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 - [x] Task 1 — Establish design, assets and primitives.
 - [x] Task 2 — Build the public shell and hero choreography.
 - [x] Task 3 — Build product storytelling and remaining reference motion.
-- [ ] Task 4 — Implement the exact local demo.
+- [x] Task 4 — Implement the exact local demo.
 - [ ] Task 5 — Complete accessibility, metadata and documentation.
 - [ ] Task 6 — Run final verification, visual review and handoff.
 
@@ -160,20 +160,20 @@ type LandingDemoFixture = {
 - `payoutPreview(grossKobo: string): { status: "rollover" | "qualifies"; grossKobo: string; feeKobo: string; receivedKobo: string; rolloverKobo: string }`: nonnegative gross, gross threshold first, no charged fee below minimum.
 - `LandingDemo()` owns `stage`, `selectedStock`, `strategyOpened`, strategy scenario (`eligible | zero_income | principal_loss`), proceeds scenario (`eligible | below_minimum | at_minimum`) and preference (`payout | reinvest`). No shared state with the decorative diagram.
 
-- [ ] Write exact amount/fixture assertions first, without executing:
+- [x] Write exact amount/fixture assertions first, without executing:
   - `formatNgn("500000") === "₦5,000"`; `formatNgn("199999") === "₦1,999.99"`; `formatNgn("-200000") === "−₦2,000"`; zero formats as `₦0`.
   - `formatNgn("900719925474099301") === "₦9,007,199,254,740,993.01"`; malformed decimal/exponent input is rejected.
   - `formatUnits("250000",6) === "0.25"`; `formatUnits("1250000",6) === "1.25"`; raw zero and invalid decimal counts behave explicitly.
   - Payout `199999` → rollover `199999`, fee `0`, received `0`; `200000` → qualifies, fee `10000`, received `190000`; `500000` → received `490000`.
   - Funding available = gross − fee; rational FX gives exactly `66000000` micro-units; both stock examples value to `1000000` kobo; strategy loss is `-200000` kobo and not income.
-- [ ] Implement helpers and fixtures using bigint math, separate from backend modules. Keep all money values integer strings across component props.
-- [ ] Build controlled Radix tabs with labelled panels and arrows/Home/End keyboard support. Keep all four chapter controls readable at 360px; use an intentional two-row layout or clearly contained horizontal tab scroller without document overflow.
-- [ ] Implement funding breakdown, fictional-stock selection and valuation explanation. Every panel carries **Independent illustrative example**; no diagram/chart implies these amounts form a realized return journey.
-- [ ] Implement strategy entry as a separate **Open strategy example** action after opening the chapter. Show no strategy by default. Opening it enables local scenario comparison only; say explicitly that it is not an authorization. Explain eligible income, zero income, principal loss and unconverted rewards.
-- [ ] Implement payout/reinvestment comparison and the qualifying/below-minimum/at-minimum controls. Render the exact payout equation and gross-first threshold. Bank details are masked; no identity inputs or transferable numbers. Reinvest copy distinguishes its possible costs from the bank payout example.
-- [ ] Implement **Reset demo** restoring every default and returning focus to the active Add naira tab. Use polite announcements for user-triggered result changes only, never for loops. Keep panel-height changes in normal layout so figures cannot clip.
-- [ ] Add browser assertions: chapter entry does not select a strategy; explicit open reveals examples; all scenarios and preferences render correctly; reset clears all selections; reload does not restore them; motion/diagram interaction does not alter them; no network, cookies or storage writes occur.
-- [ ] Review diff against spec/API semantics, update checklist and commit: `feat: add illustrative investing and proceeds demo`.
+- [x] Implement helpers and fixtures using bigint math, separate from backend modules. Keep all money values integer strings across component props.
+- [x] Build controlled Radix tabs with labelled panels and arrows/Home/End keyboard support. Keep all four chapter controls readable at 360px; use an intentional two-row layout or clearly contained horizontal tab scroller without document overflow.
+- [x] Implement funding breakdown, fictional-stock selection and valuation explanation. Every panel carries **Independent illustrative example**; no diagram/chart implies these amounts form a realized return journey.
+- [x] Implement strategy entry as a separate **Open strategy example** action after opening the chapter. Show no strategy by default. Opening it enables local scenario comparison only; say explicitly that it is not an authorization. Explain eligible income, zero income, principal loss and unconverted rewards.
+- [x] Implement payout/reinvestment comparison and the qualifying/below-minimum/at-minimum controls. Render the exact payout equation and gross-first threshold. Bank details are masked; no identity inputs or transferable numbers. Reinvest copy distinguishes its possible costs from the bank payout example.
+- [x] Implement **Reset demo** restoring every default and returning focus to the active Add naira tab. Use polite announcements for user-triggered result changes only, never for loops. Keep panel-height changes in normal layout so figures cannot clip.
+- [x] Add browser assertions: chapter entry does not select a strategy; explicit open reveals examples; all scenarios and preferences render correctly; reset clears all selections; reload does not restore them; motion/diagram interaction does not alter them; no network, cookies or storage writes occur.
+- [x] Review diff against spec/API semantics, update checklist and commit: `feat: add illustrative investing and proceeds demo`.
 
 ### Task 5 — Complete accessibility, metadata and documentation
 

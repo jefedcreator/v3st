@@ -7,7 +7,7 @@ Implementation began 2026-11-15 on `codex/implement-v3st-landing` from the clean
 - [x] Task 1: design system, authentic assets, generated primitives and dependencies.
 - [x] Task 2: anonymous shell, hero, fluid artwork and navigation.
 - [x] Task 3: stories, ecosystem, ticker, diagram, FAQ and Friday explanation.
-- [ ] Task 4: exact independent local demo.
+- [x] Task 4: exact independent local demo.
 - [ ] Task 5: accessibility, metadata and documentation.
 - [ ] Task 6: final repository/browser/visual verification and handoff.
 
@@ -42,3 +42,7 @@ Delegated asset and renderer workers exhausted their tool session after asset do
 ## Task 3 implementation (unverified)
 
 Alternating quantity/fee explanations, six-row 27s illustrative ticker, all nine provider groups with separate network/settlement row, ordered server walkthrough, independent four-node diagram, scoped fine-pointer story follower, Friday window and native FAQs are implemented. The ticker pauses hover/focus/local/global/hidden/offscreen, with one semantic list. Diagram entrance/float/highlight/hover grace and parallax follow captured constants; only presentation changes. Provider caption and risk/rights/cash distinctions follow current onchain/Friday decisions. Source/diff review completed, browser assertions are consolidated in Task 6 before execution. No external links or unsupported social proof.
+
+## Task 4 implementation (unverified)
+
+Authored exact formatter/fixture/threshold tests before implementing browser-safe BigInt helpers. Local controlled Radix chapters expose the independent funding, both fictional stocks, explicit strategy example (default no selection), zero/loss cases, gross-first rollover and payout/reinvestment comparisons. Reset restores every default and focuses Add naira. User announcements are polite and separate from decorative loops. No backend imports, storage, account inputs or automatic advances. All amounts remain integer strings. Payout fee never applies to the reinvest comparison. Authored tests still await final execution; browser scenario assertions are consolidated in Task 6.
