@@ -91,6 +91,15 @@ export const acct = {
     userId: null,
     allowNegative: true,
   }),
+  // External source account for a realized onchain reward in its own asset
+  // (stock receipts post against a STOCK asset, settlement proceeds against USDC).
+  rewardSource: (source: string, asset: Asset): AccountSpec => ({
+    code: `ext:reward:${source}:${asset}`,
+    asset,
+    ownerType: "external",
+    userId: null,
+    allowNegative: true,
+  }),
   equityOpening: (asset: Asset): AccountSpec => ({
     code: `equity:opening:${asset}`,
     asset,

@@ -15,6 +15,7 @@ import {
 } from "@/backend/services/ledger/postings";
 import { jobService } from "@/backend/services/jobs";
 import { lagosParts } from "@/backend/services/jobs/schedule";
+import { fromDbRaw } from "@/utils/asset-units";
 import { rampRegistry } from "@/backend/services/ramp";
 import { simChain } from "@/backend/services/simulator/chain";
 import { simRamp } from "@/backend/services/simulator/ramp";
@@ -201,7 +202,7 @@ class TreasuryService {
         }
         await ledgerService.post(
           tx,
-          transferReleased({ id: transfer.id, chain, amount: transfer.amount }),
+          transferReleased({ id: transfer.id, chain, amount: fromDbRaw(transfer.amount) }),
         );
         await tx.treasuryOperation.update({
           where: { id: op.id },
@@ -218,7 +219,7 @@ class TreasuryService {
             key: transfer.key,
             provider: op.provider,
             chain,
-            usdc: transfer.amount,
+            usdc: fromDbRaw(transfer.amount),
             txHash: transfer.txHash,
           });
           if (result.state === "pending") {
@@ -242,7 +243,7 @@ class TreasuryService {
               id: op.id,
               provider: op.provider,
               chain,
-              amountUsdc: transfer.amount,
+              amountUsdc: fromDbRaw(transfer.amount),
               usd: op.amountUsd,
             }),
           );
@@ -286,7 +287,7 @@ class TreasuryService {
   }
 
   async seedOpeningBalances(i: {
-    treasuryMicroUsdc: Record<Chain, bigint>;
+    treasuryMicroUsdc: Partial<Record<Chain, bigint>>;
     floatMicroUsd: bigint;
   }): Promise<void> {
     const mode = integrationModes().wallets;

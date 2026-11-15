@@ -390,6 +390,114 @@ export function floatWithdrawalReceived(input: {
   };
 }
 
+// Strategy entry spends reserved settlement and/or stock into the venue (pool).
+// Zero legs are omitted because journal entries must be positive.
+export function strategyEntered(input: {
+  key: string;
+  userId: string;
+  chain: string;
+  venueId: string;
+  stockId: string | null;
+  settlementIn: bigint;
+  stockIn: bigint;
+}): JournalInput {
+  const entries: EntryInput[] = [];
+  if (input.settlementIn > 0n) {
+    entries.push(
+      entry(acct.userReserved(input.userId, input.chain), acct.venue(input.venueId, "USDC"), input.settlementIn),
+    );
+  }
+  if (input.stockIn > 0n && input.stockId) {
+    entries.push(
+      entry(
+        acct.userStockReserved(input.userId, input.stockId),
+        acct.venue(input.venueId, `STOCK:${input.stockId}`),
+        input.stockIn,
+      ),
+    );
+  }
+  return {
+    key: `${input.key}:entered`,
+    kind: "strategyEntered",
+    orderId: null,
+    entries,
+  };
+}
+
+// Strategy exit returns principal (and, for exit-realized variants, fees) from the
+// venue to the user; principal and reward legs stay separate classifications.
+export function strategyExited(input: {
+  key: string;
+  userId: string;
+  chain: string;
+  venueId: string;
+  stockId: string | null;
+  settlementOut: bigint;
+  stockOut: bigint;
+}): JournalInput {
+  const entries: EntryInput[] = [];
+  if (input.settlementOut > 0n) {
+    entries.push(
+      entry(acct.venue(input.venueId, "USDC"), acct.userCash(input.userId, input.chain), input.settlementOut),
+    );
+  }
+  if (input.stockOut > 0n && input.stockId) {
+    entries.push(
+      entry(
+        acct.venue(input.venueId, `STOCK:${input.stockId}`),
+        acct.userStock(input.userId, input.stockId),
+        input.stockOut,
+      ),
+    );
+  }
+  return {
+    key: `${input.key}:exited`,
+    kind: "strategyExited",
+    orderId: null,
+    entries,
+  };
+}
+
+// A finalized onchain reward/fee realization is credited once, from the source
+// account, into the user's asset account (stock receipt -> stock balance, settlement
+// proceeds -> earnings). Principal is never posted through this template.
+export function rewardReceived(input: {
+  key: string;
+  source: string;
+  userId: string;
+  chain: string;
+  stockId: string | null;
+  amount: bigint;
+}): JournalInput {
+  const credit = input.stockId
+    ? acct.userStock(input.userId, input.stockId)
+    : acct.userEarnings(input.userId, input.chain);
+  return {
+    key: `${input.key}:credited`,
+    kind: "rewardReceived",
+    orderId: null,
+    entries: [entry(acct.rewardSource(input.source, credit.asset), credit, input.amount)],
+  };
+}
+
+// Recognized conversion proceeds move from spendable cash into earnings once the
+// consent-bound sell has finalized; the reward asset itself stays preserved until then.
+export function conversionProceedsRecognized(input: {
+  key: string;
+  userId: string;
+  chain: string;
+  amount: bigint;
+}): JournalInput {
+  return {
+    key: `${input.key}:recognized`,
+    kind: "conversionProceedsRecognized",
+    orderId: null,
+    entries: [
+      entry(acct.userCash(input.userId, input.chain), acct.userEarnings(input.userId, input.chain), input.amount),
+    ],
+  };
+}
+
 export function openingBalance(input: {
   account: AccountSpec;
   amount: bigint;

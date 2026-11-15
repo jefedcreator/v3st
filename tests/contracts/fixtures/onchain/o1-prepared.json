@@ -1,0 +1,16 @@
+{
+  "quoteId": "o1-quote-fixture-0001",
+  "schemaVersion": "o1-dex-aggregator/1",
+  "kind": "unsigned_transaction",
+  "unsignedTx": {
+    "chainId": 31337,
+    "to": "0x0000000000000000000000000000000000000099",
+    "data": "0x1234567890abcdef",
+    "value": "0",
+    "nonce": "7",
+    "gas": "250000",
+    "maxFeePerGas": "1000000000",
+    "maxPriorityFeePerGas": "1000000000"
+  },
+  "note": "A /submit response is transaction construction, not broadcast confirmation."
+}

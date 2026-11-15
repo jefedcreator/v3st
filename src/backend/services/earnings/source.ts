@@ -11,11 +11,14 @@ export interface EarningsSource {
   }): Promise<bigint>;
 }
 
+// Retired: the fixed weekly yield (quantity x simWeeklyEarningMicroPerShare) is
+// gone. Static stock holding and idle cash yield zero cash; income exists only as
+// finalized source proceeds (reward receipts). Historical fixture rows keep their
+// explicit "legacy_fixture" provenance and are never reinterpreted.
 export const simulatedEarningsSource: EarningsSource = {
   mode: "simulated",
 
-  async harvest(i) {
-    const scale = 10n ** BigInt(i.stock.decimals);
-    return (i.quantity * i.stock.simWeeklyEarningMicroPerShare) / scale;
+  async harvest() {
+    return 0n;
   },
 };

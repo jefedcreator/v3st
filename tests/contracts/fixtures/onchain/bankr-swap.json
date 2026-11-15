@@ -1,0 +1,40 @@
+{
+  "httpStatus": 200,
+  "body": {
+    "schemaVersion": "bankr-wallet-api/1",
+    "success": true,
+    "operationId": "3f6d2f8e-9c1a-4b7d-8e5f-2a6b0c1d2e3f",
+    "status": "submitted",
+    "txHash": "0x8f2d4c6a1b3e5f708192a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6",
+    "quote": {
+      "quoteId": "bankrq-fixture-0001",
+      "schemaVersion": "bankr-wallet-api/1",
+      "chainId": 31337,
+      "input": {
+        "asset": "testnet:31337:0x1111111111111111111111111111111111111111",
+        "amount": "10.000000",
+        "decimals": 6
+      },
+      "output": {
+        "asset": "testnet:31337:0x2222222222222222222222222222222222222222",
+        "amount": "2487.475249621266268",
+        "decimals": 18
+      },
+      "minOutput": {
+        "asset": "testnet:31337:0x2222222222222222222222222222222222222222",
+        "amount": "2462.600497125053605",
+        "decimals": 18
+      },
+      "fee": {
+        "asset": "testnet:31337:0x1111111111111111111111111111111111111111",
+        "amount": "0.050000",
+        "decimals": 6,
+        "bps": 50
+      },
+      "priceImpactBps": 4,
+      "expiresAt": "2026-11-14T15:00:00.000Z",
+      "locationClearance": "required_separately"
+    }
+  },
+  "replicaNote": "V3ST synthetic Bankr Wallet API replica definition (bankr-wallet-api/1). Not a captured Bankr response; the real hostname is never contacted in beta."
+}

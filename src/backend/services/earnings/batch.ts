@@ -29,6 +29,8 @@ function emptySkipped(): BatchResult["skipped"] {
 
 class EarningsBatchService {
   private async candidates(week: string) {
+    // Oldest-first rollover over the original earning periods: legacy fixture rows
+    // (no receipt) and receipt-backed rows (recognized, available) both qualify.
     const rows = await db.earning.findMany({
       where: {
         payoutOrderId: null,
@@ -37,18 +39,22 @@ class EarningsBatchService {
       },
       orderBy: [{ harvestedAt: "asc" }, { userId: "asc" }],
     });
-    const byUser = new Map<string, { userId: string; total: bigint; earningIds: string[]; firstHarvestedAt: Date }>();
+    const byUser = new Map<string, { userId: string; chain: string; total: bigint; earningIds: string[]; receiptIds: string[]; firstHarvestedAt: Date }>();
     for (const row of rows) {
-      const entry = byUser.get(row.userId) ?? {
+      const groupKey = `${row.userId}:${row.chain}`;
+      const entry = byUser.get(groupKey) ?? {
         userId: row.userId,
+        chain: row.chain,
         total: 0n,
         earningIds: [],
+        receiptIds: [],
         firstHarvestedAt: row.harvestedAt,
       };
-      entry.total += row.amountUsdc;
+      entry.total += BigInt(row.amountUsdc);
       entry.earningIds.push(row.id);
+      if (row.receiptId) entry.receiptIds.push(row.receiptId);
       if (row.harvestedAt < entry.firstHarvestedAt) entry.firstHarvestedAt = row.harvestedAt;
-      byUser.set(row.userId, entry);
+      byUser.set(groupKey, entry);
     }
     return [...byUser.values()].sort((a, b) =>
       a.firstHarvestedAt.getTime() === b.firstHarvestedAt.getTime()
@@ -106,6 +112,7 @@ class EarningsBatchService {
           continue;
         }
         try {
+          let linked = false;
           await withTx(async (tx) => {
             const trade = await tradeService.createBuy(tx, {
               key: `reinvest:${user.id}:${week}`,
@@ -115,12 +122,28 @@ class EarningsBatchService {
               purpose: "reinvest",
               fundsSource: "earnings",
             });
+            // A duplicate batch run must not re-link an already failed reinvest:
+            // the release happened once and the allocation stays available.
+            if (trade.status === "failed") return;
+            linked = true;
             await tx.earning.updateMany({
               where: { id: { in: candidate.earningIds } },
               data: { reinvestTradeId: trade.id },
             });
+            // Attach the reinvest identity when reserved; reinvested is reported
+            // only after the trade reaches a final state.
+            if (candidate.receiptIds.length > 0) {
+              await tx.earningAllocation.updateMany({
+                where: { receiptId: { in: candidate.receiptIds } },
+                data: { state: "reserved", reinvestTradeId: trade.id },
+              });
+              await tx.rewardReceipt.updateMany({
+                where: { id: { in: candidate.receiptIds } },
+                data: { state: "reserved_for_payout", reinvestTradeId: trade.id },
+              });
+            }
           });
-          result.reinvested += 1;
+          if (linked) result.reinvested += 1;
         } catch (error) {
           if (
             error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -177,13 +200,26 @@ class EarningsBatchService {
             usdAmount: ngnToUsd(gross, quote.rate, "ceil"),
             at,
           });
-          await withdrawalService.createEarningsPayout(tx, {
+          const order = await withdrawalService.createEarningsPayout(tx, {
             userId: user.id,
             week,
             earningIds: candidate.earningIds,
             amountUsdc: candidate.total,
             quote,
+            chain: candidate.chain,
           });
+          // Attach the payout identity when reserved; paid is reported only after
+          // the order reaches its final paid state.
+          if (candidate.receiptIds.length > 0) {
+            await tx.earningAllocation.updateMany({
+              where: { receiptId: { in: candidate.receiptIds } },
+              data: { state: "reserved", payoutOrderId: order.id },
+            });
+            await tx.rewardReceipt.updateMany({
+              where: { id: { in: candidate.receiptIds } },
+              data: { state: "reserved_for_payout", payoutOrderId: order.id },
+            });
+          }
         });
         result.paid += 1;
       } catch (error) {

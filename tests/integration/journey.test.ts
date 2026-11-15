@@ -34,7 +34,7 @@ beforeEach(async () => {
 describe("beta journey", () => {
   it("walks identity to a paid withdrawal and the Friday earnings batch through the routes", async () => {
     const identityToken = await stepIdentityToken(JOURNEY_PHONE);
-    const { token } = await stepSession(identityToken);
+    const { token, userId } = await stepSession(identityToken);
     await drainJobs();
     await stepVerification(token);
     await stepBankAccount(token);
@@ -66,18 +66,16 @@ describe("beta journey", () => {
 
     setNow("2026-11-12T21:00:00Z"); // Thursday 22:00 Lagos: harvest
     await drainJobs();
+    // Receipt-backed income: a static stock holding pays zero, so the harvest
+    // records no week for this user (see earnings.test.ts holdingStockAlonePaysZero).
     const weeks = await stepEarnings(token);
-    expect(weeks.length).toBeGreaterThan(0);
-    const week = weeks[0]!;
-    expect(BigInt(week.earned_usdc)).toBeGreaterThan(0n);
-    expect(week.status).toBe("pending");
+    expect(weeks.length).toBe(0);
 
     await stepPreference(token, "payout");
     setNow("2026-11-13T07:00:00Z"); // Friday 08:00 Lagos: payout batch
     await drainJobs();
     const after = await stepEarnings(token);
-    const batched = after.find((w) => w.week === week.week)!;
-    expect(["paid", "pending"]).toContain(batched.status);
-    expect(batched.status).not.toBe("paid_rollover");
+    expect(after.length).toBe(0);
+    expect(await db.rampOrder.count({ where: { kind: "earnings_payout", userId } })).toBe(0);
   });
 });

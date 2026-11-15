@@ -5,9 +5,12 @@ import { earningsService } from "@/backend/services/earnings";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { earningHarvested, openingBalance } from "@/backend/services/ledger/postings";
+import { positionService } from "@/backend/services/positions";
+import { stockActionService } from "@/backend/services/stocks/corporate-actions";
 
 import { useTestDatabase } from "../helpers/db";
-import { fundCash, makeStock, makeVerifiedUser } from "../helpers/factories";
+import { makeStock, makeVerifiedUser } from "../helpers/factories";
+import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../helpers/testnet";
 
 useTestDatabase();
 
@@ -20,45 +23,54 @@ async function seedStockHolding(userId: string, stockId: string, quantity: bigin
   );
 }
 
-async function seedEarning(userId: string, stockId: string, week: string, amount: bigint, chain = "base") {
+async function seedEarning(userId: string, stockId: string | null, week: string, amount: bigint, chain = "base") {
   await withTx(async (tx) => {
     await tx.earning.create({
       data: { userId, stockId, week, chain, amountUsdc: amount, harvestedAt: new Date() },
     });
     await ledgerService.post(
       tx,
-      earningHarvested({ userId, stockId, week, chain, amount }),
+      earningHarvested({ userId, stockId: stockId ?? "legacy", week, chain, amount }),
     );
   });
 }
 
 describe("earnings", () => {
-  it("records one entitlement per position-week across concurrent harvests", async () => {
+  it("holdingStockAlonePaysZero: harvest derives no income from a static holding", async () => {
     const holder = await makeVerifiedUser();
     const s = await makeStock();
     await seedStockHolding(holder.id, s.id, 5_000_000n);
-    await Promise.all([
-      earningsService.harvest("2026-11-09"),
-      earningsService.harvest("2026-11-09"),
-    ]);
-    const rows = await db.earning.findMany({ where: { userId: holder.id } });
-    expect(rows).toEqual([
-      expect.objectContaining({ amountUsdc: 1_000_000n, week: "2026-11-09" }),
-    ]);
-    expect(await ledgerService.balance(acct.userEarnings(holder.id, "base"))).toBe(1_000_000n);
+    const journalsBefore = await db.ledgerJournal.count();
+    const result = await earningsService.harvest("2026-11-09");
+    expect(result.recorded).toBe(0);
+    expect(await db.earning.count({ where: { userId: holder.id } })).toBe(0);
+    expect(await ledgerService.balance(acct.userEarnings(holder.id, "base"))).toBe(0n);
+    // No cash was minted: no new journal entries at all.
+    expect(await db.ledgerJournal.count()).toBe(journalsBefore);
   });
 
-  it("never earns on idle cash and keeps positions separate", async () => {
-    const cashOnly = await makeVerifiedUser();
-    await fundCash(cashOnly.id, 10_000_000n);
+  it("dividendMultiplierPaysNoCash: a corporate action changes valuation only", async () => {
+    const handle = await testnet();
+    const network = await ensureTestnetNetwork();
     const holder = await makeVerifiedUser();
-    const s1 = await makeStock({ symbol: "TSTA" });
-    const s2 = await makeStock({ symbol: "TSTB" });
-    await seedStockHolding(holder.id, s1.id, 5_000_000n);
-    await seedStockHolding(holder.id, s2.id, 2_000_000n);
-    await earningsService.harvest("2026-11-09");
-    expect(await db.earning.count({ where: { userId: cashOnly.id } })).toBe(0);
-    expect(await db.earning.count({ where: { userId: holder.id } })).toBe(2);
+    const { stock, token } = await makeTestnetStock({ symbol: "DIV", referencePriceMicroUsd: 100_000_000n });
+    await seedStockHolding(holder.id, stock.id, 2n * 10n ** 18n);
+    const journalsBefore = await db.ledgerJournal.count();
+    // 2:1 split fixture: multiplier 2 on the token, share price halved.
+    const past = Math.floor(Date.now() / 1000) - 1;
+    await handle.scheduleMultiplier(token, 2n * 10n ** 18n, past);
+    await handle.advanceTime(5);
+    await handle.applyDueActions(token);
+    await stockActionService.ingest(network.id, await handle.blockNumber());
+    const result = await earningsService.harvest("2026-11-09");
+    expect(result.recorded).toBe(0);
+    expect(await db.earning.count({ where: { userId: holder.id } })).toBe(0);
+    expect(await ledgerService.balance(acct.userEarnings(holder.id, "testnet"))).toBe(0n);
+    expect(await db.ledgerJournal.count()).toBe(journalsBefore);
+    // Valuation reflects the multiplier; no cash was paid.
+    const positions = await positionService.list(holder.id);
+    expect(positions[0]?.multiplier_wad).toBe((2n * 10n ** 18n).toString());
+    expect(positions[0]?.value_usdc).toBe("400000000");
   });
 
   it("lists weeks newest first with sums and naira value", async () => {
@@ -76,6 +88,15 @@ describe("earnings", () => {
       ngn_value: "310000",
     });
     expect(result.data[1]?.week).toBe("2026-11-09");
+  });
+
+  it("keeps legacy fixture rows under their explicit provenance", async () => {
+    const u = await makeVerifiedUser();
+    const s = await makeStock();
+    await seedEarning(u.id, s.id, "2026-11-09", 1_000_000n);
+    const row = await db.earning.findFirstOrThrow({ where: { userId: u.id } });
+    expect(row.provenance).toBe("legacy_fixture");
+    expect(row.receiptId).toBeNull();
   });
 
   it("validates preferences", async () => {

@@ -18,6 +18,11 @@ export const minorAmountSchema = z
   })
   .transform((val) => parseMinor(val));
 
+export const rawAmountSchema = z
+  .string()
+  .regex(/^(0|[1-9]\d*)$/, "Invalid raw amount")
+  .transform((val) => BigInt(val));
+
 export const paginationQuerySchema = z
   .object({
     page: z.coerce.number().int().min(1).default(1),

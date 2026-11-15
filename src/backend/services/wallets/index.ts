@@ -8,6 +8,7 @@ import { transferReleased, transferReserved } from "@/backend/services/ledger/po
 import { jobService } from "@/backend/services/jobs";
 import { screeningService } from "@/backend/services/screening";
 import { ConflictException, NotFoundException } from "@/utils/exceptions";
+import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 
 import { CHAINS, assertChain, type Chain } from "./chains";
 import { assertTransferPolicy, PolicyViolation } from "./policy";
@@ -145,7 +146,7 @@ class WalletService {
         token: CHAINS[chain].usdc,
         fromAddress,
         toAddress,
-        amount: spec.amount,
+        amount: toDbRaw(spec.amount),
         orderId: spec.orderId ?? null,
         treasuryOperationId: spec.treasuryOperationId ?? null,
         approvals: [],
@@ -188,7 +189,7 @@ class WalletService {
       key: t.key,
       purpose: t.purpose,
       chain,
-      amount: t.amount,
+      amount: fromDbRaw(t.amount),
       from,
       to,
       orderId: t.orderId ?? undefined,
@@ -254,7 +255,7 @@ class WalletService {
           if (spec.from.kind === "treasury") {
             await ledgerService.post(
               tx,
-              transferReleased({ id: t.id, chain, amount: t.amount }),
+              transferReleased({ id: t.id, chain, amount: fromDbRaw(t.amount) }),
             );
           }
           return failed;
@@ -271,7 +272,7 @@ class WalletService {
             from,
             to: t.toAddress,
             token: t.token,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
           });
           txHash = submitted.txHash;
         }

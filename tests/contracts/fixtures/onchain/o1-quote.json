@@ -1,0 +1,26 @@
+{
+  "quoteId": "o1-quote-fixture-0001",
+  "schemaVersion": "o1-dex-aggregator/1",
+  "chainId": 31337,
+  "input": {
+    "asset": "testnet:31337:0x0000000000000000000000000000000000000001",
+    "raw": "10000000"
+  },
+  "output": {
+    "asset": "testnet:31337:0x0000000000000000000000000000000000000002",
+    "raw": "4975124"
+  },
+  "minOutput": {
+    "asset": "testnet:31337:0x0000000000000000000000000000000000000002",
+    "raw": "4950000"
+  },
+  "fee": {
+    "asset": "testnet:31337:0x0000000000000000000000000000000000000001",
+    "raw": "50000",
+    "bps": 50
+  },
+  "priceImpactBps": 12,
+  "expiresAt": "2026-11-14T12:00:30Z",
+  "route": ["o1-router-replica", "hydrex-origin-path"],
+  "routeFeeChargedOnce": true
+}

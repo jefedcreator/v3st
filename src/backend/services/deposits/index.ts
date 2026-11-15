@@ -23,9 +23,12 @@ import { ratesService } from "@/backend/services/rates";
 import { RetryableError } from "@/backend/services/jobs/types";
 import { stockService } from "@/backend/services/stocks";
 import { tradeService } from "@/backend/services/trades";
+import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
+import type { Chain as RampChain } from "@/backend/services/ramp/types";
 import { walletService } from "@/backend/services/wallets";
 import { canonicalJson, sha256Hex } from "@/utils";
+import { fromDbRaw } from "@/utils/asset-units";
 import { ConflictException, ForbiddenException } from "@/utils/exceptions";
 import { ngnToUsd } from "@/utils/money";
 
@@ -161,7 +164,7 @@ class DepositService {
             where: { userId: order.userId, status: "active" },
           });
           const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
-          let recipient: { chain: Chain; address: string } | null = null;
+          let recipient: { chain: RampChain; address: string } | null = null;
           if (order.settlementModel === "direct_chain") {
             const chain = (order.chain ?? policy.defaultChain) as Chain;
             const wallet = await tx.wallet.findUnique({
@@ -170,7 +173,7 @@ class DepositService {
             if (!wallet) {
               throw new RetryableError("WALLET_NOT_READY");
             }
-            recipient = { chain, address: wallet.address };
+            recipient = { chain: chain as RampChain, address: wallet.address };
           }
           try {
             collection = await provider.createCollection({
@@ -330,6 +333,20 @@ class DepositService {
             patch: { holdReason: null },
             actor: "system",
           });
+          // Deposit completion funds the user's testnet execution account through a
+          // real local transfer, exactly once per order.
+          if (!current.onchainFundedAt) {
+            const fundedHash = await testnetWalletService.fundExecutionAccountOnce(
+              current.userId,
+              BigInt(settle.amount),
+            );
+            if (fundedHash) {
+              await tx.rampOrder.update({
+                where: { id: current.id },
+                data: { onchainFundedAt: now() },
+              });
+            }
+          }
           if (order.stockId) {
             await tradeService.createBuy(tx, {
               key: `deposit-buy:${order.id}`,
@@ -463,7 +480,7 @@ class DepositService {
         if (order.status !== "received") return;
         await ledgerService.post(
           tx,
-          userFunded({ id: t.id, userId: order.userId, chain: t.chain, amount: t.amount, to: "cash" }),
+          userFunded({ id: t.id, userId: order.userId, chain: t.chain, amount: fromDbRaw(t.amount), to: "cash" }),
         );
         if (order.stockId) {
           await tradeService.createBuy(tx, {
@@ -471,7 +488,7 @@ class DepositService {
             userId: order.userId,
             purpose: "deposit_buy",
             fundsSource: "cash",
-            amountIn: order.usdAmount ?? t.amount,
+            amountIn: order.usdAmount ?? fromDbRaw(t.amount),
             stockId: order.stockId,
             orderId: order.id,
           });
@@ -495,7 +512,7 @@ class DepositService {
       if (t.status === "failed") {
         await ledgerService.post(
           tx,
-          transferReleased({ id: t.id, chain: t.chain, amount: t.amount }),
+          transferReleased({ id: t.id, chain: t.chain, amount: fromDbRaw(t.amount) }),
         );
         await this.hold(tx, order, "needs_review", {
           kind: "deposit.funding_failed",

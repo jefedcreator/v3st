@@ -34,7 +34,14 @@ type LockableTable =
   | "ramp_orders"
   | "ledger_accounts"
   | "trade_orders"
-  | "chain_transfers";
+  | "chain_transfers"
+  | "onchain_operations"
+  | "investment_authorizations"
+  | "investment_quotes"
+  | "investments"
+  | "strategy_quotes"
+  | "strategy_positions"
+  | "sponsor_budgets";
 
 export async function lockRows(
   tx: Tx,

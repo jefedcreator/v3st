@@ -58,6 +58,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 
+# foundry build output, local chain state and testnet manifests (never commit keys)
+/out/
+/cache/
+/broadcast/
+/.testnet/
+*.anvil.json
+
 # idea files
 .idea
 .vscode/

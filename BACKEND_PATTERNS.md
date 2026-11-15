@@ -411,6 +411,29 @@ export const depositService = new DepositService();
 - Services throw `HttpException` subclasses for business-rule failures
 - Multi-step writes use the interactive transaction helper `withTx` (`src/server/prisma.ts`), with `SELECT … FOR UPDATE` row locks for any read-compare-write (e.g. reservations) — **not** `db.$transaction([...])` arrays
 
+### Onchain layer (testnet, beta-only)
+
+```
+src/backend/integrations/
+├── beta-policy.ts        # provider modes, sandbox URL allowlist
+├── onchain-policy.ts     # stage/chain/RPC boundaries (loopback Anvil 31337 only)
+└── provider-evidence.ts  # per-provider evidence records; actual adapters disabled
+src/backend/services/onchain/
+├── types.ts              # BetaContext, AssetAmount, Spot/Strategy adapters, plans
+├── registry.ts           # onchainRegistry.spot/strategy with typed 422/503 errors
+├── testnet.ts            # loopback RPC client, anvil lifecycle, deployment manifests
+├── providers/{o1,bankr,hydrex,stonks,basestonk,feel}/  # replicas + disabled factories
+└── execution/            # prepare/submit/observe/finalize, policy checks, nonces
+contracts/testnet/        # labelled local replica contracts (Foundry, solc pinned)
+contracts/test/           # forge behavioral tests
+```
+
+- Onchain execution is loopback-Anvil-only (chain `31337`, no fork); `assertOnchainContext` rejects mainnet and remote RPCs even with `NODE_ENV=production`
+- Raw token quantities are exact `bigint` in code and `numeric(78,0)` in PostgreSQL (`src/utils/asset-units.ts`); never use the cash parser for token units and never use floats
+- Provider replicas are labelled `local_testnet_replica` with `mode: simulated`; a replica never reports itself as a verified provider connection
+- Persist the intent (immutable quote/consent/operation snapshot) before any external effect; external calls never run inside `withTx` — enqueue a durable job and finalize from observed receipts
+- The restricted test signer/relayer pays gas from a sponsor budget; customers never sign or top up gas
+
 ### Session creation pattern
 
 ```typescript
@@ -796,3 +819,7 @@ Client
 18. **Canonical API paths are `/api/v1/**`**; `/v1/:path*` and `/webhooks/:provider` rewrite to them in `next.config.js`. Logout is `POST /api/v1/auth/logout` returning JSON 200, not a 303 redirect.
 
 19. **Lint with `eslint .`** — `next lint` is deprecated in Next 15.5.
+
+20. **Onchain effects are operation-scoped and recoverable.** Every economic action has a stable operation id, a persisted signed-payload/tx hash before broadcast, and finalizes only from observed local receipts — a crash retries the same transaction/nonce, never a replacement economic action.
+
+21. **No optional/conditional object spread** (`...(cond ? {k: v} : {})`) anywhere; assign properties with `if` statements instead.

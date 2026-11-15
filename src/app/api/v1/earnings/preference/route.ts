@@ -17,6 +17,10 @@ export const PUT = withMiddleware<EarningsPreferenceSchema, null, null>(
     const preference = await earningsService.setPreference(request.user!.id, {
       mode: body.mode,
       stock_id: body.stock_id,
+      consent_version: body.consent_version,
+      allow_background_conversion: body.allow_background_conversion,
+      max_conversion_fee_bps: body.max_conversion_fee_bps,
+      max_fx_bps: body.max_fx_bps,
     });
     return ok(preference, "Earnings preference updated");
   },

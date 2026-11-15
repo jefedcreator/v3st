@@ -17,7 +17,10 @@ import { stockService } from "@/backend/services/stocks";
 import { CHAINS } from "@/backend/services/wallets/chains";
 import { tradeSettledHandlers } from "@/backend/workers/handlers";
 import type { TradeDto } from "@/types/dto";
+import { fromDbRaw, fromDbRawNullable, toDbRaw } from "@/utils/asset-units";
 import { NotFoundException } from "@/utils/exceptions";
+
+import { progressTrade as investmentProgressTrade } from "@/backend/services/investments";
 
 import { tradeRouter } from "./router";
 
@@ -27,9 +30,9 @@ export function tradeToDto(t: TradeOrder): TradeDto {
     side: t.side,
     stock_id: t.stockId,
     status: t.status,
-    amount_in: t.amountIn.toString(),
-    amount_out: t.amountOut?.toString() ?? null,
-    min_amount_out: t.minAmountOut?.toString() ?? null,
+    amount_in: fromDbRaw(t.amountIn).toString(),
+    amount_out: fromDbRawNullable(t.amountOut)?.toString() ?? null,
+    min_amount_out: fromDbRawNullable(t.minAmountOut)?.toString() ?? null,
     failure_reason: t.failureReason,
     retryable: t.side === "buy" && t.status === "failed",
     created_at: t.createdAt.toISOString(),
@@ -73,7 +76,7 @@ class TradeService {
         stockId: i.stockId,
         orderId: i.orderId ?? null,
         chain,
-        amountIn: i.amountIn,
+        amountIn: toDbRaw(i.amountIn),
         status: "pending",
         providerMode: "simulated",
       },
@@ -110,8 +113,8 @@ class TradeService {
         stockId: i.stockId,
         orderId: i.orderId,
         chain: stock.chain,
-        amountIn: i.quantity,
-        minAmountOut: i.minAmountOut,
+        amountIn: toDbRaw(i.quantity),
+        minAmountOut: toDbRaw(i.minAmountOut),
         status: "pending",
         providerMode: "simulated",
       },
@@ -121,6 +124,7 @@ class TradeService {
   }
 
   private async releaseFunds(tx: Tx, t: TradeOrder): Promise<void> {
+    const amountIn = fromDbRaw(t.amountIn);
     if (t.side === "buy") {
       await ledgerService.post(
         tx,
@@ -128,14 +132,14 @@ class TradeService {
           key: t.key,
           userId: t.userId,
           chain: t.chain,
-          amount: t.amountIn,
+          amount: amountIn,
           to: t.fundsSource as "cash" | "earnings",
         }),
       );
     } else {
       await ledgerService.post(
         tx,
-        stockReleased({ key: t.key, userId: t.userId, stockId: t.stockId, quantity: t.amountIn }),
+        stockReleased({ key: t.key, userId: t.userId, stockId: t.stockId, quantity: amountIn }),
       );
     }
   }
@@ -143,6 +147,8 @@ class TradeService {
   async progress(tradeId: string): Promise<void> {
     const result = await withTx(async (tx) => {
       const t = await tx.tradeOrder.findUniqueOrThrow({ where: { id: tradeId } });
+      const amountIn = fromDbRaw(t.amountIn);
+      const storedMinAmountOut = fromDbRawNullable(t.minAmountOut);
       if (t.status === "filled" || t.status === "failed") {
         return { trade: t, transitioned: false };
       }
@@ -151,10 +157,16 @@ class TradeService {
           throw new RetryableError("TRADING_PAUSED", 600_000);
         }
         const stock = await stockService.get(t.stockId);
+        if (stock.networkId) {
+          // Testnet stocks route through the persisted investment/operation contracts.
+          await investmentProgressTrade(t.id);
+          const refreshed = await tx.tradeOrder.findUniqueOrThrow({ where: { id: tradeId } });
+          return { trade: refreshed, transitioned: refreshed.status !== "pending" };
+        }
         const routed = await tradeRouter.route({
           stock,
           side: t.side,
-          amountIn: t.amountIn,
+          amountIn,
           key: t.key,
         });
         if (routed.priceImpactBps > policy.trading.maxSlippageBps) {
@@ -168,7 +180,7 @@ class TradeService {
         const minAmountOut =
           t.side === "buy"
             ? (routed.amountOut * (10_000n - BigInt(policy.trading.maxSlippageBps))) / 10_000n
-            : (t.minAmountOut ?? 0n);
+            : (storedMinAmountOut ?? 0n);
         const wallet = await tx.wallet.findUniqueOrThrow({
           where: {
             userId_family: {
@@ -185,14 +197,14 @@ class TradeService {
             wallet,
             stock,
             side: t.side,
-            amountIn: t.amountIn,
+            amountIn,
             minAmountOut,
           });
           ref = submitted.ref;
         }
         const submitted = await tx.tradeOrder.update({
           where: { id: t.id },
-          data: { status: "submitted", venueId: routed.venue.id, venueRef: ref, minAmountOut },
+          data: { status: "submitted", venueId: routed.venue.id, venueRef: ref, minAmountOut: toDbRaw(minAmountOut) },
         });
         await jobService.enqueue(tx, {
           kind: "trade.progress",
@@ -216,13 +228,13 @@ class TradeService {
             venueId: t.venueId ?? venue.id,
             stockId: t.stockId,
             side: t.side,
-            amountIn: t.amountIn,
+            amountIn,
             amountOut: remote.amountOut ?? 0n,
           }),
         );
         const filled = await tx.tradeOrder.update({
           where: { id: t.id },
-          data: { status: "filled", amountOut: remote.amountOut },
+          data: { status: "filled", amountOut: toDbRaw(remote.amountOut ?? 0n) },
         });
         return { trade: filled, transitioned: true };
       }
@@ -252,7 +264,7 @@ class TradeService {
         key,
         userId,
         stockId: trade.stockId,
-        amountIn: trade.amountIn,
+        amountIn: fromDbRaw(trade.amountIn),
         purpose: "retry_buy",
         fundsSource: "cash",
         orderId: trade.orderId ?? undefined,

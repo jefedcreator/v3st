@@ -6,6 +6,7 @@ import { alertService } from "@/backend/services/alerts";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { complianceService, customerFor } from "@/backend/services/compliance";
 import { controlsService } from "@/backend/services/controls";
+import { earningsService } from "@/backend/services/earnings";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import {
@@ -25,7 +26,7 @@ import { orderService } from "@/backend/services/orders";
 import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
 import { paycrestFundingAddress } from "@/backend/services/ramp/paycrest";
-import type { Quote } from "@/backend/services/ramp/types";
+import type { Chain as RampChain, Quote } from "@/backend/services/ramp/types";
 import { refForKey } from "@/backend/services/simulator/ramp";
 import { simulatedVenue } from "@/backend/services/simulator/venue";
 import { stockService } from "@/backend/services/stocks";
@@ -34,6 +35,7 @@ import { tradeService } from "@/backend/services/trades";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import { walletService } from "@/backend/services/wallets";
 import { sha256Hex } from "@/utils";
+import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 import {
   ConflictException,
   ForbiddenException,
@@ -107,7 +109,7 @@ class WithdrawalService {
         rateMicroUsd: providerQuote.rate.microUsd,
         chain,
         stockId,
-        sellQuantity,
+        sellQuantity: sellQuantity === null ? null : toDbRaw(sellQuantity),
         bankAccountId: bank.id,
         expiresAt: new Date(now().getTime() + policy.withdrawals.quoteTtlSeconds * 1_000),
       },
@@ -215,7 +217,7 @@ class WithdrawalService {
           key: `withdrawal-sell:${order.id}`,
           userId,
           stockId: quote.stockId,
-          quantity: quote.sellQuantity,
+          quantity: fromDbRaw(quote.sellQuantity),
           minAmountOut: quote.debitUsdc,
           orderId: order.id,
         });
@@ -249,6 +251,7 @@ class WithdrawalService {
       earningIds: string[];
       amountUsdc: bigint;
       quote: Quote;
+      chain?: string;
     },
   ): Promise<RampOrder> {
     const key = `earnings:${i.userId}:${i.week}`;
@@ -257,7 +260,7 @@ class WithdrawalService {
     const bank = await tx.bankAccount.findFirstOrThrow({
       where: { userId: i.userId, status: "active" },
     });
-    const chain = policy.defaultChain;
+    const chain = (i.chain ?? policy.defaultChain) as typeof policy.defaultChain;
     const debitUsdc = ngnToUsd(i.quote.ngnAmount, i.quote.rate, "ceil");
     const order = await tx.rampOrder.create({
       data: {
@@ -405,7 +408,7 @@ class WithdrawalService {
           customer: customerFor(user),
           key: order.id,
           maxUsd,
-          chain,
+          chain: chain as RampChain,
         });
         const funding = result.funding;
         if (funding.kind !== "chain") {
@@ -427,7 +430,7 @@ class WithdrawalService {
           throw new RetryableError(error.code);
         }
         if (error instanceof ProviderError && error.kind === "duplicate") {
-          const fundingAddress = paycrestFundingAddress(chain, order.id);
+          const fundingAddress = paycrestFundingAddress(chain as RampChain, order.id);
           await orderService.transition(tx, {
             order,
             to: "created",
@@ -621,6 +624,9 @@ class WithdrawalService {
                   ],
             actor: "system",
           });
+          if (order.kind === "earnings_payout") {
+            await earningsService.markPayoutFinal(order.id);
+          }
           return;
         }
         if (txState.state === "refunded" && order.settlementModel === "direct_chain") {
@@ -725,7 +731,7 @@ class WithdrawalService {
             id: t.id,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
           }),
         );
         await orderService.transition(tx, {
@@ -745,7 +751,7 @@ class WithdrawalService {
             key: `order:${order.id}`,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
             to,
           }),
         );
@@ -779,7 +785,7 @@ class WithdrawalService {
             provider: order.provider,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
           }),
         );
         await orderService.transition(tx, {
@@ -799,7 +805,7 @@ class WithdrawalService {
             key: `order:${order.id}`,
             userId: order.userId,
             chain: t.chain,
-            amount: t.amount,
+            amount: fromDbRaw(t.amount),
             to,
           }),
         );
@@ -830,7 +836,7 @@ class WithdrawalService {
           id: t.id,
           userId: order.userId,
           chain: t.chain,
-          amount: t.amount,
+          amount: fromDbRaw(t.amount),
           to: order.kind === "earnings_payout" ? "earnings" : "cash",
         }),
       );

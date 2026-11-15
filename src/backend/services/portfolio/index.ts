@@ -6,6 +6,8 @@ import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { ratesService } from "@/backend/services/rates";
 import { tradeRouter } from "@/backend/services/trades/router";
+import { positionService } from "@/backend/services/positions";
+import { rewardService } from "@/backend/services/rewards";
 import { betaDto, type PortfolioDto, type PortfolioHoldingDto } from "@/types/dto";
 import { formatMinor, rateToDto, usdToNgn, type Rate } from "@/utils/money";
 
@@ -34,7 +36,8 @@ class PortfolioService {
       return formatMinor(usdToNgn(microUsdc, payoutRate, "floor"));
     };
 
-    const stocks = await db.stock.findMany({ where: { enabled: true } });
+    // Paused/delisted owned assets stay visible in totals.
+    const stocks = await db.stock.findMany();
     const holdings: PortfolioHoldingDto[] = [];
     for (const stock of stocks) {
       const quantity = balances.get(acct.userStock(userId, stock.id).code) ?? 0n;
@@ -70,10 +73,12 @@ class PortfolioService {
       pending_ngn: toNgn(pending),
       earnings_ngn: toNgn(earnings),
       holdings,
+      positions: await positionService.list(userId),
       rate,
       valuation,
       as_of: now().toISOString(),
       beta: betaDto(integrationModes().yellowcard),
+      receipts: await rewardService.listForUser(userId),
     };
   }
 }
