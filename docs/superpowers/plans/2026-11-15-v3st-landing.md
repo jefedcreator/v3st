@@ -63,7 +63,7 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 ## Task checklist
 
 - [x] Task 1 — Establish design, assets and primitives.
-- [ ] Task 2 — Build the public shell and hero choreography.
+- [x] Task 2 — Build the public shell and hero choreography.
 - [ ] Task 3 — Build product storytelling and remaining reference motion.
 - [ ] Task 4 — Implement the exact local demo.
 - [ ] Task 5 — Complete accessibility, metadata and documentation.
@@ -104,17 +104,17 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 - `smoothProgress(current: number, target: number, deltaMs: number): number` implements the spec's frame-normalized 0.18 smoothing.
 - `createFluidRenderer(canvas: HTMLCanvasElement, options: FluidOptions): { setPaused(paused: boolean): void; resize(): void; dispose(): void }`. Export `fluidDefaults` with the spec's named solver/pointer/idle values and three green palette colors; derive `FluidOptions` from its explicitly typed properties. Unsupported WebGL throws a construction error caught by the wrapper, which keeps the static fallback visible.
 
-- [ ] Author motion assertions before implementation: full intro at elapsed 1740ms/progress 0 yields all five hero opacities 1; start values follow the exact intervals; handover at progress 1 hides the hero and reveals header CTA; decreasing progress restores visibility; smoothing is frame-rate normalized. Do not run them yet.
-- [ ] Implement `(marketing)/page.tsx` as a Server Component composed only from landing modules. Use static rendering (`dynamic = "error"` is suitable) and no session/auth/API data access. Remove the competing root page.
-- [ ] Build the header, skip link to `#main-content`, fixed beta badge, hero exact copy, original SVG fallback and footer. Native anchors must work before hydration. Add a `noscript` mobile anchor list and reserve header space/scroll margins so target headings are not hidden.
-- [ ] Implement the left mobile `Sheet` with spec dimensions and 260/170ms transitions, a labelled title, close control, Escape/focus restoration and close-on-anchor-selection. Keep document scroll locking confined to the open sheet.
-- [ ] Implement the 160vh/sticky hero, −45vh content overlap, exact intro/fade intervals and header choreography from the spec. Start the intro only after enhancement is ready. On deep-link or restored-scroll entry, initialize from current position without scrolling to top or replaying blank content. Read scroll passively; update motion values/CSS properties, not React state per frame.
-- [ ] Keep beta and skip navigation visible throughout. Reveal a focused hero control group and keep it visible until focus leaves; disable invisible pointer hit areas. At zero opacity remove irrelevant decorative hit targets from interaction.
-- [ ] Implement original green fluid artwork, or adapt a pinned licensed source revision with notices and an explicit parameter mapping. Lazy-load after readable hero text; do not import it into the server route. Bound GPU resolution, handle pointer takeover/resume, stop hidden/offscreen work, dispose all resources and preserve SVG fallback for failure/reduced motion.
-- [ ] Detect fit at short heights/zoom rather than blindly fixing a cropped stage. Switch to ordinary flow and remove overlap when the complete hero cannot fit. Use the measured normal mobile behavior when it fits; do not blanket-disable mobile animation.
-- [ ] Add route `loading.tsx` using the same tokens and structural proportions. It is a fallback, not an artificial loading delay.
-- [ ] Author browser assertions for every anchor, skip link, sheet keyboard cycle/restore, deep-link reload and Back/Forward, upward-scroll recovery, and no-JS mobile access. No browser gate runs yet.
-- [ ] Review diff, update checklist and commit: `feat: build V3ST marketing shell and hero motion`.
+- [x] Author motion assertions before implementation: full intro at elapsed 1740ms/progress 0 yields all five hero opacities 1; start values follow the exact intervals; handover at progress 1 hides the hero and reveals header CTA; decreasing progress restores visibility; smoothing is frame-rate normalized. Do not run them yet.
+- [x] Implement `(marketing)/page.tsx` as a Server Component composed only from landing modules. Use static rendering (`dynamic = "error"` is suitable) and no session/auth/API data access. Remove the competing root page.
+- [x] Build the header, skip link to `#main-content`, fixed beta badge, hero exact copy, original SVG fallback and footer. Native anchors must work before hydration. Add a `noscript` mobile anchor list and reserve header space/scroll margins so target headings are not hidden.
+- [x] Implement the left mobile `Sheet` with spec dimensions and 260/170ms transitions, a labelled title, close control, Escape/focus restoration and close-on-anchor-selection. Keep document scroll locking confined to the open sheet.
+- [x] Implement the 160vh/sticky hero, −45vh content overlap, exact intro/fade intervals and header choreography from the spec. Start the intro only after enhancement is ready. On deep-link or restored-scroll entry, initialize from current position without scrolling to top or replaying blank content. Read scroll passively; update motion values/CSS properties, not React state per frame.
+- [x] Keep beta and skip navigation visible throughout. Reveal a focused hero control group and keep it visible until focus leaves; disable invisible pointer hit areas. At zero opacity remove irrelevant decorative hit targets from interaction.
+- [x] Implement original green fluid artwork, or adapt a pinned licensed source revision with notices and an explicit parameter mapping. Lazy-load after readable hero text; do not import it into the server route. Bound GPU resolution, handle pointer takeover/resume, stop hidden/offscreen work, dispose all resources and preserve SVG fallback for failure/reduced motion.
+- [x] Detect fit at short heights/zoom rather than blindly fixing a cropped stage. Switch to ordinary flow and remove overlap when the complete hero cannot fit. Use the measured normal mobile behavior when it fits; do not blanket-disable mobile animation.
+- [x] Add route `loading.tsx` using the same tokens and structural proportions. It is a fallback, not an artificial loading delay.
+- [x] Author browser assertions for every anchor, skip link, sheet keyboard cycle/restore, deep-link reload and Back/Forward, upward-scroll recovery, and no-JS mobile access. No browser gate runs yet.
+- [x] Review diff, update checklist and commit: `feat: build V3ST marketing shell and hero motion`.
 
 ### Task 3 — Build product storytelling and remaining reference motion
 

@@ -5,7 +5,7 @@ Implementation began 2026-11-15 on `codex/implement-v3st-landing` from the clean
 ## Execution checklist
 
 - [x] Task 1: design system, authentic assets, generated primitives and dependencies.
-- [ ] Task 2: anonymous shell, hero, fluid artwork and navigation.
+- [x] Task 2: anonymous shell, hero, fluid artwork and navigation.
 - [ ] Task 3: stories, ecosystem, ticker, diagram, FAQ and Friday explanation.
 - [ ] Task 4: exact independent local demo.
 - [ ] Task 5: accessibility, metadata and documentation.
@@ -30,3 +30,11 @@ Official shadcn CLI 4.23.0 generated exactly button, badge, card, tabs, sheet, s
 All twelve local ecosystem marks are sourced; provenance, dimensions, content types and hashes live in public/brands/sources.json. Feel.cash resolved from its official launchpad; Solana official-host 429 was resolved from the Foundation-owned repository. SVG inspection found no scripts/event handlers/external resources. Brand assets require final rendered visual review.
 
 Task 1 diff review: no credentials, backend changes, Node-only browser imports, invented investment claims or Katana assets. Shared hero stylesheet was authored alongside foundation; shell components remain in Task 2. Gates remain deferred.
+
+## Task 2 implementation (unverified)
+
+Static anonymous marketing composition replaces the starter. Native anchors, skip link, labelled left Radix sheet, original growth contours, focus-revealed hero actions, passive scroll/ref choreography, fit measurement and normal-flow fallback are implemented. Native browser assertions cover geometry, reversal, deep entry/history and reduced/short layouts; additional shell assertions accompany the final browser suite.
+
+The renderer is original WebGL2: velocity/dye advection, divergence, Jacobi pressure solve (38 iterations), projection and optional viscosity diffusion (14 iterations when enabled). Named reference values map to solver timestep, resolution, density decay, radius/force, edge reflection and idle/pointer interpolation. Display DPR is capped at 1.5, grid width 160 and simulation cadence 30Hz as explicit performance adaptations. The field has no copied renderer/license dependency. Float WebGL2 failure/context loss keeps static SVG. Lazy GPU work starts after text paint, with cleanup on hidden/offscreen/unmount and pause without demo state effects. Behavioral fidelity still needs browser review.
+
+Delegated asset and renderer workers exhausted their tool session after asset downloads; root completed provenance and original renderer natively. No gate results are claimed.
