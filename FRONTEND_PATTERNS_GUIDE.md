@@ -35,11 +35,19 @@ react-hook-form          ^7    uncontrolled forms (see §7)
 vitest                   ^4    tests (`yarn test` → `vitest run`)
 ```
 
-**Aspirational, not yet installed:** `zustand`, `nuqs`, `sonner`. Fluid is light-only: no `next-themes`.
+**Installed today (see `package.json`):** `next`, `react`/`react-dom`, `tailwindcss` v4 + `@tailwindcss/postcss` + `tw-animate-css`, `radix-ui` (unified), `motion` (the `motion/react` entry — **not** `framer-motion`), `@phosphor-icons/react`, `class-variance-authority` + `clsx` + `tailwind-merge`, `@t3-oss/env-nextjs`, `prisma`/`@prisma/client`, `zod`, `viem`, `vitest`.
+
+**Aspirational, not yet installed:** `@tanstack/react-query`, `axios`, `react-hook-form` + `@hookform/resolvers`, `zustand`, `nuqs`, `sonner`, `next-themes`. Do not add them merely to satisfy a copied example below; the V3ST landing page needs none of them.
 
 ---
 
 ## 2. Project structure
+
+> **V3ST reconciliation:** the `(auth)`, `(dashboard)`, `(pay)` and `(app)` route
+> groups listed below are copied starter examples from another product, not V3ST
+> routes. V3ST's real routes are `app/(marketing)/` (the public landing page at `/`)
+> and `app/api/` (the implemented `/api/v1/*` backend). Treat every education/payment
+> example in this guide as illustrative, not as a V3ST requirement.
 
 ```
 src/
@@ -95,7 +103,7 @@ src/
 │   ├── markdown.tsx           ← the curriculum's markdown subset: day lessons and grammar pages
 │   ├── app-error.tsx          ← the fallback when a surface's data will not load
 │   ├── app-skeleton.tsx       ← what every (app) loading.tsx is built from
-│   ├── theme-toggle.tsx       ← 'use client' — next-themes toggle with Framer Motion icon swap (landing footer)
+│   ├── theme-toggle.tsx       ← copied starter example from another product (next-themes); NOT a V3ST component
 │   ├── day/                   ← day-page-client.tsx, day-spine.tsx (the row of four steps), lesson-recap.tsx, use-reveal-on-change.ts, blocks/
 │   ├── mock/                  ← mock-hub-client.tsx, mock-session-client.tsx, mock-score-report.tsx, mock-attempt-row.tsx
 │   ├── progress/              ← progress-page-client.tsx, programme-board.tsx
@@ -153,6 +161,8 @@ src/
 
 **Barrel files**: `src/primitives/index.ts`, `src/utils/index.ts`, `src/provider/index.tsx` re-export the public surface of that folder — import from the barrel (`@/primitives`, `@/utils`, `@/provider`) in feature code.
 
+**Exception — `@/utils/cn`:** `src/utils/index.ts` imports `node:crypto` and must never enter the client graph. Browser code (Server and Client Components alike) imports `cn` directly from `@/utils/cn`, and any other browser-safe helper from its own module, never from the `@/utils` barrel.
+
 **Path alias**: `@/*` → `src/*` (configured in `tsconfig.json`). Never use deep relative imports (`../../../`) across feature boundaries.
 
 ---
@@ -171,7 +181,7 @@ src/
 
 ## 5. Styling — light only
 
-Fluid is **light-only**: no `next-themes`, no `.dark` block.
+V3ST is **light-only**: no `next-themes`, no `.dark` block.
 
 ### Tailwind v4
 
@@ -179,121 +189,16 @@ Tokens live in `@theme static` in `src/styles/globals.css` — there is no `tail
 
 - `static` is load-bearing: without it Tailwind only emits the tokens it saw used, and dark mode overrides these variables at runtime.
 
-### Dark Mode Architecture with `next-themes`
+### Theme architecture for V3ST — light only
 
-Dark mode is **attribute-driven** via `next-themes` using `data-theme="dark"` / `data-theme="light"`:
-
-1. **Provider Setup (`src/provider/theme-provider.tsx` & `src/provider/index.tsx`):**
-
-   ```tsx
-   // src/provider/theme-provider.tsx
-   "use client";
-   import {
-     ThemeProvider as NextThemesProvider,
-     type ThemeProviderProps,
-   } from "next-themes";
-
-   export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
-     return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
-   }
-
-   // src/provider/index.tsx
-   export function Provider({ children }: { children: ReactNode }) {
-     return (
-       <QueryProvider>
-         <ThemeProvider
-           attribute="data-theme"
-           defaultTheme="system"
-           enableSystem
-           disableTransitionOnChange
-         >
-           {children}
-         </ThemeProvider>
-       </QueryProvider>
-     );
-   }
-   ```
-
-2. **Root Layout (`src/app/layout.tsx`):**
-   - Add `suppressHydrationWarning` to `<html lang="en">` so `next-themes` can set the attribute without React hydration warnings.
-   - `next-themes` automatically injects its pre-paint script, eliminating flash of unstyled theme (FOUC).
-
-3. **Theme Toggle Component (`src/components/theme-toggle.tsx`):**
-   - Consumes `useTheme()` from `next-themes` (`resolvedTheme`, `setTheme`).
-   - Uses `mounted` state guard to avoid SSR/hydration markup mismatch.
-   - Animates sun/moon icon transition smoothly using `framer-motion`'s `AnimatePresence` and `motion.div`:
-
-   ```tsx
-   "use client";
-
-   import { useEffect, useState } from "react";
-   import { AnimatePresence, motion } from "framer-motion";
-   import { useTheme } from "next-themes";
-   import { Moon, Sun } from "@phosphor-icons/react/dist/ssr";
-   import { cn } from "@/utils";
-
-   export function ThemeToggle({ className }: { className?: string }) {
-     const { resolvedTheme, setTheme } = useTheme();
-     const [mounted, setMounted] = useState(false);
-
-     useEffect(() => {
-       setMounted(true);
-     }, []);
-
-     const toggleTheme = () => {
-       setTheme(resolvedTheme === "dark" ? "light" : "dark");
-     };
-
-     if (!mounted) {
-       return (
-         <div
-           className={cn(
-             "border-rule grid size-7 place-items-center rounded-full border",
-             className,
-           )}
-           aria-hidden="true"
-         />
-       );
-     }
-
-     const isDark = resolvedTheme === "dark";
-
-     return (
-       <button
-         type="button"
-         onClick={toggleTheme}
-         aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
-         className={cn(
-           "group border-rule text-ink-3 hover:border-ink-3 hover:text-ink relative grid size-7 place-items-center overflow-hidden rounded-full border transition-colors",
-           className,
-         )}
-       >
-         <AnimatePresence mode="wait" initial={false}>
-           <motion.div
-             key={isDark ? "dark" : "light"}
-             initial={{ y: 7, opacity: 0 }}
-             animate={{ y: 0, opacity: 1 }}
-             exit={{ y: -7, opacity: 0 }}
-             transition={{ duration: 0.16, ease: "easeInOut" }}
-             className="flex items-center justify-center"
-           >
-             {isDark ? (
-               <Moon className="size-4" weight="bold" />
-             ) : (
-               <Sun className="size-4" weight="bold" />
-             )}
-           </motion.div>
-         </AnimatePresence>
-       </button>
-     );
-   }
-   ```
-
-4. **CSS Palette Specificity:**
-   In `src/styles/globals.css`, the palette flips in two places, with load-bearing order:
-   - `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }` first.
-   - `:root[data-theme="dark"]` second.
-   - `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));` binds Tailwind's `dark:` modifier to the attribute.
+V3ST is **light-only**: no `next-themes`, no `.dark` block, no `dark:` classes, and
+the page stays light even under system dark mode. Tokens are declared once in
+`@theme static` in `src/styles/globals.css` (the V3ST forest-green/ivory palette —
+see `DESIGN_SYSTEM.md`); `static` is load-bearing because it keeps every token
+emitted regardless of usage. The dark-mode/`next-themes`/`ThemeToggle` example that
+originally followed here belongs to the copied starter product and is **not** a V3ST
+instruction; do not reintroduce theme machinery for V3ST. There is also no application
+provider stack for the landing page.
 
 ---
 
@@ -455,11 +360,16 @@ Filters, tabs, and pagination that should survive a refresh/share live in the UR
 
 ---
 
-## 11. Animation — Framer Motion
+## 11. Animation — `motion/react`
 
-- Page/list entrances: `FadeIn`, `FadeInStagger`.
-- Interactive elements: `ThemeToggle` with `AnimatePresence` and `motion.div` for icon transitions.
+- Import from `motion/react` (the `motion` package), never `framer-motion`.
+- Page/list entrances and microinteractions use `motion` components; on the landing
+  page, continuous scroll motion is driven by motion values / CSS properties per
+  frame (`useMotionValue` + `useTransform`), not by React state re-renders. The
+  captured timing contract lives in `src/components/landing/motion-contract.ts`
+  and `DESIGN_SYSTEM.md`.
 - Layout-safe animations: animate transforms and opacity (`scaleX`, `translate`, `opacity`) instead of layout properties (`height`, `width`) to prevent browser layout reflows.
+- Decorative animation is progressively enhanced and pausable (`prefers-reduced-motion` plus the page's pause control); content is never hidden before enhancement.
 
 ---
 
