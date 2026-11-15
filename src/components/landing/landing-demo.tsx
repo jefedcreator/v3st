@@ -1,18 +1,175 @@
 "use client";
-import { useState,useRef } from "react";
+import { useState, useRef } from "react";
 import { motion } from "motion/react";
 import { ArrowCounterClockwise } from "@phosphor-icons/react/dist/ssr";
-import { Button,Tabs,TabsContent,TabsList,TabsTrigger } from "@/primitives";
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "@/primitives";
 import { useLandingMotion } from "./landing-motion";
 import { DemoFunding } from "./demo-funding";
 import { DemoStocks } from "./demo-stocks";
-import { DemoStrategies,type StrategyScenario } from "./demo-strategies";
-import { DemoProceeds,type ProceedsScenario } from "./demo-proceeds";
+import { DemoStrategies, type StrategyScenario } from "./demo-strategies";
+import { DemoProceeds, type ProceedsScenario } from "./demo-proceeds";
 import type { DemoStage } from "./demo.types";
-const chapters=[['funding','Add naira'],['stocks','Explore stocks'],['strategies','Optional strategies'],['proceeds','Review proceeds']] as const;
-export function LandingDemo(){
- const [stage,setStage]=useState<DemoStage>('funding'),[stock,setStock]=useState<'TSTA'|'TSTB'>('TSTA'),[strategyOpened,setStrategyOpened]=useState(false),[strategyScenario,setStrategyScenario]=useState<StrategyScenario>('eligible'),[proceedsScenario,setProceedsScenario]=useState<ProceedsScenario>('eligible'),[preference,setPreference]=useState<'payout'|'reinvest'>('payout');
- const [announcement,setAnnouncement]=useState('');const firstTab=useRef<HTMLButtonElement>(null);const {reducedMotion}=useLandingMotion();
- const reset=()=>{setStage('funding');setStock('TSTA');setStrategyOpened(false);setStrategyScenario('eligible');setProceedsScenario('eligible');setPreference('payout');setAnnouncement('Demo reset. Add naira example selected; no strategy selected.');requestAnimationFrame(()=>firstTab.current?.focus());};
- return <section id="demo" className="section demo-section" aria-labelledby="demo-title"><div className="shell"><div className="demo-heading"><div><h2 id="demo-title" className="section-title">Try the details<br/>for yourself.</h2><p className="section-copy">Four independent examples. No account, no real money and no automatic next step.</p></div><Button variant="outline" onClick={reset}><ArrowCounterClockwise aria-hidden="true"/>Reset demo</Button></div><ol className="demo-static-steps" aria-label="Demo walkthrough"><li>Review naira funding and fees.</li><li>Inspect fictional fractional stock exposure.</li><li>Explore an optional strategy separately.</li><li>Compare eligible proceeds and rollover.</li></ol><noscript><p className="nojs-demo">This walkthrough is available without JavaScript. Enable JavaScript to try the interactive examples.</p></noscript><Tabs value={stage} onValueChange={value=>{if(chapters.some(([id])=>id===value)){setStage(value as DemoStage);setAnnouncement(`${chapters.find(([id])=>id===value)![1]} example selected.`);}}><TabsList className="demo-tabs" aria-label="Independent demo chapters">{chapters.map(([id,label])=><TabsTrigger key={id} value={id} ref={id==='funding'?firstTab:undefined}>{label}</TabsTrigger>)}</TabsList>{chapters.map(([id])=><TabsContent key={id} value={id}><motion.div key={id} initial={false} animate={{opacity:reducedMotion?1:[.65,1]}} transition={{duration:reducedMotion?0:.2}}><div className="demo-panel"><p className="independent-label">Independent illustrative example</p>{id==='funding'?<DemoFunding/>:id==='stocks'?<DemoStocks selected={stock} onSelect={value=>{setStock(value);setAnnouncement(`${value} fictional stock selected.`);}}/>:id==='strategies'?<DemoStrategies opened={strategyOpened} scenario={strategyScenario} onOpen={()=>{setStrategyOpened(true);setAnnouncement('Strategy example opened. This is not an authorization.');}} onScenario={value=>{setStrategyScenario(value);setAnnouncement(`Strategy scenario: ${value.replaceAll('_',' ')}.`);}}/>:<DemoProceeds scenario={proceedsScenario} preference={preference} onScenario={value=>{setProceedsScenario(value);setAnnouncement(`Proceeds scenario: ${value.replaceAll('_',' ')}.`);}} onPreference={value=>{setPreference(value);setAnnouncement(`${value==='payout'?'Payout':'Reinvestment'} comparison selected.`);}}/>}</div></motion.div></TabsContent>)}</Tabs><p className="demo-boundary">All amounts are independent illustrations. No account, order or strategy is created. Nothing is saved when you leave.</p><p role="status" className="sr-only" aria-live="polite">{announcement}</p></div></section>;
+const chapters = [
+  ["funding", "Add naira"],
+  ["stocks", "Explore stocks"],
+  ["strategies", "Optional strategies"],
+  ["proceeds", "Review proceeds"],
+] as const;
+export function LandingDemo() {
+  const [stage, setStage] = useState<DemoStage>("funding"),
+    [stock, setStock] = useState<"TSTA" | "TSTB">("TSTA"),
+    [strategyOpened, setStrategyOpened] = useState(false),
+    [strategyScenario, setStrategyScenario] =
+      useState<StrategyScenario>("eligible"),
+    [proceedsScenario, setProceedsScenario] =
+      useState<ProceedsScenario>("eligible"),
+    [preference, setPreference] = useState<"payout" | "reinvest">("payout");
+  const [announcement, setAnnouncement] = useState("");
+  const firstTab = useRef<HTMLButtonElement>(null);
+  const { reducedMotion } = useLandingMotion();
+  const reset = () => {
+    setStage("funding");
+    setStock("TSTA");
+    setStrategyOpened(false);
+    setStrategyScenario("eligible");
+    setProceedsScenario("eligible");
+    setPreference("payout");
+    setAnnouncement(
+      "Demo reset. Add naira example selected; no strategy selected.",
+    );
+    requestAnimationFrame(() => firstTab.current?.focus());
+  };
+  return (
+    <section
+      id="demo"
+      className="section demo-section"
+      aria-labelledby="demo-title"
+    >
+      <div className="shell">
+        <div className="demo-heading">
+          <div>
+            <h2 id="demo-title" className="section-title">
+              Try the details
+              <br />
+              for yourself.
+            </h2>
+            <p className="section-copy">
+              Four independent examples. No account, no real money and no
+              automatic next step.
+            </p>
+          </div>
+          <Button variant="outline" onClick={reset}>
+            <ArrowCounterClockwise aria-hidden="true" />
+            Reset demo
+          </Button>
+        </div>
+        <ol className="demo-static-steps" aria-label="Demo walkthrough">
+          <li>Review naira funding and fees.</li>
+          <li>Inspect fictional fractional stock exposure.</li>
+          <li>Explore an optional strategy separately.</li>
+          <li>Compare eligible proceeds and rollover.</li>
+        </ol>
+        <noscript>
+          <p className="nojs-demo">
+            This walkthrough is available without JavaScript. Enable JavaScript
+            to try the interactive examples.
+          </p>
+        </noscript>
+        <Tabs
+          value={stage}
+          onValueChange={(value) => {
+            if (chapters.some(([id]) => id === value)) {
+              setStage(value as DemoStage);
+              setAnnouncement(
+                `${chapters.find(([id]) => id === value)![1]} example selected.`,
+              );
+            }
+          }}
+        >
+          <TabsList
+            className="demo-tabs"
+            aria-label="Independent demo chapters"
+          >
+            {chapters.map(([id, label]) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                ref={id === "funding" ? firstTab : undefined}
+              >
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {chapters.map(([id]) => (
+            <TabsContent key={id} value={id}>
+              <motion.div
+                key={id}
+                initial={false}
+                animate={{ opacity: reducedMotion ? 1 : [0.65, 1] }}
+                transition={{ duration: reducedMotion ? 0 : 0.2 }}
+              >
+                <div className="demo-panel">
+                  <p className="independent-label">
+                    Independent illustrative example
+                  </p>
+                  {id === "funding" ? (
+                    <DemoFunding />
+                  ) : id === "stocks" ? (
+                    <DemoStocks
+                      selected={stock}
+                      onSelect={(value) => {
+                        setStock(value);
+                        setAnnouncement(`${value} fictional stock selected.`);
+                      }}
+                    />
+                  ) : id === "strategies" ? (
+                    <DemoStrategies
+                      opened={strategyOpened}
+                      scenario={strategyScenario}
+                      onOpen={() => {
+                        setStrategyOpened(true);
+                        setAnnouncement(
+                          "Strategy example opened. This is not an authorization.",
+                        );
+                      }}
+                      onScenario={(value) => {
+                        setStrategyScenario(value);
+                        setAnnouncement(
+                          `Strategy scenario: ${value.replaceAll("_", " ")}.`,
+                        );
+                      }}
+                    />
+                  ) : (
+                    <DemoProceeds
+                      scenario={proceedsScenario}
+                      preference={preference}
+                      onScenario={(value) => {
+                        setProceedsScenario(value);
+                        setAnnouncement(
+                          `Proceeds scenario: ${value.replaceAll("_", " ")}.`,
+                        );
+                      }}
+                      onPreference={(value) => {
+                        setPreference(value);
+                        setAnnouncement(
+                          `${value === "payout" ? "Payout" : "Reinvestment"} comparison selected.`,
+                        );
+                      }}
+                    />
+                  )}
+                </div>
+              </motion.div>
+            </TabsContent>
+          ))}
+        </Tabs>
+        <p className="demo-boundary">
+          All amounts are independent illustrations. No account, order or
+          strategy is created. Nothing is saved when you leave.
+        </p>
+        <p role="status" className="sr-only" aria-live="polite">
+          {announcement}
+        </p>
+      </div>
+    </section>
+  );
 }

@@ -66,7 +66,7 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 - [x] Task 2 — Build the public shell and hero choreography.
 - [x] Task 3 — Build product storytelling and remaining reference motion.
 - [x] Task 4 — Implement the exact local demo.
-- [ ] Task 5 — Complete accessibility, metadata and documentation.
+- [x] Task 5 — Complete accessibility, metadata and documentation.
 - [ ] Task 6 — Run final verification, visual review and handoff.
 
 ### Task 1 — Establish design, assets and primitives
@@ -181,13 +181,13 @@ type LandingDemoFixture = {
 
 **Interfaces:** Use the existing Next metadata API and Geist configuration. Title **V3ST — Start with naira. See investing clearly.** Description must identify an illustrative beta preview. `robots: { index: false, follow: false }` remains in force pending a separate public-release decision.
 
-- [ ] Complete visible focus styles, contrast, 44px control targets, semantic headings/landmarks, descriptive logo alt text, tab/dialog names and screen-reader treatment of decorative SVG/canvas. Respect safe areas and long labels.
-- [ ] Apply live `prefers-reduced-motion` changes and global pause consistently: stop ticker, floating tiles, path cycling, fluid simulation, parallax and cursor follower; preserve essential content and controls. Pause must not reset the demo. Resume must not trigger a sudden jump through missed animation frames.
-- [ ] Complete no-JS, failed-enhancement, WebGL-unavailable and short-viewport fallback behavior. No hidden essential server HTML or endless skeleton. Ensure overlays/sheets do not leave body scrolling locked after closing/unmounting.
-- [ ] Generate original V3ST favicon and static 1200×630 PNG social artwork with approved palette/type, no third-party endorsements or return figures. Set metadata paths, alt text and dimensions. Use an explicitly configured application URL if an absolute URL is required; do not invent a public production domain.
-- [ ] Update README: `/` now contains the marketing page and local illustrative demo; financial APIs remain unchanged; describe pause/reset and beta/noindex status, local-only asset serving, preview prerequisites, and final E2E commands. Distinguish this frontend assignment from the earlier backend-only onchain release.
-- [ ] Document selected dependency/CLI versions, brand provenance, any adapted renderer/license, source-to-component mapping, accessible deviations from Katana and unresolved asset limitations in the review record. Do not claim verification yet.
-- [ ] Review complete copy/metadata for unsupported ownership, income, safety, partner or audit claims. Update checklist and commit: `feat: finish landing accessibility and V3ST metadata`.
+- [x] Complete visible focus styles, contrast, 44px control targets, semantic headings/landmarks, descriptive logo alt text, tab/dialog names and screen-reader treatment of decorative SVG/canvas. Respect safe areas and long labels.
+- [x] Apply live `prefers-reduced-motion` changes and global pause consistently: stop ticker, floating tiles, path cycling, fluid simulation, parallax and cursor follower; preserve essential content and controls. Pause must not reset the demo. Resume must not trigger a sudden jump through missed animation frames.
+- [x] Complete no-JS, failed-enhancement, WebGL-unavailable and short-viewport fallback behavior. No hidden essential server HTML or endless skeleton. Ensure overlays/sheets do not leave body scrolling locked after closing/unmounting.
+- [x] Generate original V3ST favicon and static 1200×630 PNG social artwork with approved palette/type, no third-party endorsements or return figures. Set metadata paths, alt text and dimensions. Use an explicitly configured application URL if an absolute URL is required; do not invent a public production domain.
+- [x] Update README: `/` now contains the marketing page and local illustrative demo; financial APIs remain unchanged; describe pause/reset and beta/noindex status, local-only asset serving, preview prerequisites, and final E2E commands. Distinguish this frontend assignment from the earlier backend-only onchain release.
+- [x] Document selected dependency/CLI versions, brand provenance, any adapted renderer/license, source-to-component mapping, accessible deviations from Katana and unresolved asset limitations in the review record. Do not claim verification yet.
+- [x] Review complete copy/metadata for unsupported ownership, income, safety, partner or audit claims. Update checklist and commit: `feat: finish landing accessibility and V3ST metadata`.
 
 ### Task 6 — Final verification, visual review and handoff
 

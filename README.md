@@ -31,7 +31,9 @@ The environment schema enforces `APP_STAGE=beta` and keeps every integration san
 yarn dev
 ```
 
-The web page remains the T3 starter UI; this release is backend/API only. Do not use `db:push` or migration commands against a live or shared database.
+The anonymous `/` route contains the V3ST landing page and four independent local demo chapters: funding, fictional stocks, optional strategies and proceeds. No session, database, financial API, RPC or provider call is made by this page. The backend APIs remain unchanged. `Pause animations` stops decorative motion without resetting the demo; `Reset demo` restores all examples. Native anchors, the four-step explanation and FAQs work without JavaScript; interactive examples need JavaScript. The page remains beta and `noindex, nofollow`.
+
+Brand assets and fonts are locally served. The original WebGL fluid field loads lazily and falls back to original static SVG artwork when unavailable; reduced motion and short viewports use ordinary flow. The first font build needs access to Google Fonts through Next's build-time font loader; no runtime third-party font request occurs. Do not use `db:push` or migration commands against a live or shared database.
 
 ## Backend commands
 
@@ -51,3 +53,9 @@ The portable handoff includes source, configuration, Prisma schema, `yarn.lock`,
 
 Implementation review and verification evidence: [docs/implementation-review.md](docs/implementation-review.md).
 Use a separate disposable local `_test` database for verification; the review never uses the configured remote application database.
+
+## Landing verification
+
+The landing work is separate from the prior backend-only onchain release. Read [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), [PRODUCT.md](PRODUCT.md) and the [landing review](docs/superpowers/reviews/2026-11-15-v3st-landing.md). Preview locally with `yarn dev`; no worker or database is needed to view `/`, but required beta environment values must be configured. Use nonfunctional local database settings for this preview; never reuse real provider credentials.
+
+After the final beta build, run `yarn test:e2e` (Chromium installed with `yarn playwright install chromium`). Playwright owns a production server at `http://127.0.0.1:3107`, supplies simulated-only settings and an unreachable database URL, and refuses external/API/RPC/WebSocket requests. It does not start a financial worker. The full `yarn test` suite separately needs isolated local PostgreSQL beta and `_test` databases plus Forge/Anvil. Keep browser reports/screenshots/traces and generated output out of Git. No deployment is included.

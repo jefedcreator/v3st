@@ -1404,3 +1404,18 @@
     gap: 0.75rem;
   }
 }
+
+@supports (padding: env(safe-area-inset-left)) {
+  .sheet-content {
+    padding-left: env(safe-area-inset-left);
+  }
+  .header-inner {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+.landing[data-reduced-motion="true"] .flow-node {
+  animation: none !important;
+}
+.landing[data-reduced-motion="true"] .flow-contours {
+  transform: none;
+}

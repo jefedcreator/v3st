@@ -8,7 +8,7 @@ Implementation began 2026-11-15 on `codex/implement-v3st-landing` from the clean
 - [x] Task 2: anonymous shell, hero, fluid artwork and navigation.
 - [x] Task 3: stories, ecosystem, ticker, diagram, FAQ and Friday explanation.
 - [x] Task 4: exact independent local demo.
-- [ ] Task 5: accessibility, metadata and documentation.
+- [x] Task 5: accessibility, metadata and documentation.
 - [ ] Task 6: final repository/browser/visual verification and handoff.
 
 ## Decisions and workflow
@@ -46,3 +46,9 @@ Alternating quantity/fee explanations, six-row 27s illustrative ticker, all nine
 ## Task 4 implementation (unverified)
 
 Authored exact formatter/fixture/threshold tests before implementing browser-safe BigInt helpers. Local controlled Radix chapters expose the independent funding, both fictional stocks, explicit strategy example (default no selection), zero/loss cases, gross-first rollover and payout/reinvestment comparisons. Reset restores every default and focuses Add naira. User announcements are polite and separate from decorative loops. No backend imports, storage, account inputs or automatic advances. All amounts remain integer strings. Payout fee never applies to the reinvest comparison. Authored tests still await final execution; browser scenario assertions are consolidated in Task 6.
+
+## Task 5 implementation (unverified)
+
+V3ST title, beta description, noindex/nofollow, configured metadata base, original SVG icon and 1200×630 static PNG social card replace starter branding. Social art is original vector composition rasterized by sharp using official Geist font (Google Fonts repository); no provider marks or financial claims. README documents reachable page, pause/reset, local serving, independent backend prerequisites and final E2E workflow. Focus, 44px targets, semantic sections, native details and safe areas are implemented. The formatter caught a missing closing brace in the new demo tab handler; corrected before final gates. No intermediate passing result was claimed.
+
+Accessible adaptations: measured hero fit rather than fixed crop; no pin/overlap or spatial loops under reduced motion; no-JS mobile links/native FAQs/ordered explanations; focused hero actions override fading; local pause is independent of demo state. All need rendered verification.
