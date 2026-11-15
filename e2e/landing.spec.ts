@@ -215,3 +215,83 @@ test.describe("product stories and ecosystem", () => {
     ).toBeVisible();
   });
 });
+
+test.describe("interactive demo", () => {
+  test("chapters, scenarios, preference and reset behave with exact figures", async ({
+    page,
+  }) => {
+    await page.goto("/#demo");
+    await expect(
+      page.getByRole("tab", { name: "Add naira", selected: true }),
+    ).toBeVisible();
+    await expect(page.getByText("\u20a6100,000")).toBeVisible();
+    await expect(page.getByText("\u20a61,000")).toBeVisible();
+    await expect(page.getByText("\u20a699,000")).toBeVisible();
+    await expect(page.getByText(/66\.000000 USDC-equivalent/)).toBeVisible();
+
+    await page.getByRole("tab", { name: "Explore stocks" }).click();
+    await expect(page.getByText("0.25 units")).toBeVisible();
+    await page.getByRole("button", { name: /TSTB/ }).click();
+    await expect(page.getByText("1.25 units")).toBeVisible();
+    await expect(page.getByText("\u20a610,000")).toBeVisible();
+
+    await page.getByRole("tab", { name: "Choose a strategy" }).click();
+    await expect(page.getByText("No strategy selected")).toBeVisible();
+    await page.getByRole("button", { name: "Open strategy example" }).click();
+    await expect(page.getByText("\u20a65,000")).toBeVisible();
+    await page.getByRole("button", { name: "Principal loss" }).click();
+    await expect(page.getByText("\u2212\u20a62,000")).toBeVisible();
+    await expect(page.getByText("\u20a618,000")).toBeVisible();
+
+    await page.getByRole("tab", { name: "Review proceeds" }).click();
+    await expect(page.getByText("\u20a64,900")).toBeVisible();
+    await page.getByRole("button", { name: "Below minimum" }).click();
+    await expect(page.getByText("Rolls over to next Friday")).toBeVisible();
+    await expect(page.getByText("\u20a61,999.99")).toBeVisible();
+    await page.getByRole("button", { name: "At minimum" }).click();
+    await expect(page.getByText("\u20a61,900")).toBeVisible();
+    await page.getByRole("button", { name: "Reinvest" }).click();
+    await expect(page.getByText(/not applied to reinvestment/)).toBeVisible();
+    await expect(
+      page.getByText("Example bank · account •••• 1234"),
+    ).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Reset demo" }).click();
+    await expect(
+      page.getByRole("tab", { name: "Add naira", selected: true }),
+    ).toBeFocused();
+    await expect(page.getByText("\u20a6100,000")).toBeVisible();
+  });
+
+  test("reload does not restore demo selections and no storage is written", async ({
+    page,
+  }) => {
+    await page.goto("/#demo");
+    await page.getByRole("tab", { name: "Explore stocks" }).click();
+    await page.getByRole("button", { name: /TSTB/ }).click();
+    await page.reload();
+    await expect(
+      page.getByRole("tab", { name: "Add naira", selected: true }),
+    ).toBeVisible();
+    const storage = await page.evaluate(() => ({
+      local: window.localStorage.length,
+      session: window.sessionStorage.length,
+      cookies: document.cookie,
+    }));
+    expect(storage.local).toBe(0);
+    expect(storage.session).toBe(0);
+    expect(storage.cookies).toBe("");
+  });
+
+  test("every chapter panel carries the independent-example label", async ({
+    page,
+  }) => {
+    await page.goto("/#demo");
+    for (const tab of ["Add naira", "Explore stocks", "Choose a strategy", "Review proceeds"]) {
+      await page.getByRole("tab", { name: tab }).click();
+      await expect(
+        page.getByText("Independent illustrative example"),
+      ).toBeVisible();
+    }
+  });
+});
