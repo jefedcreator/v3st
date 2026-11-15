@@ -44,7 +44,7 @@ export function LandingMotion({ children }: { children: ReactNode }) {
             ) : (
               <Pause aria-hidden="true" />
             )}
-            {paused ? "Resume animations" : "Pause animations"}
+            <span>{paused ? "Resume animations" : "Pause animations"}</span>
           </Button>
         </div>
       </div>

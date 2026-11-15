@@ -30,9 +30,13 @@ export function FlowDiagram() {
   const { paused, reducedMotion } = useLandingMotion();
   const [active, setActive] = useState(0);
   const [entered, setEntered] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
   const [engaged, setEngaged] = useState(false);
   const intent = useRef<ReturnType<typeof setTimeout> | null>(null);
   const grace = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (paused || reducedMotion) setIntroDone(true);
+  }, [paused, reducedMotion]);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -108,7 +112,7 @@ export function FlowDiagram() {
     <div
       ref={ref}
       className="flow-diagram"
-      data-entered={entered}
+      data-entered={entered && !introDone}
       data-stopped={paused || reducedMotion || !visible}
       aria-label="Illustrative investing journey"
     >
@@ -132,6 +136,10 @@ export function FlowDiagram() {
         <div
           className="flow-node"
           key={label}
+          onAnimationEnd={(event) => {
+            if (index === 3 && event.animationName === "flow-enter")
+              setIntroDone(true);
+          }}
           style={{ animationDelay: `${index * 60}ms` }}
         >
           <button

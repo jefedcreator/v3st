@@ -46,7 +46,7 @@ export function MarketTicker({ rows }: { rows: readonly TickerRow[] }) {
           ))}
         </div>
       </div>
-      <ul className={reducedMotion ? "ticker-readable" : "sr-only"}>
+      <ul className={`ticker-readable ${reducedMotion ? "" : "sr-only"}`}>
         {rows.map((row) => (
           <li key={row.id}>
             <strong>{row.title}</strong>

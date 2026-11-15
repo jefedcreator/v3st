@@ -1419,3 +1419,52 @@
 .landing[data-reduced-motion="true"] .flow-contours {
   transform: none;
 }
+.landing[data-paused="true"] .flow-node {
+  animation: none !important;
+}
+/* A keyboard-focused hero control must remain above the overlapping story. */
+.hero-track:focus-within {
+  z-index: 2;
+}
+.hero-track:focus-within .hero-stage {
+  pointer-events: none;
+}
+.hero-track:focus-within .hero-actions {
+  pointer-events: auto;
+}
+@media (max-width: 767px) {
+  .hero-track[data-fit="true"] .hero-rail {
+    bottom: 5.5rem;
+  }
+}
+/* Short or zoomed viewports keep the pause control in header clearspace. */
+@media (max-height: 500px) {
+  .motion-control {
+    top: 1.625rem;
+    bottom: auto;
+    left: max(9rem, calc((100vw - 75rem) / 2 + 8rem));
+    right: auto;
+  }
+  .motion-control button {
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+  }
+  .motion-control button > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@media (max-height: 500px) and (max-width: 767px) {
+  .motion-control {
+    top: 1.375rem;
+    right: 5rem;
+    left: auto;
+  }
+}

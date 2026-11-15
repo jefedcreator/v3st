@@ -1,13 +1,12 @@
 "use client";
 import { useEffect, useRef } from "react";
+import type { createFluidRenderer } from "./fluid-renderer";
 import { useDecorationVisibility, useLandingMotion } from "./landing-motion";
 
 export function FluidBackground() {
   const { ref, visible } = useDecorationVisibility<HTMLDivElement>();
   const canvas = useRef<HTMLCanvasElement>(null);
-  const renderer = useRef<ReturnType<
-    typeof import("./fluid-renderer").createFluidRenderer
-  > | null>(null);
+  const renderer = useRef<ReturnType<typeof createFluidRenderer> | null>(null);
   const { paused, reducedMotion } = useLandingMotion();
   const pausedRef = useRef(paused);
   useEffect(() => {
@@ -22,6 +21,7 @@ export function FluidBackground() {
       renderer.current?.dispose();
       renderer.current = null;
       element.style.opacity = "0";
+      if (ref.current) ref.current.dataset.fluidState = "fallback";
     };
     const resize = () => {
       try {
@@ -42,6 +42,7 @@ export function FluidBackground() {
           try {
             renderer.current = createFluidRenderer(element, fluidDefaults);
             element.style.opacity = "1";
+            if (ref.current) ref.current.dataset.fluidState = "ready";
             renderer.current.setPaused(pausedRef.current || document.hidden);
           } catch {
             destroy();
@@ -58,7 +59,7 @@ export function FluidBackground() {
       element.removeEventListener("webglcontextlost", lost);
       window.removeEventListener("resize", resize);
     };
-  }, [reducedMotion, visible]);
+  }, [reducedMotion, visible, ref]);
   useEffect(() => {
     renderer.current?.setPaused(paused || reducedMotion || !visible);
   }, [paused, reducedMotion, visible]);
@@ -66,6 +67,7 @@ export function FluidBackground() {
     <div
       ref={ref}
       className="fluid-background"
+      data-fluid-state="static"
       aria-hidden="true"
       style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
     >

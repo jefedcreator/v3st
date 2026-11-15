@@ -68,3 +68,7 @@ yarn-error.log*
 # idea files
 .idea
 .vscode/
+
+# Browser verification artifacts
+/playwright-report/
+/test-results/

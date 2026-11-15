@@ -12,9 +12,9 @@ describe("exact illustrative money", () => {
     ["0", "₦0"],
     ["900719925474099301", "₦9,007,199,254,740,993.01"],
   ])("formats %s exactly", (raw, formatted) =>
-    expect(formatNgn(raw!)).toBe(formatted),
+    expect(formatNgn(raw)).toBe(formatted),
   );
-  it.each(["1.2", "1e6", "01", "-0", "+1", " 5", ""])(
+  it.each(["1.2", "1e6", "01", "-0", "+1", " 5", "1\n", "1\r\n", ""])(
     "rejects malformed integer %s",
     (value) => expect(() => formatNgn(value)).toThrow(),
   );
@@ -28,8 +28,9 @@ describe("exact illustrative money", () => {
     "rejects invalid decimals %s",
     (decimals) => expect(() => formatUnits("1", decimals)).toThrow(),
   );
-  it.each(["-1", "01", "1e3"])("rejects invalid raw quantity %s", (raw) =>
-    expect(() => formatUnits(raw, 6)).toThrow(),
+  it.each(["-1", "01", "1e3", "1\n"])(
+    "rejects invalid raw quantity %s",
+    (raw) => expect(() => formatUnits(raw, 6)).toThrow(),
   );
   it("checks gross threshold before fee and charges nothing on rollover", () => {
     expect(payoutPreview("199999")).toEqual({

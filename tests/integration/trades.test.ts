@@ -155,7 +155,12 @@ describe("trades", () => {
         fundsSource: "cash",
       }),
     );
-    await drainJobs();
+    // This prerequisite is not a scheduler test. Advance to the simulator's
+    // persisted settlement time rather than depending on a minute-boundary drain.
+    await tradeService.progress(okBuy.id);
+    const settledSwap = await db.simSwap.findUniqueOrThrow({ where: { key: "buy:ok" } });
+    setNow(settledSwap.settleAt.toISOString());
+    await tradeService.progress(okBuy.id);
     expect((await db.tradeOrder.findUniqueOrThrow({ where: { id: okBuy.id } })).status).toBe(
       "filled",
     );

@@ -31,7 +31,12 @@ export function HeroMotion({ children }: { children: ReactNode }) {
 
     const measure = () => {
       const rail = stage.querySelector<HTMLElement>(".hero-rail");
-      const needed = content.scrollHeight + (rail?.scrollHeight ?? 0) + 190;
+      const controlClearance = window.innerWidth < 768 ? 56 : 0;
+      const needed =
+        content.scrollHeight +
+        (rail?.scrollHeight ?? 0) +
+        190 +
+        controlClearance;
       fits = window.innerHeight >= needed && !reducedMotion;
       track.dataset.fit = String(fits);
       landing.dataset.heroFit = String(fits);

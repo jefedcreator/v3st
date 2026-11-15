@@ -1,7 +1,10 @@
 import { landingDemoFixture } from "./demo-fixtures";
 const unsigned = /^(0|[1-9]\d*)$/;
 function minor(raw: string, signed = false): bigint {
-  if (!(signed ? /^(0|-?[1-9]\d*)$/ : unsigned).test(raw))
+  if (
+    typeof raw !== "string" ||
+    !(signed ? /^(0|-?[1-9]\d*)$/ : unsigned).test(raw)
+  )
     throw new Error("Expected a canonical integer string");
   return BigInt(raw);
 }

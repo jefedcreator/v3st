@@ -30,6 +30,8 @@ The original WebGL field is lazy and bounded, with ivory contrast veil and SVG f
 
 Reduced motion is observed live: remove sticky/overlap, disable spatial/looping effects, expose static rows, use static growth art and immediate demo updates. Pause stops decorative effects without clearing demo state or replaying elapsed motion on resume. Short viewports, enlarged text and zoom fall back to ordinary document flow after measuring hero fit. No-JS preserves anchors, mobile links, four-step explanation, all disclosures and native FAQs. Canvas/SVG decoration is hidden from assistive technology; no financial information lives in canvas. One main landmark, skip link, logical headings, named tab/dialog controls and visible focus. No account, cookie/storage, backend, RPC, wallet or provider access from `/`.
 
+The mobile hero reserves space above the persistent pause control. At viewport heights up to 500px, pause becomes a 44px icon in header clearspace, retaining its full accessible name. The Sheet owns vertical overflow so short and zoomed viewports can reach every link. The synchronous root deliberately has no automatic route loading boundary; its matching skeleton is a separate component, preserving visible HTML without JavaScript. WebGL uses straight-alpha compositing so the original SVG remains visible beneath the field.
+
 ## Layers
 
 Artwork 0; content 1; header/beta 20; skip link 40; Sheet overlay 50/content 51; decorative cursor 30 (pointer-events none). Scope z-index to those roles.

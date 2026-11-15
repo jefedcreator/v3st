@@ -59,3 +59,12 @@ Use a separate disposable local `_test` database for verification; the review ne
 The landing work is separate from the prior backend-only onchain release. Read [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), [PRODUCT.md](PRODUCT.md) and the [landing review](docs/superpowers/reviews/2026-11-15-v3st-landing.md). Preview locally with `yarn dev`; no worker or database is needed to view `/`, but required beta environment values must be configured. Use nonfunctional local database settings for this preview; never reuse real provider credentials.
 
 After the final beta build, run `yarn test:e2e` (Chromium installed with `yarn playwright install chromium`). Playwright owns a production server at `http://127.0.0.1:3107`, supplies simulated-only settings and an unreachable database URL, and refuses external/API/RPC/WebSocket requests. It does not start a financial worker. The full `yarn test` suite separately needs isolated local PostgreSQL beta and `_test` databases plus Forge/Anvil. Keep browser reports/screenshots/traces and generated output out of Git. No deployment is included.
+
+For a self-contained production preview of the landing, use the pinned Node/Yarn toolchain and run these in order:
+
+```bash
+node scripts/landing-beta.mjs build
+node scripts/landing-beta.mjs start
+```
+
+Open `http://127.0.0.1:3107`. This launcher clears the documented provider environment, uses test-only beta values and an unreachable database, and starts only Next. Stop it before running Playwright, which owns the same port. The synchronous root has no automatic loading boundary so its content and hash links remain available without JavaScript; the matching skeleton is retained in `src/components/landing/marketing-loading.tsx` for future asynchronous surfaces.

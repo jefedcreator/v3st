@@ -44,11 +44,12 @@ export function createFluidRenderer(
 ) {
   const gl = canvas.getContext("webgl2", {
     alpha: true,
+    premultipliedAlpha: false,
     antialias: false,
     depth: false,
     preserveDrawingBuffer: false,
   });
-  if (!gl || !gl.getExtension("EXT_color_buffer_float"))
+  if (!gl?.getExtension("EXT_color_buffer_float"))
     throw new Error("Fluid field needs float WebGL2 targets");
   const resources: (() => void)[] = [];
   let disposed = false;
@@ -153,7 +154,7 @@ export function createFluidRenderer(
     return result;
   }
   const uniform = (p: WebGLProgram, name: string) =>
-    gl!.getUniformLocation(p, name);
+    gl.getUniformLocation(p, name);
   function texture(p: WebGLProgram, name: string, t: Target, unit: number) {
     gl!.activeTexture(gl!.TEXTURE0 + unit);
     gl!.bindTexture(gl!.TEXTURE_2D, t.texture);
