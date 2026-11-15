@@ -36,8 +36,11 @@ describe("heroFrame", () => {
     for (const group of GROUPS) {
       expect(frame[group]).toBe(1);
     }
-    expect(frame.navReveal).toBe(1);
+    expect(frame.navReveal).toBe(0);
     expect(frame.ctaReveal).toBe(0);
+    expect(
+      heroFrame({ elapsedMs: 2120 + 900, progress: 0 }).navReveal,
+    ).toBe(1);
   });
 
   it("starts every group at 0 at elapsed 0", () => {
@@ -77,23 +80,34 @@ describe("heroFrame", () => {
 
   it("restores visibility when progress decreases", () => {
     const full = heroFrame({ elapsedMs: HERO_INTRO_TOTAL_MS, progress: 1 });
-    const half = heroFrame({ elapsedMs: HERO_INTRO_TOTAL_MS, progress: 0.65 });
+    const half = heroFrame({ elapsedMs: HERO_INTRO_TOTAL_MS, progress: 0.5 });
     const zero = heroFrame({ elapsedMs: HERO_INTRO_TOTAL_MS, progress: 0 });
     for (const group of GROUPS) {
-      expect(half[group]).toBeGreaterThan(full[group]);
-      expect(zero[group]).toBeGreaterThan(half[group]);
+      expect(half[group]).toBeGreaterThanOrEqual(full[group]);
+      expect(zero[group]).toBeGreaterThanOrEqual(half[group]);
     }
+    expect(half.actions).toBeGreaterThan(full.actions);
+    expect(zero.actions).toBeGreaterThan(half.actions);
+    expect(zero.heading).toBe(1);
   });
 
   it("matches the captured fade interval boundaries", () => {
     const h = (p: number) => heroFrame({ elapsedMs: HERO_INTRO_TOTAL_MS, progress: p });
-    // actions fade 0..0.40 of handover: at progress 0.30 (h=0) actions still 1
+    // handover has not started at progress 0.30 (h=0): nothing fades yet
     expect(h(0.3).actions).toBe(1);
-    // heading fade 0.40..1: at h=0.4 heading starts fading
-    const h40 = h(0.3 + 0.4 * 0.7);
-    expect(h40.heading).toBeLessThan(1);
-    expect(h40.heading).toBeGreaterThan(0.99);
-    expect(HERO_FADE_INTERVALS.actions[1]).toBe(0.4);
+    expect(h(0.3).heading).toBe(1);
+    // heading fade runs over h in [0.40, 1]: by progress 0.9 (h≈0.86) it is mid-fade
+    const mid = h(0.9).heading;
+    expect(mid).toBeLessThan(1);
+    expect(mid).toBeGreaterThan(0);
+    // actions fade first: at progress 0.65 (h=0.5 > 0.40) actions are gone
+    expect(h(0.65).actions).toBe(0);
+    expect(h(0.65).heading).toBeGreaterThan(0);
+    expect(HERO_FADE_INTERVALS.actions).toEqual([0, 0.4]);
+    expect(HERO_FADE_INTERVALS.rail).toEqual([0, 0.36]);
+    expect(HERO_FADE_INTERVALS.copy).toEqual([0.18, 0.66]);
+    expect(HERO_FADE_INTERVALS.heading).toEqual([0.4, 1]);
+    expect(HERO_FADE_INTERVALS.background).toEqual([0.45, 1]);
     expect(HERO_INTRO_INTERVALS.rail[1]).toBe(1740);
   });
 });

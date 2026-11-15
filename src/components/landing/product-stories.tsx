@@ -46,8 +46,8 @@ export function ProductStories() {
         aria-labelledby="explore-heading"
         className="mx-auto max-w-[1200px] px-6 py-14 md:py-28"
       >
-        <div className="grid items-center gap-10 lg:grid-cols-2">
-          <div>
+        <div className="grid items-center gap-10 lg:grid-cols-2 [&>*]:min-w-0">
+          <div className="min-w-0">
             <h2
               id="explore-heading"
               className="text-3xl font-bold tracking-tight text-balance text-ink md:text-5xl"
@@ -79,8 +79,8 @@ export function ProductStories() {
         aria-labelledby="costs-heading"
         className="mx-auto max-w-[1200px] px-6 py-14 md:py-28"
       >
-        <div className="grid items-center gap-10 lg:grid-cols-2">
-          <div className="order-2 lg:order-1">
+        <div className="grid items-center gap-10 lg:grid-cols-2 [&>*]:min-w-0">
+          <div className="order-2 min-w-0 lg:order-1">
             <div className="rounded-2xl border border-rule bg-surface p-6">
               <h3 className="text-sm font-semibold tracking-wide text-primary uppercase">
                 Fees before confirmation
@@ -105,7 +105,7 @@ export function ProductStories() {
               </p>
             </div>
           </div>
-          <div className="order-1 lg:order-2">
+          <div className="order-1 min-w-0 lg:order-2">
             <h2
               id="costs-heading"
               className="text-3xl font-bold tracking-tight text-balance text-ink md:text-5xl"
@@ -124,8 +124,8 @@ export function ProductStories() {
         aria-labelledby="no-wallet-heading"
         className="mx-auto max-w-[1200px] px-6 py-14 md:py-28"
       >
-        <div className="grid items-center gap-10 lg:grid-cols-2">
-          <div>
+        <div className="grid items-center gap-10 lg:grid-cols-2 [&>*]:min-w-0">
+          <div className="min-w-0">
             <h2
               id="no-wallet-heading"
               className="text-3xl font-bold tracking-tight text-balance text-ink md:text-5xl"

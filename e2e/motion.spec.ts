@@ -60,6 +60,8 @@ test.describe("hero choreography", () => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto("/");
     const track = page.locator("[data-hero-track]");
+    await track.waitFor();
+    await page.waitForTimeout(800);
     const height = await track.evaluate((el) => el.getBoundingClientRect().height);
     expect(height).toBeGreaterThan(1000 * 1.59);
     expect(height).toBeLessThan(1000 * 1.61);

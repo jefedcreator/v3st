@@ -68,3 +68,8 @@ yarn-error.log*
 # idea files
 .idea
 .vscode/
+
+# playwright browser artifacts
+/playwright-report/
+/test-results/
+/playwright/.cache/

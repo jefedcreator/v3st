@@ -55,15 +55,13 @@ export function MarketTicker({ rows }: { rows: readonly TickerRow[] }) {
   );
 
   return (
-    <div
-      className={cn("ticker-root", stopped && "ticker-paused")}
-      onMouseEnter={() => setHoverPaused(true)}
-      onMouseLeave={() => setHoverPaused(false)}
-      onFocus={() => setHoverPaused(true)}
-      onBlur={() => setHoverPaused(false)}
-    >
+    <div className={cn("ticker-root", stopped && "ticker-paused")}>
       <div
         className="ticker-viewport h-[22rem] overflow-hidden sm:h-[26rem]"
+        onMouseEnter={() => setHoverPaused(true)}
+        onMouseLeave={() => setHoverPaused(false)}
+        onFocus={() => setHoverPaused(true)}
+        onBlur={() => setHoverPaused(false)}
         style={
           reducedMotion
             ? undefined

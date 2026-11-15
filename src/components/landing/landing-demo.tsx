@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { RotateCounterClockwise } from "@phosphor-icons/react/dist/ssr";
+import { ArrowCounterClockwise } from "@phosphor-icons/react/dist/ssr";
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "@/primitives";
 import { landingDemoFixture } from "./demo-fixtures";
 import type { DemoStage } from "./demo.types";
@@ -86,7 +86,7 @@ export function LandingDemo() {
         >
           <TabsList
             aria-label="Demo chapters"
-            className="h-auto w-full flex-wrap justify-start rounded-2xl sm:w-fit sm:flex-nowrap sm:rounded-full"
+            className="h-auto w-full flex-wrap justify-start rounded-2xl group-data-[orientation=horizontal]/tabs:h-auto sm:w-fit sm:flex-nowrap sm:rounded-full"
           >
             {STAGES.map((s, index) => (
               <TabsTrigger
@@ -146,7 +146,7 @@ export function LandingDemo() {
 
       <div className="mt-8 flex flex-wrap items-center gap-4">
         <Button variant="outline" size="sm" onClick={reset}>
-          <RotateCounterClockwise className="size-4" weight="bold" />
+          <ArrowCounterClockwise className="size-4" weight="bold" />
           Reset demo
         </Button>
         <p className="text-sm text-ink-muted">

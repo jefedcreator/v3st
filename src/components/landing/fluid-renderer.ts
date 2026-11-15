@@ -226,6 +226,13 @@ type ProgramInfo = {
   uniforms: Record<string, WebGLUniformLocation | null>;
 };
 
+function uniform(
+  info: ProgramInfo,
+  name: string,
+): WebGLUniformLocation | null {
+  return info.uniforms[name] ?? null;
+}
+
 function compileShader(
   gl: WebGLRenderingContext,
   type: number,
@@ -356,16 +363,20 @@ export function createFluidRenderer(
   canvas: HTMLCanvasElement,
   options: FluidOptions,
 ): FluidRenderer {
-  const gl = canvas.getContext("webgl", {
+  const context = canvas.getContext("webgl", {
     alpha: false,
     depth: false,
     stencil: false,
     antialias: false,
     preserveDrawingBuffer: false,
-  }) as WebGLRenderingContext | null;
-  const extFloat = gl?.getExtension("OES_texture_float");
-  const extFloatLinear = gl?.getExtension("OES_texture_float_linear");
-  if (!gl || !extFloat) {
+  });
+  if (!context) {
+    throw new Error("WebGL is not available");
+  }
+  const gl: WebGLRenderingContext = context;
+  const extFloat = gl.getExtension("OES_texture_float");
+  const extFloatLinear = gl.getExtension("OES_texture_float_linear");
+  if (!extFloat) {
     throw new Error("WebGL with float textures is not available");
   }
   const filter = extFloatLinear ? gl.LINEAR : gl.NEAREST;
@@ -438,15 +449,15 @@ export function createFluidRenderer(
     const aspect = canvas.width / Math.max(1, canvas.height);
     const radius = Math.max(0.00005, options.cursorSize / 100000);
     gl.useProgram(programs.splat.program);
-    gl.uniform1i(programs.splat.uniforms.uTarget, velocity.read.attach(0));
-    gl.uniform1f(programs.splat.uniforms.aspectRatio, aspect);
-    gl.uniform2f(programs.splat.uniforms.point, x, y);
-    gl.uniform3f(programs.splat.uniforms.color, dx, dy, 0);
-    gl.uniform1f(programs.splat.uniforms.radius, radius);
+    gl.uniform1i(uniform(programs.splat, "uTarget"), velocity.read.attach(0));
+    gl.uniform1f(uniform(programs.splat, "aspectRatio"), aspect);
+    gl.uniform2f(uniform(programs.splat, "point"), x, y);
+    gl.uniform3f(uniform(programs.splat, "color"), dx, dy, 0);
+    gl.uniform1f(uniform(programs.splat, "radius"), radius);
     blit(velocity.write);
     velocity.swap();
-    gl.uniform1i(programs.splat.uniforms.uTarget, dye.read.attach(0));
-    gl.uniform3f(programs.splat.uniforms.color, color[0], color[1], color[2]);
+    gl.uniform1i(uniform(programs.splat, "uTarget"), dye.read.attach(0));
+    gl.uniform3f(uniform(programs.splat, "color"), color[0], color[1], color[2]);
     blit(dye.write);
     dye.swap();
   }
@@ -457,63 +468,63 @@ export function createFluidRenderer(
 
     if (options.isViscous) {
       gl.useProgram(programs.viscous.program);
-      gl.uniform2f(programs.viscous.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-      gl.uniform1f(programs.viscous.uniforms.viscous, options.viscous);
-      gl.uniform1f(programs.viscous.uniforms.dt, dtSeconds);
-      gl.uniform1i(programs.viscous.uniforms.uVelocity, velocity.read.attach(0));
-      gl.uniform1i(programs.viscous.uniforms.uSource, velocity.read.attach(1));
+      gl.uniform2f(uniform(programs.viscous, "texelSize"), velocity.texelSizeX, velocity.texelSizeY);
+      gl.uniform1f(uniform(programs.viscous, "viscous"), options.viscous);
+      gl.uniform1f(uniform(programs.viscous, "dt"), dtSeconds);
+      gl.uniform1i(uniform(programs.viscous, "uVelocity"), velocity.read.attach(0));
+      gl.uniform1i(uniform(programs.viscous, "uSource"), velocity.read.attach(1));
       for (let i = 0; i < options.iterationsViscous; i += 1) {
-        gl.uniform1i(programs.viscous.uniforms.uVelocity, velocity.read.attach(0));
-        gl.uniform1i(programs.viscous.uniforms.uSource, velocity.write.attach(1));
+        gl.uniform1i(uniform(programs.viscous, "uVelocity"), velocity.read.attach(0));
+        gl.uniform1i(uniform(programs.viscous, "uSource"), velocity.write.attach(1));
         blit(velocity.write);
         velocity.swap();
       }
     }
 
     gl.useProgram(programs.divergence.program);
-    gl.uniform2f(programs.divergence.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(programs.divergence.uniforms.uVelocity, velocity.read.attach(0));
+    gl.uniform2f(uniform(programs.divergence, "texelSize"), velocity.texelSizeX, velocity.texelSizeY);
+    gl.uniform1i(uniform(programs.divergence, "uVelocity"), velocity.read.attach(0));
     blit(divergence);
 
     gl.useProgram(programs.clear.program);
-    gl.uniform1i(programs.clear.uniforms.uTexture, pressure.read.attach(0));
-    gl.uniform1f(programs.clear.uniforms.value, 0.8);
+    gl.uniform1i(uniform(programs.clear, "uTexture"), pressure.read.attach(0));
+    gl.uniform1f(uniform(programs.clear, "value"), 0.8);
     blit(pressure.write);
     pressure.swap();
 
     gl.useProgram(programs.pressure.program);
-    gl.uniform2f(programs.pressure.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(programs.pressure.uniforms.uDivergence, divergence.attach(0));
+    gl.uniform2f(uniform(programs.pressure, "texelSize"), velocity.texelSizeX, velocity.texelSizeY);
+    gl.uniform1i(uniform(programs.pressure, "uDivergence"), divergence.attach(0));
     for (let i = 0; i < options.iterationsPoisson; i += 1) {
-      gl.uniform1i(programs.pressure.uniforms.uPressure, pressure.read.attach(1));
+      gl.uniform1i(uniform(programs.pressure, "uPressure"), pressure.read.attach(1));
       blit(pressure.write);
       pressure.swap();
     }
 
     gl.useProgram(programs.gradientSubtract.program);
-    gl.uniform2f(programs.gradientSubtract.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(programs.gradientSubtract.uniforms.uPressure, pressure.read.attach(0));
-    gl.uniform1i(programs.gradientSubtract.uniforms.uVelocity, velocity.read.attach(1));
+    gl.uniform2f(uniform(programs.gradientSubtract, "texelSize"), velocity.texelSizeX, velocity.texelSizeY);
+    gl.uniform1i(uniform(programs.gradientSubtract, "uPressure"), pressure.read.attach(0));
+    gl.uniform1i(uniform(programs.gradientSubtract, "uVelocity"), velocity.read.attach(1));
     blit(velocity.write);
     velocity.swap();
 
     gl.useProgram(programs.advection.program);
-    gl.uniform2f(programs.advection.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
+    gl.uniform2f(uniform(programs.advection, "texelSize"), velocity.texelSizeX, velocity.texelSizeY);
     if (!extFloatLinear) {
-      gl.uniform2f(programs.advection.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
+      gl.uniform2f(uniform(programs.advection, "texelSize"), velocity.texelSizeX, velocity.texelSizeY);
     }
     const velocityId = velocity.read.attach(0);
-    gl.uniform1i(programs.advection.uniforms.uVelocity, velocityId);
-    gl.uniform1i(programs.advection.uniforms.uSource, velocityId);
-    gl.uniform1f(programs.advection.uniforms.dt, dtSeconds);
-    gl.uniform1f(programs.advection.uniforms.dissipation, 0);
+    gl.uniform1i(uniform(programs.advection, "uVelocity"), velocityId);
+    gl.uniform1i(uniform(programs.advection, "uSource"), velocityId);
+    gl.uniform1f(uniform(programs.advection, "dt"), dtSeconds);
+    gl.uniform1f(uniform(programs.advection, "dissipation"), 0);
     blit(velocity.write);
     velocity.swap();
 
-    gl.uniform2f(programs.advection.uniforms.texelSize, dye.texelSizeX, dye.texelSizeY);
-    gl.uniform1i(programs.advection.uniforms.uVelocity, velocity.read.attach(0));
-    gl.uniform1i(programs.advection.uniforms.uSource, dye.read.attach(1));
-    gl.uniform1f(programs.advection.uniforms.dissipation, options.dissipation - 1);
+    gl.uniform2f(uniform(programs.advection, "texelSize"), dye.texelSizeX, dye.texelSizeY);
+    gl.uniform1i(uniform(programs.advection, "uVelocity"), velocity.read.attach(0));
+    gl.uniform1i(uniform(programs.advection, "uSource"), dye.read.attach(1));
+    gl.uniform1f(uniform(programs.advection, "dissipation"), options.dissipation - 1);
     blit(dye.write);
     dye.swap();
   }
@@ -521,8 +532,8 @@ export function createFluidRenderer(
   function render() {
     if (!dye) return;
     gl.useProgram(programs.display.program);
-    gl.uniform1i(programs.display.uniforms.uTexture, dye.read.attach(0));
-    gl.uniform3f(programs.display.uniforms.background, background[0], background[1], background[2]);
+    gl.uniform1i(uniform(programs.display, "uTexture"), dye.read.attach(0));
+    gl.uniform3f(uniform(programs.display, "background"), background[0], background[1], background[2]);
     blit(null);
   }
 
@@ -536,7 +547,8 @@ export function createFluidRenderer(
   let colorIndex = 0;
 
   const pickColor = (scale = 0.35): [number, number, number] => {
-    const c = dyeColors[colorIndex % dyeColors.length] ?? dyeColors[0];
+    const c: [number, number, number] =
+      dyeColors[colorIndex % dyeColors.length] ?? [0.09, 0.4, 0.2];
     colorIndex += 1;
     return [c[0] * scale, c[1] * scale, c[2] * scale];
   };

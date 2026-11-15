@@ -67,7 +67,7 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 - [x] Task 3 — Build product storytelling and remaining reference motion (implemented; unverified until Task 6).
 - [x] Task 4 — Implement the exact local demo (implemented; unverified until Task 6).
 - [x] Task 5 — Complete accessibility, metadata and documentation (implemented; unverified until Task 6).
-- [ ] Task 6 — Run final verification, visual review and handoff.
+- [x] Task 6 — Run final verification, visual review and handoff (all gates green; evidence in docs/superpowers/reviews/2026-11-15-v3st-landing.md).
 
 ### Task 1 — Establish design, assets and primitives
 

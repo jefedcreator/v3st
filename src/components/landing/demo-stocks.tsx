@@ -10,9 +10,8 @@ export function DemoStocks({
   selected: DemoStock["id"];
   onSelect: (id: DemoStock["id"]) => void;
 }) {
-  const stock =
-    landingDemoFixture.stocks.find((s) => s.id === selected) ??
-    landingDemoFixture.stocks[0];
+  const stock = landingDemoFixture.stocks.find((s) => s.id === selected);
+  if (!stock) return null;
 
   return (
     <div className="rounded-2xl border border-rule bg-surface p-6">
