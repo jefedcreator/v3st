@@ -46,7 +46,7 @@
 
 Planning used installed Superpowers `writing-plans` 7.0.2. Application verification is not run for this documentation-only task. Source baseline inspected: `2459d65` (`fix: type path parameters and null API input slots`). Recheck changed interfaces at implementation start.
 
-Self-review covered spec requirements, task dependencies, shared types, provider provenance and each Review Focus condition. It incorporated architecture-review findings on dual nonces, durable local keys, once-only funding, deadline recovery and income entitlement. Documentation checks verified local links, balanced code fences and 15 ordered tasks; no application or contract test result is implied. All implementation tasks below remain unstarted.
+Self-review covered spec requirements, task dependencies, shared types, provider provenance and each Review Focus condition. It incorporated architecture-review findings on dual nonces, durable local keys, once-only funding, deadline recovery and income entitlement. Documentation checks verified local links, balanced code fences and 15 ordered tasks; no application or contract test result is implied. At planning time, all implementation tasks below were unstarted. The merged implementation was subsequently audited on 2026-11-15; see [the implementation review](../../implementation-review.md) for repairs and executed verification evidence.
 
 | Observed code | Required adaptation |
 | --- | --- |

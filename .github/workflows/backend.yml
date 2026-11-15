@@ -1,0 +1,44 @@
+name: Backend beta verification
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: v3st_beta
+          POSTGRES_PASSWORD: local_ci_only
+          POSTGRES_DB: v3st_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U v3st_beta -d v3st_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      APP_STAGE: beta
+      DATABASE_URL: postgresql://v3st_beta:local_ci_only@127.0.0.1:5432/v3st_beta
+      TEST_DATABASE_URL: postgresql://v3st_beta:local_ci_only@127.0.0.1:5432/v3st_test
+      YELLOWCARD_MODE: simulated
+      SIMULATED_IDENTITY_SECRET: ci-synthetic-identity-secret-test-only
+      PAYCREST_SIM_WEBHOOK_SECRET: ci-synthetic-paycrest-secret
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      SENTRY_DSN: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm install --global yarn@1.22.22
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.9.0
+      - run: bash scripts/setup-cloud.sh
+      - run: yarn prisma validate
+      - run: yarn prisma generate
+      - run: yarn test:contracts
+      - run: yarn test
+      - run: yarn lint
+      - run: yarn typecheck
+      - run: yarn build

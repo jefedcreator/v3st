@@ -423,7 +423,7 @@ src/backend/services/onchain/
 ├── registry.ts           # onchainRegistry.spot/strategy with typed 422/503 errors
 ├── testnet.ts            # loopback RPC client, anvil lifecycle, deployment manifests
 ├── providers/{o1,bankr,hydrex,stonks,basestonk,feel}/  # replicas + disabled factories
-└── execution/            # prepare/submit/observe/finalize, policy checks, nonces
+src/backend/services/execution/  # prepare/submit/observe/finalize, policy checks, nonces
 contracts/testnet/        # labelled local replica contracts (Foundry, solc pinned)
 contracts/test/           # forge behavioral tests
 ```

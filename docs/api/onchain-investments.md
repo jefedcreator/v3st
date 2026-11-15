@@ -8,9 +8,7 @@ calldata or eligibility flag. No response contains wallet-signing payloads, priv
 provider signing instructions; the relayer pays all testnet gas, so users never top up.
 
 Error contract: `409` for expired/changed quotes, consumed quotes and inadequate balances
-(`INSUFFICIENT_FUNDS`, `AUTHORIZATION_EXCEEDED`, `QUOTE_EXPIRED` on strategy quotes; an expired
-investment quote instead returns `202` with `status: "needs_confirmation"` and the cash stays
-with the user), `422 CAPABILITY_UNAVAILABLE` for unsupported capabilities, `503` with a typed
+(`INSUFFICIENT_FUNDS`, `AUTHORIZATION_EXCEEDED`, `QUOTE_EXPIRED` for an expired confirmation; cash remains with the user), `422 CAPABILITY_UNAVAILABLE` for unsupported capabilities, `503` with a typed
 reason for unverified providers, sponsor shortage or unhealthy networks, `404` for cross-user
 resources, `403` for non-operators on `/ops/*`.
 
@@ -41,7 +39,7 @@ resources, `403` for non-operators on `/ops/*`.
 
 | Endpoint | Request → result |
 | --- | --- |
-| `POST /strategy-quotes` | `{ strategy_id, action: "enter", inputs?: [{asset, raw}], budget_raw? }` or `{ strategy_id, action: "claim" }` or `{ position_id, action: "exit"\|"claim" }` → multi-asset maximum inputs / minimum outputs, user fee, expiry, `preparatory_swap` flag |
+| `POST /strategy-quotes` | `{ strategy_id, action: "enter", budget_ngn }` (compatibility forms: `budget_raw` or explicit `inputs`, exactly one) or `{ strategy_id, action: "claim" }` or `{ position_id, action: "exit"\|"claim" }` → multi-asset maximum inputs / minimum outputs, user fee, expiry, `preparatory_swap` flag |
 | `POST /strategy-operations` | `{ quote_id, authorization_id }` + `Idempotency-Key` → `202` operation (explicit separate consent for entry); replay returns `200` with the same operation |
 | `GET /strategy-positions`, `GET /strategy-operations/:id` | Own receipt quantities, principal/value, pending rewards and status |
 
@@ -72,3 +70,15 @@ Journeys are covered by `tests/api/onchain-journey.test.ts` (login → bank rece
 funding → quote/confirm → holdings → strategy entry → reward claim → conversion → Friday payout,
 plus a failed-buy cash fallback) and `tests/api/onchain-errors.test.ts` (auth, origin, idempotency,
 strict bodies, cross-user 404s, scenario scoping, operator role).
+
+Customer confirmation keys are namespaced by user. Every replay revalidates the original payload; a changed quote or authorization under the same key returns 409. Sell requests accept `quantity_raw`; `input_raw` remains a compatibility alias. Quote fees disclose their source asset and raw amount separately from settlement estimates.
+
+Naira-sized investment quotes retain and return `fx_rate` with integer-string
+`kobo`/`micro_usd`, `as_of` and display-cache `expires_at` evidence. Input sizing and
+standing-cap reservations use the accepted rational rate. The quote's own
+`expires_at` governs acceptance/broadcast; refreshing the display cache cannot
+change accepted inputs. Acquired lots retain the kobo-per-dollar acquisition rate.
+Position values become unavailable when reference prices are stale. Strategy
+allocation checks use the price basis and multiplier once and retain that evidence
+for settlement; their reference-based entry value is an estimate, separate from
+actual asset movements and FIFO investment cost.

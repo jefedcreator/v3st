@@ -48,3 +48,6 @@ The web page remains the T3 starter UI; this release is backend/API only. Do not
 Follow `CLAUDE.md`: write the relevant tests with each task, review and commit focused changes, then run the complete gate once after the whole implementation: `bash scripts/setup-cloud.sh`, `yarn prisma validate`, `yarn prisma generate`, `yarn test:contracts`, `yarn test`, `yarn lint`, `yarn typecheck`, `yarn build`. The final plan gate lists the complete acceptance commands and beta-containment cases.
 
 The portable handoff includes source, configuration, Prisma schema, `yarn.lock`, the requirements, repository instructions, and the plan. Prisma output, `node_modules`, build caches, local credentials and `.env` files are excluded. `package-lock.json` is local-only because this project uses Yarn.
+
+Implementation review and verification evidence: [docs/implementation-review.md](docs/implementation-review.md).
+Use a separate disposable local `_test` database for verification; the review never uses the configured remote application database.
