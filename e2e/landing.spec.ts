@@ -122,3 +122,96 @@ test.describe("landing shell", () => {
     expect(violations).toEqual([]);
   });
 });
+
+test.describe("product stories and ecosystem", () => {
+  test("ticker is labelled illustrative, loops at 27s for six rows and pauses via its control", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await expect(
+      page.getByText("Illustrative examples · not live prices"),
+    ).toBeVisible();
+    const track = page.locator(".ticker-track");
+    await expect(track).toBeVisible();
+    const duration = await track.evaluate(
+      (el) => getComputedStyle(el).animationDuration,
+    );
+    expect(duration).toBe("27s");
+    const pause = page.getByRole("button", { name: "Pause ticker" });
+    await pause.click();
+    const playState = await track.evaluate(
+      (el) => getComputedStyle(el).animationPlayState,
+    );
+    expect(playState).toBe("paused");
+    await page.getByRole("button", { name: "Resume ticker" }).click();
+    const resumed = await track.evaluate(
+      (el) => getComputedStyle(el).animationPlayState,
+    );
+    expect(resumed).toBe("running");
+    const duplicate = page.locator(".ticker-track ul[aria-hidden='true']");
+    await expect(duplicate).toHaveCount(1);
+    await expect(
+      page.locator(".sr-only li", { hasText: "TSTA" }),
+    ).toHaveCount(1);
+  });
+
+  test("all nine provider marks and the Base/Solana/USDC row render with local sources", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const section = page.locator("#ecosystem");
+    await section.scrollIntoViewIfNeeded();
+    const names = [
+      "Yellow Card",
+      "Paycrest",
+      "Privy",
+      "o1 Exchange",
+      "Bankr",
+      "Hydrex / Hydropump",
+      "Stonks Exchange",
+      "BaseStonk",
+      "Feel.cash",
+      "Base",
+      "Solana",
+      "USDC",
+    ];
+    for (const name of names) {
+      const img = section.getByRole("img", { name });
+      await expect(img, name).toBeVisible();
+      const src = await img.getAttribute("src");
+      expect(src).toMatch(/^\/brands\//);
+      const natural = await img.evaluate(
+        (el) => (el as HTMLImageElement).naturalWidth,
+      );
+      expect(natural, name).toBeGreaterThan(0);
+    }
+    await expect(
+      section.getByText(/Integrations are simulated in this beta/),
+    ).toBeVisible();
+  });
+
+  test("FAQ disclosures work with keyboard and without JavaScript", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    await page.goto("/");
+    const first = page.locator("#faq details summary").first();
+    await expect(first).toBeVisible();
+    await first.click();
+    await expect(
+      page.locator("#faq details[open] p").first(),
+    ).toBeVisible();
+    await context.close();
+  });
+
+  test("diagram highlight never changes demo state", async ({ page }) => {
+    await page.goto("/#demo");
+    await page.locator("[data-hero-track]").waitFor();
+    await page.locator(".diagram-node").first().hover();
+    await page.waitForTimeout(1000);
+    await expect(
+      page.getByRole("tab", { name: "Add naira", selected: true }),
+    ).toBeVisible();
+  });
+});
