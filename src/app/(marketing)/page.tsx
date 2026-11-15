@@ -5,6 +5,7 @@ import { Header } from "@/components/landing/header";
 import { Hero } from "@/components/landing/hero";
 import { HeroMotion } from "@/components/landing/hero-motion";
 import { HowItWorks } from "@/components/landing/how-it-works";
+import { LandingDemo } from "@/components/landing/landing-demo";
 import { LandingMotion } from "@/components/landing/landing-motion";
 import { ProductStories } from "@/components/landing/product-stories";
 import { ProviderEcosystem } from "@/components/landing/provider-ecosystem";
@@ -30,6 +31,7 @@ export default function MarketingPage() {
             <ProductStories />
             <ProviderEcosystem />
             <HowItWorks />
+            <LandingDemo />
             <FridayProceeds />
             <Faq />
           </div>
