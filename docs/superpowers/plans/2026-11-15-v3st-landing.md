@@ -62,7 +62,7 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 
 ## Task checklist
 
-- [ ] Task 1 — Establish design, assets and primitives.
+- [x] Task 1 — Establish design, assets and primitives.
 - [ ] Task 2 — Build the public shell and hero choreography.
 - [ ] Task 3 — Build product storytelling and remaining reference motion.
 - [ ] Task 4 — Implement the exact local demo.
@@ -79,17 +79,17 @@ Feature component filenames are kebab-case with PascalCase exports, as required 
 - Primitive exports retain generated APIs: `Button`, `buttonVariants`, `Badge`, `Card` parts, `Tabs` parts, `Sheet` parts, `Skeleton`.
 - `ProviderLogo = { id: string; name: string; src: string; width: number; height: number; sourceUrl: string; category: "provider" | "network" | "settlement" }`; export readonly `providerLogos` and `infrastructureLogos`. Source URLs are provenance, not automatic external links in the product.
 
-- [ ] Inspect Git state, create an isolated implementation branch if needed, and preserve unrelated changes. Read the required documents and spec before choosing patterns.
-- [ ] Run setup with the pinned toolchain. Use a cloud-local beta environment; do not reuse or print the developer's `.env`. Install dependencies using Yarn only. Record any missing service tooling for the final gate.
-- [ ] Discover Superpowers/Impeccable in the cloud environment. Use their installed entry points when available. For Impeccable, run its context command once; load new-work/animate guidance, and craft-floor immediately before UI edits. If unavailable, use this plan's embedded guidance and record the limitation without blocking work or installing unrelated plugins.
-- [ ] Write `PRODUCT.md` from approved product truth and `DESIGN_SYSTEM.md` from the spec. Include tokens, type/spacing, primitive APIs, motion formulas, static fallbacks, contrast and icon rules. Record Persuade/Operate surface roles in the spec, not as a global product style mandate.
-- [ ] Reconcile the frontend guide: mark unrelated education/payment routes as examples, remove contradictory dark-theme instructions for V3ST, replace `framer-motion` guidance with `motion/react`, distinguish installed packages from future ones, document the `@/utils/cn` exception, and retain real backend contracts. Do not add theme/query/form libraries merely to satisfy copied examples.
-- [ ] Add required dependencies: `motion`, `radix-ui`, `@phosphor-icons/react`, `class-variance-authority`, `clsx`, `tailwind-merge`, `tw-animate-css`. Resolve versions compatible with current React/Next; lock actual versions and do not upgrade unrelated backend/framework packages.
-- [ ] Configure shadcn for Tailwind v4, RSC, `src/styles/globals.css`, `ui: "@/primitives"`, `utils: "@/utils/cn"`. Generate only button, badge, card, tabs, sheet and skeleton using the official CLI. Record the CLI version. Ensure dependency installation uses Yarn even if an ignored local npm lockfile exists.
-- [ ] Restyle generated primitives in place with semantic tokens. Use unified `radix-ui` imports, replace Lucide with Phosphor SSR imports, remove unnecessary direct/scoped/icon dependencies, and expose the primitives barrel. Use `asChild` for anchor buttons; never nest an anchor inside a button.
-- [ ] Implement `@theme static` tokens and base light styles. Theme focus-visible, selection and tabular financial numerals. Keep all content visible by default; do not set global reveal opacity to zero.
-- [ ] Source every provider/network/settlement mark from the spec's official links. Inspect actual bytes, dimensions, content type, SVG scripts/events/external references and approved variants. Store locally with source page, exact asset URL, date, dimensions and variant in the manifest. Preserve geometry and colors. Resolve Feel.cash's missing asset locator from its official site; record an honest exception if inaccessible.
-- [ ] Review the diff for Node-only client imports, unrelated dependencies, real credentials, invented claims and copied Katana assets. Mark Task 1 implemented but unverified, update checklist and commit: `feat: establish V3ST landing design foundation`.
+- [x] Inspect Git state, create an isolated implementation branch if needed, and preserve unrelated changes. Read the required documents and spec before choosing patterns.
+- [x] Run setup with the pinned toolchain. Use a cloud-local beta environment; do not reuse or print the developer's `.env`. Install dependencies using Yarn only. Record any missing service tooling for the final gate.
+- [x] Discover Superpowers/Impeccable in the cloud environment. Use their installed entry points when available. For Impeccable, run its context command once; load new-work/animate guidance, and craft-floor immediately before UI edits. If unavailable, use this plan's embedded guidance and record the limitation without blocking work or installing unrelated plugins.
+- [x] Write `PRODUCT.md` from approved product truth and `DESIGN_SYSTEM.md` from the spec. Include tokens, type/spacing, primitive APIs, motion formulas, static fallbacks, contrast and icon rules. Record Persuade/Operate surface roles in the spec, not as a global product style mandate.
+- [x] Reconcile the frontend guide: mark unrelated education/payment routes as examples, remove contradictory dark-theme instructions for V3ST, replace `framer-motion` guidance with `motion/react`, distinguish installed packages from future ones, document the `@/utils/cn` exception, and retain real backend contracts. Do not add theme/query/form libraries merely to satisfy copied examples.
+- [x] Add required dependencies: `motion`, `radix-ui`, `@phosphor-icons/react`, `class-variance-authority`, `clsx`, `tailwind-merge`, `tw-animate-css`. Resolve versions compatible with current React/Next; lock actual versions and do not upgrade unrelated backend/framework packages.
+- [x] Configure shadcn for Tailwind v4, RSC, `src/styles/globals.css`, `ui: "@/primitives"`, `utils: "@/utils/cn"`. Generate only button, badge, card, tabs, sheet and skeleton using the official CLI. Record the CLI version. Ensure dependency installation uses Yarn even if an ignored local npm lockfile exists.
+- [x] Restyle generated primitives in place with semantic tokens. Use unified `radix-ui` imports, replace Lucide with Phosphor SSR imports, remove unnecessary direct/scoped/icon dependencies, and expose the primitives barrel. Use `asChild` for anchor buttons; never nest an anchor inside a button.
+- [x] Implement `@theme static` tokens and base light styles. Theme focus-visible, selection and tabular financial numerals. Keep all content visible by default; do not set global reveal opacity to zero.
+- [x] Source every provider/network/settlement mark from the spec's official links. Inspect actual bytes, dimensions, content type, SVG scripts/events/external references and approved variants. Store locally with source page, exact asset URL, date, dimensions and variant in the manifest. Preserve geometry and colors. Resolve Feel.cash's missing asset locator from its official site; record an honest exception if inaccessible.
+- [x] Review the diff for Node-only client imports, unrelated dependencies, real credentials, invented claims and copied Katana assets. Mark Task 1 implemented but unverified, update checklist and commit: `feat: establish V3ST landing design foundation`.
 
 ### Task 2 — Build the public shell and hero choreography
 

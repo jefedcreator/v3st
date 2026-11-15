@@ -1,502 +1,218 @@
-# Frontend Patterns Guide
+# V3ST Frontend Patterns Guide
 
-This document captures the frontend conventions established in this codebase (Next.js App Router). It's meant to be a portable reference — apply these patterns to any new Next.js project to keep architecture, naming, and data-flow consistent across the org.
+This guide defines V3ST's Next.js App Router frontend conventions. Read `CLAUDE.md`, `DESIGN_SYSTEM.md`, `PRODUCT.md` and the active feature specification before implementation. `Design.md` remains product architecture; do not overwrite it with a visual-design document. `BACKEND_PATTERNS.md` governs the existing HTTP, service, validator and database layers.
 
----
+The public landing assignment follows [the landing specification](docs/superpowers/specs/2026-11-15-v3st-landing-design.md) and [its plan](docs/superpowers/plans/2026-11-15-v3st-landing.md). It adds an anonymous marketing page and browser-local illustrative demo, without financial API changes or authenticated dashboards.
 
-## 1. Stack
+All V3ST operation remains beta. Every external integration uses a verified sandbox/test environment or simulation; Paycrest is simulated-only. `NODE_ENV=production` selects an optimized build and secure cookies, never real providers. A local replica does not establish verified access to an external provider.
 
-```
-next                     ^15   App Router, RSC by default
-react                    ^19
-typescript               ^5.8  strict, noUncheckedIndexedAccess, checkJs
-tailwindcss              v4    tokens in `@theme static` in src/styles/globals.css;
-                               there is no tailwind.config.ts
-@tailwindcss/postcss     ^4    the v4 build step (+ tw-animate-css for shadcn's
-                               animation utilities)
-shadcn/ui                      CLI only, never a runtime dependency. v4 mode,
-                               CSS variables, generates into src/primitives.
-                               The source of every primitive it has (§6); a
-                               component may bring its own deps (cmdk, react-day-picker)
-radix-ui                 ^1.6  the unified package: `import { Slot } from "radix-ui"`.
-                               The scoped `@radix-ui/react-*` packages exist only as
-                               its transitive deps — never add one directly.
-motion                   ^14   animation & microinteractions (not framer-motion)
-@tanstack/react-query    ^5    client caching, background refetching, mutations
-axios                    ^1    typed HTTP client with centralized interceptors
-react-hook-form          ^7    forms with zodResolver (see §7)
-class-variance-authority ^0.7  (cva) + tailwind-merge ^3 + clsx ^2 — variant-driven styling
-@phosphor-icons/react    ^2    the icon set (see §4)
-@t3-oss/env-nextjs       ^0.12 typed, validated env vars
-prisma / @prisma/client  ^6    database
-zod                      ^3    validation
-react-hook-form          ^7    uncontrolled forms (see §7)
-@hookform/resolvers      ^5    bridges a Zod schema into `useForm`
-vitest                   ^4    tests (`yarn test` → `vitest run`)
-```
+## 1. Stack and dependency status
 
-**Aspirational, not yet installed:** `zustand`, `nuqs`, `sonner`. Fluid is light-only: no `next-themes`.
+`package.json` and `yarn.lock` are the source of truth for installed packages and resolved versions. Before landing Task 1, the baseline includes:
 
----
+| Package                                 | Role                                                |
+| --------------------------------------- | --------------------------------------------------- |
+| Next.js 15 / React 19                   | App Router; Server Components by default            |
+| TypeScript 5                            | Strict types, `noUncheckedIndexedAccess`, `checkJs` |
+| Tailwind CSS 4 / `@tailwindcss/postcss` | CSS-first tokens and PostCSS build                  |
+| Zod 3 / `@t3-oss/env-nextjs`            | Server validation and typed environment             |
+| Prisma 6 / `@prisma/client`             | Server-side PostgreSQL access                       |
+| `viem`                                  | Existing server-side local-testnet execution        |
+| `@sentry/nextjs`                        | Existing centralized backend reporting              |
+| Vitest 5 / Vite 7 / `tsx`               | Existing tests and TypeScript scripts               |
 
-## 2. Project structure
+Landing Task 1 adds `motion`, unified `radix-ui`, `@phosphor-icons/react`, `class-variance-authority`, `clsx`, `tailwind-merge` and `tw-animate-css`. Resolve compatible versions through Yarn and record actual versions in the review record. The official shadcn CLI generates source; shadcn/ui is not a runtime dependency. Playwright is added for final browser verification.
 
-```
+TanStack Query, Axios, React Hook Form, `@hookform/resolvers`, Zustand, nuqs and sonner are future feature patterns, not baseline installed dependencies or landing requirements. Do not install them merely to satisfy an example. V3ST has one light theme: no `next-themes` or theme provider/toggle. Animation imports come from `motion/react`.
+
+Use the Node version in `.nvmrc` and Yarn 1.22.22. Start setup with `bash scripts/setup-cloud.sh`. Keep `yarn.lock` as the only committed package-manager lockfile. Generated Prisma output, dependencies and build output stay uncommitted.
+
+## 2. V3ST structure and routing
+
+This tree distinguishes the landing target from the existing backend; it does not claim every planned frontend file already exists:
+
+```text
 src/
-├── app/                      ← App Router routes ONLY (pages, layouts, route handlers)
-│   ├── (auth)/               ← /login — sign-in
-│   ├── (dashboard)/          ← the signed-in dashboard: /dashboard, /payments, /links, /destinations, /settings
-│   ├── (pay)/                ← public payment pages: /<code> and /<code>/<paymentId>
-│   ├── (app)/                ← route group: the authenticated app surfaces
-│   │   ├── layout.tsx        ← the wash and the chrome (see below)
-│   │   ├── day/page.tsx      ← today's session — the app's home
-│   │   ├── progress/page.tsx
-│   │   ├── mock/
-│   │   │   ├── page.tsx
-│   │   │   └── [id]/page.tsx ← a running exam section, drawn without chrome
-│   │   ├── leaderboards/     ← page.tsx, [slug]/page.tsx
-│   │   ├── duels/page.tsx
-│   │   └── profile/page.tsx
-│   ├── profile/              ← /profile (owner, authed) & /profile/[handle] (public, reached via /@handle rewrite outside auth)
-│   ├── (marketing)/          ← route group: the public landing page
-│   └── api/                  ← Route Handlers, mirrors the resource tree
-│       ├── attempts/route.ts
-│       ├── day/
-│       │   ├── route.ts
-│       │   ├── blocks/route.ts
-│       │   └── complete/route.ts
-│       ├── mock/
-│       │   ├── route.ts
-│       │   └── [id]/
-│       │       ├── complete/route.ts
-│       │       └── submit/route.ts
-│       ├── progress/route.ts
-│       └── reviews/route.ts
-│
-├── server/                   ← RSC wrappers over the services (getDashboardSummary, getPayPage, …)
-├── backend/                  ← server-only application logic (never imported client-side)
-│   ├── validators/           ← Zod schemas, one file per resource: `[resource].validator.ts`
-│   ├── services/             ← integrations & business logic, one folder per service
-│   ├── middleware/           ← composable route-handler middleware
-│   └── cron/                 ← scheduled jobs
-│
-├── server/                   ← server-side data-fetch layer consumed by Server Components
-│   ├── index.ts              ← re-exports typed fetch wrappers (getDay, getProgress, getMockHistory, getMockFormats, …)
-│   ├── day.ts
-│   ├── mock.ts               ← also getMockFormats: the assembler's blueprint + a bank count
-│   └── progress.ts
-│
-├── components/                ← "smart" feature components (kebab-case files)
-│   ├── app-nav.ts             ← APP_NAV (the pill nav: Today, Progress, Mocks), ACCOUNT_NAV (the account menu), hasAppChrome
-│   ├── app-topbar.tsx         ← 'use client' — logo, three-item ink pill nav, account menu: one row at every width
-│   ├── account-menu.tsx       ← 'use client' — email, Profile/Leaderboards/Duels, theme switch, sign-out
-│   ├── app-chrome.tsx         ← 'use client' — topbar + the 62rem column + <main>; mounted BY THE LAYOUT, never a page
-│   ├── page-header.tsx        ← every (app) page's title and its one plain line
-│   ├── markdown.tsx           ← the curriculum's markdown subset: day lessons and grammar pages
-│   ├── app-error.tsx          ← the fallback when a surface's data will not load
-│   ├── app-skeleton.tsx       ← what every (app) loading.tsx is built from
-│   ├── theme-toggle.tsx       ← 'use client' — next-themes toggle with Framer Motion icon swap (landing footer)
-│   ├── day/                   ← day-page-client.tsx, day-spine.tsx (the row of four steps), lesson-recap.tsx, use-reveal-on-change.ts, blocks/
-│   ├── mock/                  ← mock-hub-client.tsx, mock-session-client.tsx, mock-score-report.tsx, mock-attempt-row.tsx
-│   ├── progress/              ← progress-page-client.tsx, programme-board.tsx
-│   ├── exercises/             ← the four renderers plus parts.tsx (the shared frame, options, feedback)
-│   └── landing/               ← marketing sections of `/`: hero, strip, track, method, exam, etc.
-│
-├── primitives/                ← "dumb" reusable UI building blocks (design system layer)
-│   ├── index.ts               ← barrel export for the folder — hand-built and generated alike
-│   ├── Meta.tsx, Shell.tsx, Stat.tsx, Surface.tsx, FadeIn.tsx   ← hand-built, PascalCase
-│   ├── Card.tsx, KeyValue.tsx, Notice.tsx, Chip.tsx,            ← the pale-wash-glass set
-│   │   Body.tsx, EmptyState.tsx                                    (see DESIGN_SYSTEM §4)
-│   └── button.tsx, accordion.tsx                                ← shadcn/ui-generated, kebab-case
-│
-├── hooks/                     ← TanStack Query hooks & mutations (`use-*.ts`)
-│   ├── queries/               ← `use-day.ts`, `use-progress.ts`, `use-mock.ts`
-│   └── mutations/             ← `use-day-mutations.ts`, `use-mock-mutations.ts`
-│
-├── provider/                  ← app-wide context providers (QueryProvider, ThemeProvider)
-│   ├── index.tsx              ← unified root Provider wrapper
-│   ├── query-provider.tsx     ← SSR-safe QueryClient singleton provider
-│   └── theme-provider.tsx     ← next-themes ThemeProvider wrapper
-│
-├── types/                     ← shared TS types/interfaces (DTOs, contract.ts)
-├── utils/                     ← pure helpers, `cn`, `axios.ts`, `api.ts`, theme constants
-└── styles/                    ← globals.css, CSS custom properties
+├── app/
+│   ├── layout.tsx                  # root document, Geist, static V3ST metadata
+│   ├── (marketing)/                # anonymous /; landing implementation target
+│   │   ├── page.tsx                # static Server Component composition
+│   │   └── loading.tsx             # matching route fallback
+│   └── api/v1/                     # existing canonical Route Handlers
+│       ├── auth/{session,logout}/
+│       ├── deposits/               # plus stocks, investments, portfolio, strategies
+│       ├── withdrawals/            # plus earnings, bank accounts and events
+│       └── ops/                    # operator-only API contracts
+├── components/landing/             # feature sections and focused client islands
+├── primitives/                     # generated/restyled UI building blocks
+│   └── index.ts                    # public primitive exports
+├── backend/
+│   ├── middleware/                 # withMiddleware, auth and input validators
+│   ├── validators/                 # strict per-domain Zod contracts
+│   ├── services/                   # domain singletons; database/provider access
+│   ├── integrations/               # beta policy and provider evidence
+│   └── workers/                    # durable job execution
+├── server/
+│   ├── db.ts                       # existing Prisma singleton and transactions
+│   ├── prisma.ts                   # generated Prisma namespace exports
+│   └── auth/constants.ts           # canonical sara-session name
+├── types/                          # API envelopes, DTOs and operator contracts
+├── utils/
+│   ├── index.ts                    # server helpers; imports node:crypto
+│   ├── cn.ts                       # browser-safe landing addition
+│   ├── money.ts                    # existing exact server money helpers
+│   └── response.ts                 # server response envelopes
+└── styles/globals.css              # @theme static tokens and base styling
 ```
 
-### Rules of thumb
-
-- **`app/`** contains _only_ routing concerns: a Server Component `page.tsx` that fetches data and renders one client component. Business logic never lives in `page.tsx`.
-- **`server/`** vs **`backend/`**: `server/` is the _consumer-facing_ fetch layer used by Server Components (thin wrappers around `fetch` with fallbacks). `backend/` is where the actual API logic, validators, and services live, imported only from Route Handlers.
-- Each route folder gets its own `loading.tsx` — Next's built-in Suspense boundary, styled as a skeleton matching the eventual layout. The `(app)` ones are built from `app-skeleton.tsx` and draw **the page body alone**: the chrome is mounted by the layout and stays standing while the page suspends, so a skeleton that redrew it would replace a live pill nav with a dead copy of itself for the length of the fetch.
-- **`(app)/layout.tsx` mounts the wash _and the chrome_.** The one-row topbar — pill nav and account menu — comes from `AppChrome`, mounted once by the layout and **never composed by a page**. This is not a style choice: only a layout survives a route change, so chrome rendered from a page is unmounted and rebuilt on every navigation — replaying its entrance animation, dropping whatever `AccountMenu` held open, and mounting the nav three times per move once `loading.tsx` draws its own copy. Mounted from the layout it persists, and only its own UI state — the current marker, read from `usePathname` — changes.
-- **Today's session is home.** `DEFAULT_AFTER_AUTH` is `/day`, the logo links there, and `/dashboard` (retired 2026-10-19) is redirected to it in `next.config.js`. Config redirects run before middleware, so the middleware matcher carries no `/dashboard` entry.
-- **The one route without chrome opts out from inside `AppChrome`, on the client.** `/mock/[id]` renders a running exam section, and an app navigation across the top of one is an exit the real test does not offer. `hasAppChrome(pathname)` in `app-nav.ts` is that rule. It is read from `usePathname` rather than from a middleware header because a shared layout is _not_ re-rendered when the reader moves between its own children — a server-side branch there would only ever update on a full page load.
-- **The chrome carries no data.** The layout's only read is the account check behind the email prompts, and it catches its own failure — `error.tsx` sits _below_ the layout and cannot catch what the layout itself throws, so an unreadable account costs the prompts and nothing else. The day number lives on `/day` and Progress, which already read it.
-- **`(app)/template.tsx` wraps the page body only.** Next renders `layout > template > page`, so the chrome above is outside the template's remount-per-navigation and does not re-animate with the content.
-- A **feature** (e.g. "mock", "progress", "day") owns one `*-page-client.tsx` that composes queries (`useProgressQuery`), mutation hooks (`useSubmitAnswerMutation`), and user interaction. Presentational pieces stay dumb and receive props/callbacks only.
-- **`primitives/`** is the design-system layer and holds two kinds of file side by side: hand-built PascalCase primitives (`Shell`, `Meta`, `Surface`, `Stat`, `FadeIn`) and shadcn/ui-generated kebab-case ones (`button`, `accordion`). `components.json` points the CLI at it (`"ui": "@/primitives"`), so `npx shadcn@latest add …` writes there directly — no relocation step. Both kinds are re-exported from `primitives/index.ts`; feature code imports from `@/primitives`.
-
----
-
-## 3. Naming conventions
-
-| What                                     | Convention                                                                                | Example                                                 |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Feature components (`src/components`)    | kebab-case file, PascalCase export                                                        | `mock-hub-client.tsx` → `export function MockHubClient` |
-| Hand-built primitives (`src/primitives`) | PascalCase file **matching** the export                                                   | `Surface.tsx` → `export function Surface`               |
-| shadcn/ui-generated primitives           | kebab-case, lowercase — the _filename_ is left as scaffolded, the styling is not (see §6) | `button.tsx`, `accordion.tsx`                           |
-| Query / Mutation Hooks                   | kebab-case filename prefixed with `use-`, camelCase export                                | `use-progress.ts` → `useProgressQuery`                  |
-| Zod validators                           | `[resource].validator.ts`, schema var `xValidatorSchema`, type `XValidatorSchema`         | `day.validator.ts` → `patchBlockValidatorSchema`        |
-| Types                                    | PascalCase interfaces/types in `src/types/index.ts`, or colocated `*.types.ts`            | `GetDaySessionResponseData`, `ProgressResponseData`     |
-| API route folders                        | mirror the REST resource path exactly                                                     | `api/mock/[id]/submit/route.ts`                         |
-| Query keys                               | factory object with `all`, `lists()`, `detail(id)`                                        | `progressKeys.all`, `mockKeys.detail(id)`               |
-
-**Barrel files**: `src/primitives/index.ts`, `src/utils/index.ts`, `src/provider/index.tsx` re-export the public surface of that folder — import from the barrel (`@/primitives`, `@/utils`, `@/provider`) in feature code.
-
-**Path alias**: `@/*` → `src/*` (configured in `tsconfig.json`). Never use deep relative imports (`../../../`) across feature boundaries.
-
----
-
-## 4. Iconography
-
-- **The icon set is `@phosphor-icons/react`** — the only one installed. There is no `lucide-react` and no `react-icons` in this project.
-- **shadcn/ui generates `lucide-react` imports.** When you add a component (§6), swap each icon for its Phosphor equivalent: `X`, `Check`, `CaretDown`, `CaretUp`, `CaretLeft`, `CaretRight`, `Circle` (`weight="fill"`), `MagnifyingGlass`, `DotsThree`, `CircleNotch`. Then remove `lucide-react` if the CLI installed it.
-- **Runtime icons always come from the SSR entry**, in Server _and_ Client Components alike:
-  `import { ArrowRight, Moon, Sun, Exam } from "@phosphor-icons/react/dist/ssr"`. Every runtime icon import in `src/` uses this path. Don't import runtime icons from the package root.
-- **The package root is for the `Icon` type only**, because the ssr entry doesn't export it: `import type { Icon } from "@phosphor-icons/react"`.
-- Weight is a prop (`weight="bold"` / `weight="fill"`).
-- Icons are sized with Tailwind (`className="size-4"`), never hand-rolled SVG per component.
-
----
-
-## 5. Styling — light only
-
-Fluid is **light-only**: no `next-themes`, no `.dark` block.
-
-### Tailwind v4
-
-Tokens live in `@theme static` in `src/styles/globals.css` — there is no `tailwind.config.ts` and one must not be added. Reference tokens (`bg-bone`, `text-ink-2`, `border-rule`, `text-h1`, `rounded-surface`), never raw hex.
-
-- `static` is load-bearing: without it Tailwind only emits the tokens it saw used, and dark mode overrides these variables at runtime.
-
-### Dark Mode Architecture with `next-themes`
-
-Dark mode is **attribute-driven** via `next-themes` using `data-theme="dark"` / `data-theme="light"`:
-
-1. **Provider Setup (`src/provider/theme-provider.tsx` & `src/provider/index.tsx`):**
-
-   ```tsx
-   // src/provider/theme-provider.tsx
-   "use client";
-   import {
-     ThemeProvider as NextThemesProvider,
-     type ThemeProviderProps,
-   } from "next-themes";
-
-   export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
-     return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
-   }
-
-   // src/provider/index.tsx
-   export function Provider({ children }: { children: ReactNode }) {
-     return (
-       <QueryProvider>
-         <ThemeProvider
-           attribute="data-theme"
-           defaultTheme="system"
-           enableSystem
-           disableTransitionOnChange
-         >
-           {children}
-         </ThemeProvider>
-       </QueryProvider>
-     );
-   }
-   ```
-
-2. **Root Layout (`src/app/layout.tsx`):**
-   - Add `suppressHydrationWarning` to `<html lang="en">` so `next-themes` can set the attribute without React hydration warnings.
-   - `next-themes` automatically injects its pre-paint script, eliminating flash of unstyled theme (FOUC).
-
-3. **Theme Toggle Component (`src/components/theme-toggle.tsx`):**
-   - Consumes `useTheme()` from `next-themes` (`resolvedTheme`, `setTheme`).
-   - Uses `mounted` state guard to avoid SSR/hydration markup mismatch.
-   - Animates sun/moon icon transition smoothly using `framer-motion`'s `AnimatePresence` and `motion.div`:
-
-   ```tsx
-   "use client";
-
-   import { useEffect, useState } from "react";
-   import { AnimatePresence, motion } from "framer-motion";
-   import { useTheme } from "next-themes";
-   import { Moon, Sun } from "@phosphor-icons/react/dist/ssr";
-   import { cn } from "@/utils";
-
-   export function ThemeToggle({ className }: { className?: string }) {
-     const { resolvedTheme, setTheme } = useTheme();
-     const [mounted, setMounted] = useState(false);
-
-     useEffect(() => {
-       setMounted(true);
-     }, []);
-
-     const toggleTheme = () => {
-       setTheme(resolvedTheme === "dark" ? "light" : "dark");
-     };
-
-     if (!mounted) {
-       return (
-         <div
-           className={cn(
-             "border-rule grid size-7 place-items-center rounded-full border",
-             className,
-           )}
-           aria-hidden="true"
-         />
-       );
-     }
-
-     const isDark = resolvedTheme === "dark";
-
-     return (
-       <button
-         type="button"
-         onClick={toggleTheme}
-         aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
-         className={cn(
-           "group border-rule text-ink-3 hover:border-ink-3 hover:text-ink relative grid size-7 place-items-center overflow-hidden rounded-full border transition-colors",
-           className,
-         )}
-       >
-         <AnimatePresence mode="wait" initial={false}>
-           <motion.div
-             key={isDark ? "dark" : "light"}
-             initial={{ y: 7, opacity: 0 }}
-             animate={{ y: 0, opacity: 1 }}
-             exit={{ y: -7, opacity: 0 }}
-             transition={{ duration: 0.16, ease: "easeInOut" }}
-             className="flex items-center justify-center"
-           >
-             {isDark ? (
-               <Moon className="size-4" weight="bold" />
-             ) : (
-               <Sun className="size-4" weight="bold" />
-             )}
-           </motion.div>
-         </AnimatePresence>
-       </button>
-     );
-   }
-   ```
-
-4. **CSS Palette Specificity:**
-   In `src/styles/globals.css`, the palette flips in two places, with load-bearing order:
-   - `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }` first.
-   - `:root[data-theme="dark"]` second.
-   - `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));` binds Tailwind's `dark:` modifier to the attribute.
-
----
-
-## 6. Component architecture: primitives vs. components
-
-Two distinct layers, don't blur them:
-
-1. **`primitives/`** — dumb, app-agnostic UI atoms. Either:
-   - Hand-built (`Shell`, `Meta`, `Surface`, `Stat`, `FadeIn`), or
-   - shadcn/ui-generated (`button.tsx`, `accordion.tsx`), kept at their scaffolded filename and API but restyled in place: edit the existing `cva` call rather than wrapping it (see "shadcn/ui for every primitive it has" below).
-   - Never import `@tanstack/react-query` or feature types into `primitives/`.
-
-2. **`components/`** — feature-aware, composed from primitives. The `*-page-client.tsx` pattern:
-   - **Parent owns state**: query hooks (`useProgressQuery`), mutation hooks (`useCompleteDayMutation`), and local navigation live in the page-client component.
-   - **Children are pure UI**: cards and sections receive data and callbacks as props.
-
-### shadcn/ui for every primitive it has
-
-Primitives come from shadcn/ui, with Radix underneath, wherever shadcn has one. Never hand-roll one of these:
-- buttons, cards, badges, inputs, textareas, labels and fields;
-- tables, skeletons, avatars, separators, pagination, empty states, kbd, input groups, spinners;
-- dialogs (modals), sheets, popovers, dropdown menus, selects, tabs, switches, checkboxes, radio groups, toggle groups and tooltips;
-- the command palette (⌘K) and the calendar.
-
-The rules:
-- **Add with the CLI:** `npx shadcn@latest add <name>`. `components.json` points the CLI at `src/primitives` (`"ui": "@/primitives"`) and at the project's `cn` helper (the `"utils"` alias), so the file lands in place as `src/primitives/<name>.tsx`. Re-export it from `primitives/index.ts`.
-- **Restyle in place, never wrap.** Edit the generated `cva` call and class strings to the project's tokens: colours, radii, shadows, focus ring. A wrapper that restyles a primitive leaves two sources of truth for its look. Delete variants the design forbids, such as a red `destructive`, rather than leaving them unused.
-- **Radix only through shadcn,** via the unified `radix-ui` package (see §1). If a generated file imports a scoped `@radix-ui/react-*` package, change the import to `radix-ui` and drop the scoped package.
-- **Icons:** the CLI writes `lucide-react` imports. Swap each one for its Phosphor equivalent (§4) when you add the component, and never keep `lucide-react` installed.
-- **Token names can collide.** shadcn's `muted` is a surface colour and `muted-foreground` its text, while a project may already use `muted` for text. Never redefine an existing token for shadcn's sake; map the generated classes to the project's own names instead.
-- **Hand-built primitives (PascalCase)** are only for what shadcn doesn't have: brand marks, a QR code, a key–value list, a flat panel. The same goes for compositions of shadcn parts, such as radio cards, a date picker or a copy button. A composition uses the shadcn parts as they are; it doesn't restyle them.
-- **App-level layout is a feature component** in `components/`, not a primitive: sidebars, tab bars, page shells. Use a shadcn block, such as `sidebar`, only when its behaviour matches the design (a bottom tab bar is not shadcn's off-canvas drawer).
-
----
-
-## 7. Forms — React Hook Form + Zod
-
-- Schema lives in `src/backend/validators/[resource].validator.ts`, always `.strict()`, exports both the schema and `z.infer` type from the same file.
-- `useForm<FormValues>` where `FormValues = z.input<typeof schema>`.
-- Create forms use `defaultValues`; edit forms use `values` (re-syncs when server data changes).
-- Plain inputs use `register('field')` spread directly on the primitive (`<Input {...register('slug')} />`).
-- `noValidate` on every form — validation is Zod's job, and the browser's native
-  bubbles compete with the rendered field errors.
-- `autoComplete="off"` on ordinary forms, **but not on auth forms**. `/login`
-  and `/signup` set real tokens (`username`, `current-password`,
-  `new-password`): suppressing password managers on a sign-in form is
-  user-hostile and pushes people toward passwords weak enough to memorise.
-- Lay forms out with shadcn's field parts (`Field`, `FieldLabel`,
-  `FieldDescription`, `FieldError`; see §6), inside a plain
-  `<form noValidate onSubmit={handleSubmit(…)}>`. Bind non-native controls
-  (`Select`, `RadioGroup`, `Switch`, `Checkbox`, a date picker) through
-  React Hook Form's `Controller`.
-
----
-
-## 8. Data fetching — TanStack Query & Axios
-
-Two distinct data paths:
-
-### a. Initial/server-rendered data → `src/server/`
-
-Server Components fetch through typed wrapper functions (`getDay`, `getProgress`, `getMockHistory`) that:
-
-- Attach credentials/cookies server-side.
-- Always `try/catch` and return a **typed empty-state fallback** on failure so pages degrade gracefully instead of throwing 500s.
-- Return `null` on failure (never a typed empty fallback that could render as a false ₦0) and let the page render `AppError`; detail reads return `undefined` for not-found so pages can call `notFound()`.
-- Are passed into the client component as `initialData`, which seeds `useQuery({ queryKey, queryFn, initialData })` — avoiding client refetch waterfalls on first paint.
-- Are wrapped in React `cache()`. Per-request memoisation, not a persistent cache: a route reads the same wrapper twice — once in `generateMetadata`, once in the component — and must not pay for it twice. Next dedupes `fetch` automatically and nothing else, and these wrappers go straight to Prisma.
-
----
-
-## 8b. Page metadata — described from the page's own service
-
-Every route whose page calls a `src/server/` wrapper describes itself from **that same wrapper**, through `liveMetadata` in `src/utils/metadata.ts`. A hardcoded blurb is accurate about the route and silent about the page; `liveMetadata` says which day, which module, how many boards, whether the mock was scored.
-
-```ts
-export async function generateMetadata(): Promise<Metadata> {
-  return liveMetadata(
-    getDay,                                 // the page's own fetcher, cache()d
-    (day) => ({                             // title + description ONLY
-      title: `Day ${day.dayIndex} · ${day.lesson.moduleTitle}`,
-      description: `...`,
-    }),
-    { title: "Today's session", cardTitle: "…", path: "/day", index: false },
-  );
-}
-```
-
-**The split is the rule, and the types enforce it.**
-
-| Field | Where it goes | May carry live data |
-| --- | --- | --- |
-| `title`, `description` | the page's own HTML, served to the signed-in reader | **yes** |
-| `cardTitle`, `eyebrow`, `tag` | the query string of an `/api/og` URL | **no** |
-
-A card URL is fetched anonymously and cached indefinitely by every service a link is pasted into, so anything reaching it is published permanently to an audience the reader never chose. `liveMetadata` therefore takes a `describe` callback typed `LiveDescription` (`title` and `description`, nothing else) and **requires** a static `cardTitle` in the fallback — without which `pageMetadata` would silently fall back to `cardTitle ?? title` and carry the live title into the image URL.
-
-Other rules:
-
-- `liveMetadata` calls `unstable_rethrow` before its fallback, so `redirect()` from `requireCurrentUserId` and `notFound()` still work from inside `generateMetadata`.
-- A failed read costs the page its live description and nothing else — the component's own `try/catch` still renders `AppError`.
-- Refusals stay indistinguishable. `getBoard` returns null for both "no such board" and "not your board" (spec §6.1); the describer gives both the same generic text rather than rebuilding the enumeration oracle.
-- `path` names the actual route, slug included, so the canonical and `og:url` point at the page rather than at its index.
-- A page that calls no service keeps static `pageMetadata` — `/duels/[slug]`, which fetches client-side, is the only one.
-
-### Shared links — a public page describes the resource
-
-A link built to be sent to someone (`/cards/<slug>`, `/duels/<slug>`, `/@handle`, a study-group invite) is the one case where the card **does** carry live data, and it gets there a different way: a **public** page, outside the middleware's auth gate, whose `generateMetadata` reads the resource and points `og:image` at a **stateful** route under `/api/og/<resource>/` that reads the same row. The image is drawn from stored data rather than from query parameters, so a pasted link cannot be made to claim something about the resource that it does not lead to. The public design is shared through `src/app/api/og/house-card.tsx`.
-
-- **What may be published is fixed by a DTO,** not by the page. `InvitePreviewDto` is the example: the group's name and counts, never a member — members agreed to be seen by the group, and the card is shown to whoever the link is pasted in front of.
-- **A link that must stay at a gated address is rewritten, not redirected.** The invite link is `/leaderboards?invite=<token>`, which a signed-in reader follows to join. For a signed-out request the middleware rewrites it to the public `/invite/[token]` page instead of redirecting to `/login`. Signed out includes every link unfurler, so no user-agent list decides whether the card resolves.
-- **A dead link stops describing the resource.** A rotated invite token gets a generic "no longer active" card, and its stateful image answers 404.
-- The static cards the middleware serves to known bots for the gated `(app)` routes (`PROTECTED_BOT_METADATA`, rendered by `src/utils/bot-card.ts`) are for links that were never meant to be shared. They carry nothing live.
-
-### b. Client-side mutations & live state → `@tanstack/react-query` + Axios
-
-- **Centralized Axios Client (`src/utils/axios.ts`):** `baseURL: '/api'`, `withCredentials: true`, standard typed error handler.
-- **Typed API methods (`src/utils/api.ts`):** `api.progress.get()`, `api.mock.start(format)`, `api.day.patchBlock(payload)`, etc.
-- **Query Key Factories:**
-  ```ts
-  export const progressKeys = {
-    all: ["progress"] as const,
-    current: () => [...progressKeys.all, "current"] as const,
-  };
-  ```
-- **Mutation Hooks (`src/hooks/mutations/`):**
-  - Invalidate relevant query keys on `onSuccess` so server and client data stay synchronized:
-  ```ts
-  export function useCompleteDayMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: () => api.day.complete(),
-      onSuccess: () => {
-        void queryClient.invalidateQueries({ queryKey: dayKeys.all });
-        void queryClient.invalidateQueries({ queryKey: progressKeys.all });
-      },
-    });
-  }
-  ```
-
----
-
-## 9. Client/global state — Zustand (Target Pattern)
-
-Used sparingly for cross-tree client state seeded from the server (e.g. interactive multi-step runner state):
-
-1. **Store factory** in `src/store/index.ts` — `createXStore(initState)` returns `createStore<XState>(...)` (SSR-safe per-request).
-2. **Context provider** in `src/provider/store-provider.tsx` — creates store once per mount via `useRef`, seeds with server data.
-3. Components consume via selector hooks: `const activeItem = useMockRunnerStore((s) => s.activeItem)`.
-
----
-
-## 10. URL state — nuqs (Target Pattern)
-
-Filters, tabs, and pagination that should survive a refresh/share live in the URL:
-
-- Parser objects colocated in `src/utils/index.ts`.
-- Read and update query states with `useQueryStates(params, { shallow: false, throttleMs: 500 })`.
-
----
-
-## 11. Animation — Framer Motion
-
-- Page/list entrances: `FadeIn`, `FadeInStagger`.
-- Interactive elements: `ThemeToggle` with `AnimatePresence` and `motion.div` for icon transitions.
-- Layout-safe animations: animate transforms and opacity (`scaleX`, `translate`, `opacity`) instead of layout properties (`height`, `width`) to prevent browser layout reflows.
-
----
-
-## 12. Validation, types & backend boundary
-
-- **Zod is the single source of truth** for server validation and payload contracts.
-- **Compile-time contract proof (`src/types/contract.ts`):** Asserts type equality between service response types and documented API DTOs.
-- Route Handlers are composed with `withMiddleware(handler, [authMiddleware, bodyValidatorMiddleware(schema), ...])`.
-- Middleware carries the validators' inferred output types through `withMiddleware<B, P, Q>` in **body, path, query** order, with `null` for every unused channel. For example: body-only `withMiddleware<DepositBodySchema, null, null>`, ID detail `withMiddleware<null, PathParameters, null>`, and paginated list `withMiddleware<null, null, PaginationQuerySchema>`.
-- Handlers read `request.validatedData!`, `request.params!` and `request.query!` after the matching validators run, without casting request data inside API routes. Path transforms also reach the handler's `context.params`; unvalidated `parsedBody`, `parsedParams` and `parsedQuery` belong to the middleware pipeline.
-
-### What the client must expect from the API
-
-- **Session cookie authentication:** `parcours_session` is `HttpOnly` and attached automatically via `withCredentials: true`.
-- **`PATCH /api/day/blocks` can refuse `complete: true` with a `409`** when the block's work is incomplete.
-- **`requested` vs `filled`** on practice and test slots is surfaced as an honest underfill indicator.
-- **`GET /api/progress` returns `provisional` and `measured` scores separately** for all four skills.
-
----
-
-## 13. Environment variables
-
-- `@t3-oss/env-nextjs` + Zod schema in `src/env.js` — server vars and client vars (`NEXT_PUBLIC_*`) validated at build time.
-- Always import `{ env } from '@/env'` instead of reading `process.env`.
-
----
-
-## 14. Quick checklist: scaffolding a new feature
-
-- [ ] Zod schema(s) in `src/backend/validators/[resource].validator.ts`
-- [ ] Route Handler(s) in `src/app/api/[resource]/route.ts` composed via `withMiddleware`
-- [ ] Fetch wrapper in `src/server/[resource].ts` (`get[Resource]`) with try/catch + typed fallback
-- [ ] Shared response DTOs in `src/types/index.ts` verified by `src/types/contract.ts`
-- [ ] Query key factory in `src/hooks/queries/use-[resource].ts`
-- [ ] Mutation hook in `src/hooks/mutations/use-[resource]-mutations.ts` with cache invalidation
-- [ ] `page.tsx` (Server Component): fetches initial data, passes as `initialData` prop
-- [ ] `loading.tsx` skeleton matching layout
-- [ ] `[resource]-page-client.tsx`: connects `useQuery(initialData)` and mutations
-- [ ] Any primitive the feature needs that isn't in `src/primitives/` yet: added with `npx shadcn@latest add <name>` and restyled in place (§6), not hand-rolled
-- [ ] Interactive controls verified under both light and dark themes with `ThemeToggle`
+`public/brands/` holds authentic locally served marks and provenance. Landing fixtures, demo money helpers and motion contracts live in `src/components/landing/`. Pure assertions belong in `tests/landing/`; browser specs live in `e2e/`, outside Vitest's `tests/**/*.test.ts` match.
+
+### Historical examples, not V3ST routes or requirements
+
+Earlier versions of this portable guide contained other products' structures. The education routes `/day`, `/progress`, `/mock/[id]`, `/leaderboards`, `/duels`, `/@handle`, study-group invites, curriculum renderers, pill navigation and `DEFAULT_AFTER_AUTH=/day` are historical examples only. Their API routes, `getDay`/`getProgress` wrappers, underfill indicators, provisional scores and bot/social-card machinery do not describe V3ST.
+
+The payment-product groups `(dashboard)` and `(pay)`, `/payments`, `/links`, `/destinations`, `/<code>`, `/<code>/<paymentId>`, `getDashboardSummary` and `getPayPage` are also examples, not implemented V3ST surfaces. Do not copy their routes, redirects, middleware matchers or metadata machinery. Example component names such as `AppChrome`, `AppSkeleton`, `FadeIn` and `ThemeToggle` do not establish existing files or a required provider stack.
+
+The older ramps plan describes future customer routes such as `/portfolio`, `/deposits/new`, `/withdrawals/new`, `/earnings` and settings. The landing assignment does not implement or link to unbuilt account surfaces. Native section anchors are its navigation.
+
+### Route and component boundaries
+
+- `app/` owns routing, metadata and composition. Business logic belongs in services, never pages or Route Handlers.
+- `(marketing)/page.tsx` is a static Server Component composing server-rendered sections and client islands. `dynamic = "error"` is suitable for enforcing its anonymous boundary. It performs no session, database, API or provider reads.
+- Keep one root `/` implementation; remove the competing starter `src/app/page.tsx` when adding the marketing page.
+- Client islands own mobile navigation, local demo state and decorative lifecycle. Pass server-rendered content through `children`; never import server-only modules into client components.
+- A feature-scoped `LandingMotion` context may share only pause/reduced-motion state. Do not mount application-wide query, form, auth, theme or global-store providers for this page.
+- A route's `loading.tsx` matches its layout without artificial delays. Essential copy remains visible in default server HTML, including when enhancement fails.
+- For a future authenticated feature, persistent shared chrome belongs in its layout, outside remounting templates. Pages/loading fallbacks render only their own body. Do not impose another product's navigation or chrome exceptions.
+- `server/` already contains database/auth infrastructure. Add service-backed RSC wrappers only when a data-driven feature needs them; wrappers and Route Handlers call services instead of accessing Prisma.
+
+## 3. Naming and imports
+
+| What                       | Convention                                         | Example                                |
+| -------------------------- | -------------------------------------------------- | -------------------------------------- |
+| Feature component          | Kebab-case file, PascalCase export                 | `landing-demo.tsx` → `LandingDemo`     |
+| Hand-built primitive       | PascalCase file matching export                    | `Surface.tsx` → `Surface`, if needed   |
+| shadcn primitive           | Preserve generated filename/API                    | `button.tsx`, `tabs.tsx`               |
+| Future query/mutation hook | Kebab-case `use-` filename, camelCase export       | `use-deposits.ts` → `useDepositsQuery` |
+| Backend validator          | `[resource].validator.ts`, inferred exported types | `deposit.validator.ts`                 |
+| Wire type                  | Explicit DTO in `src/types/`                       | `DepositDto`                           |
+| Local demo type            | Feature-local, distinct from financial DTOs        | `DemoStage`, `LandingDemoFixture`      |
+| API route                  | Mirror canonical resource path                     | `api/v1/deposits/[id]/route.ts`        |
+
+`@/*` maps to `src/*`. Use aliases across feature boundaries instead of deep relative imports. Import primitives from `@/primitives`.
+
+**Browser exception to barrel imports:** `@/utils` imports `node:crypto`. Browser modules and generated primitives import `cn` directly from `@/utils/cn`. Import exact demo formatting directly from its browser-safe feature module. Do not re-export server helpers through browser barrels or move backend code to accommodate the landing. Type-only imports must stay type-only.
+
+`cn(...inputs: ClassValue[]): string` combines `clsx` and `tailwind-merge`. Configure shadcn's `utils` alias as `@/utils/cn` and `ui` as `@/primitives`.
+
+## 4. Iconography and assets
+
+- The landing's selected UI icon package is `@phosphor-icons/react`, added in Task 1. Server and Client Components use its SSR entry: `import { ArrowRight, X } from "@phosphor-icons/react/dist/ssr"`.
+- Import only the `Icon` type from the package root when needed; runtime icons use the SSR entry.
+- Prefer regular weight, tokenized size classes and `aria-hidden` beside text. Icon-only controls need accessible names and 44px targets.
+- Replace generated Lucide icons with Phosphor equivalents and remove unnecessary Lucide dependencies. Use unified `radix-ui` instead of adding scoped Radix packages directly.
+- Provider/chain/asset marks are real local assets, not UI icons. Preserve approved geometry, colors, clearspace and explicit dimensions. Record provenance in `public/brands/sources.json`; do not hotlink or fabricate unavailable marks.
+- Original growth contours and investing diagrams are artwork. Hide decorative artwork from assistive technology; it must not carry essential financial information.
+
+## 5. Styling: one light theme
+
+V3ST stays light when the system prefers dark mode. Do not add `.dark`, a theme attribute switch, `next-themes`, theme-toggle controls or hydration suppression for a nonexistent theme script.
+
+`DESIGN_SYSTEM.md` defines the semantic palette, Geist typography, widths, spacing, radii, focus and layers. Tokens live in `@theme static` in `src/styles/globals.css`; do not add `tailwind.config.ts`. `static` ensures declared tokens are emitted, including those referenced by dynamic style code. Use semantic classes instead of repeating raw colors in components.
+
+Retain Geist through `next/font`; no runtime font CDN. Use tabular financial numerals, intentional wrapping and visible focus. Body text meets 4.5:1 contrast and large text 3:1 on actual surfaces, including during artwork movement. Map generated shadcn classes to project tokens; do not redefine an existing text token as a surface token.
+
+Server HTML is visible before enhancement. No-JS, reduced motion, unavailable WebGL, short viewports, enlarged text and zoom retain the explanation and actions. Do not globally hide reveal content or clip financial figures to fixed panel heights.
+
+## 6. Primitives and feature composition
+
+`primitives/` holds app-agnostic building blocks; `components/` holds feature compositions. Primitives never import backend services, query hooks or financial feature types.
+
+Use the official shadcn CLI for primitives it provides and record the selected CLI version. Generate only what the feature needs; this landing needs Button, Badge, Card parts, Tabs parts, Sheet parts and Skeleton. Preserve generated filenames/APIs, restyle in place with project tokens and re-export through `src/primitives/index.ts`. Edit variants/classes instead of creating competing styled wrappers.
+
+Use unified `radix-ui` for generated Slot, Tabs and Dialog behavior. Preserve keyboard navigation, labelled panels/dialog titles, Escape, focus trapping/restoration and scroll-lock cleanup. Anchor buttons use `asChild`; never nest an anchor inside a button. Native `details`/`summary` suits the FAQ because it works without JavaScript.
+
+Hand-built PascalCase primitives address needs shadcn does not provide. Feature layouts, original diagrams and sections belong in `components/landing/`. Avoid unnecessary generic abstractions for small static copy blocks.
+
+The demo parent owns chapter, stock, explicit strategy-example entry, scenario and payout/reinvestment selections. Children receive props/callbacks. Every example is independent and illustrative. State resets on reload, writes no storage/cookies and creates no account, quote, authorization or operation. Decorative diagram state is separate and cannot advance the demo or imply consent.
+
+## 7. Forms: future feature pattern
+
+React Hook Form and its Zod resolver are not required or installed merely because this guide describes them. The landing has no identity, bank, signup or waitlist form, and no form provider.
+
+If a future feature needs them, derive `FormValues = z.input<typeof schema>` from a browser-safe schema. Server validation remains authoritative; do not import a server-only validator dependency graph into the browser. Use `defaultValues` for creation, deliberate resynchronization for editing, `register` for native inputs and `Controller` for non-native controls. Associate field/error descriptions accessibly. Disable native validation only when complete rendered schema errors replace it. Auth inputs use proper autocomplete tokens.
+
+## 8. Data fetching and metadata
+
+### Landing: static composition and local fixtures
+
+The root route makes zero calls to `/api/*`, `/v1/*`, `/webhooks/*`, RPCs, wallets or provider SDKs. It uses no server actions, sessions, cookies or persistent browser storage. Fonts/assets/scripts are served locally. Fixtures are explicit local integer strings, not fabricated API responses. Use bigint arithmetic without converting money to `Number`.
+
+Use Next's static metadata API and original static social artwork. Title: **V3ST — Start with naira. See investing clearly.** Describe an illustrative beta preview; retain `robots: { index: false, follow: false }`. Absolute URLs require explicit app URL configuration; do not invent a production domain.
+
+### Future authenticated reads and mutations
+
+Add typed service-backed read wrappers in `src/server/` only when needed. Use request-scoped React `cache()` for repeated reads and private/no-store financial reads. Preserve redirect/not-found control flow. Failure renders unavailable/error, never fabricated empty balances or ₦0. Distinguish failure from genuine empty results and inaccessible/missing resources.
+
+TanStack Query and Axios are optional future additions for client caching/mutations. If selected, use an SSR-safe per-user QueryClient, typed methods, query-key factories, timestamped initial data and relevant invalidation. Clear user caches/streams on logout or account changes. Axios uses canonical `baseURL: "/api/v1"` with cookie credentials. Do not add this stack to the marketing page.
+
+Private metadata must not publish balances, personal details or tokens in OG image URLs. Historical `liveMetadata`, `pageMetadata`, invite previews and bot-card examples are not installed V3ST utilities or required features. The landing uses a static public card without account access.
+
+## 9. Client and URL state
+
+Prefer local state. `LandingMotion` may share page-scoped pause/reduced-motion state without persistence. Reset demo selections independently from pause state.
+
+Zustand is aspirational for a future need across component trees; use a per-mount/per-request factory, never a shared server store. nuqs is aspirational for shareable filters/pagination. Neither belongs in this demo, whose selections do not survive reload or become URL state. Native hash anchors support deep-link entry and Back/Forward behavior.
+
+## 10. Animation: `motion/react`
+
+Import `motion`, `AnimatePresence`, hooks and motion values from `motion/react`; do not install or import `framer-motion`. Use CSS/native DOM APIs where appropriate. No GSAP, Lenis, wheel interception or scroll-jacking is required.
+
+The landing specification and `DESIGN_SYSTEM.md` define exact hero, navigation, ticker, diagram, cursor and fluid timing. Continuous work uses motion values, refs or CSS properties instead of React state every frame. Prefer transforms/opacity to layout animation. Demo changes use a 200ms opacity transition with normal-flow height; reduced motion updates immediately.
+
+Enhance visible server content after initialization. Skip blank entrance replays after delayed hydration, deep-link entry or restored scroll. Keep focused/faded controls usable and avoid invisible hit targets. Measure hero fit at short heights/zoom and fall back to ordinary flow instead of cropping.
+
+Observe reduced-motion changes live. The visible pause control stops decorative loops without clearing demo state or catching up missed frames on resume. Stop hidden/offscreen work; release listeners, timers and GPU resources on cleanup. Preserve SVG fallback on renderer failure. Ticker duplicates are decorative; expose one readable list. Diagram autoplay never changes demo selections.
+
+## 11. Validation, services and API contracts
+
+These are existing V3ST backend contracts, independent of the local demo:
+
+- Canonical handlers live under `/api/v1/**`; `/v1/:path*` and `/webhooks/:provider` rewrite to those same handlers.
+- Every exported API handler uses `withMiddleware(handler, middlewares, options)`. Handlers call singleton domain services; only services access Prisma. Database, provider and signing logic stay out of browser bundles.
+- Strict Zod schemas provide request validation/inferred types. `withMiddleware<B, P, Q>` takes **body, path, query**, with explicit `null` for unused channels. After matching validators run, read `request.validatedData!`, `request.params!`, `request.query!` without route-local casts. `context.params` receives the validated path output. `parsedBody`, `parsedParams`, `parsedQuery` remain unvalidated pipeline inputs.
+- Examples: body-only `withMiddleware<DepositBodySchema, null, null>`; ID-only `withMiddleware<null, PathParameters, null>`; pagination `withMiddleware<null, null, PaginationQuerySchema>`. Preserve `json`, `raw`, `none` body modes. Webhooks verify original raw bytes.
+- Auth precedes validators on authenticated routes. Preserve Origin protection for cookie writes and applicable `Idempotency-Key` requirements. A retry is not a new economic operation.
+- `src/types/index.ts` defines `ApiResponse<T>`, `PaginatedApiResponse<T>`, `ApiErrorResponse` and stable `ErrorCode`s. Success: `{ status, message, data }`; error: `{ status, message, code, data: null }`; pagination adds `{ total, page, size, totalPages }`.
+- Explicit `src/types/dto.ts` serializers produce snake_case wire fields. Money/raw token quantities cross JSON as integer strings, never BigInt/floats. Never expose raw Prisma rows or provider payloads.
+- `src/types/contract.ts` contains existing operator evidence/status DTOs. Preserve them; add actual compile-time assertions when needed without claiming the file already proves every service/DTO equality.
+- Quote expiry, changed terms, unavailable reads, holds and unresolved operations remain visible states. Current API docs/services govern their meaning; education examples do not.
+
+### Session transport
+
+`SESSION_COOKIE_NAME` in `src/server/auth/constants.ts` is **`sara-session`**, the existing V3ST contract. Do not substitute the historical `parcours_session` name.
+
+Sessions are opaque random 32-byte tokens stored/validated in PostgreSQL, not session JWTs or NextAuth. Cookie attributes: `HttpOnly`, `SameSite=Lax`, path `/`, `Secure` with `NODE_ENV=production`. Same-origin browser requests send it automatically; future Axios clients use credentials. Never store it in localStorage or try to decode it client-side.
+
+`authMiddleware` validates session/expiry and attaches `User & { session: Session }`; no business entity is implied. Cookie transport takes precedence over bearer; an invalid cookie must not switch principals through bearer fallback. Expired sessions are removed lazily. Beta exchange uses `POST /api/v1/auth/session`; `POST /api/v1/auth/logout` revokes the row, clears the cookie and returns JSON 200. The landing calls neither endpoint and checks no session.
+
+## 12. Environment and beta boundaries
+
+Use validated server configuration from `src/env.js` through `@/env`. Never import server environment, credentials, policy/services, Prisma, Node crypto or signing SDKs into browser modules. Only explicit `NEXT_PUBLIC_*` values may be exposed when needed; the local demo needs no provider configuration.
+
+Keep `APP_STAGE=beta`, explicit simulated/verified-sandbox modes and no live fallback across optimized builds, workers and scripts. Fictional stocks, fees/rates and settlement units are illustrative fixtures. They establish no provider access, legal ownership, guaranteed income, issuer-backed assets or real financial consent.
+
+## 13. Feature checklist and verification timing
+
+For the landing:
+
+- [ ] Static anonymous route, visible server HTML, no session/database/provider access.
+- [ ] Local state/fixtures, exact money, reset and independent decorative state.
+- [ ] Generated/restyled primitives, Phosphor SSR icons, direct `@/utils/cn` imports.
+- [ ] One light theme, local assets/fonts, beta disclosures and static noindex metadata.
+- [ ] Working anchors/FAQ and no-JS, reduced-motion, failed-WebGL, mobile/zoom fallbacks.
+- [ ] Keyboard/focus, pause/resume, overflow and network-containment assertions authored.
+
+For later data-driven features, add only necessary validators, wrapped handlers, services, DTOs, service-backed reads, reachable pages/navigation and loading/error states. Introduce query/form/store packages only for an actual requirement. Preserve ownership, private metadata, unavailable-data and session contracts.
+
+Follow `CLAUDE.md`: write tests with tasks, review diffs and commit focused task work, but defer test/lint/typecheck/build gates until the full implementation is ready. Run the active plan's final sequence and record actual results; unexecuted assertions have not passed.
