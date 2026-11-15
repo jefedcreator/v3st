@@ -1,3 +1,4 @@
+import { fromDbRaw } from "@/utils/asset-units";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -155,7 +156,7 @@ describe("paycrest direct settlement", () => {
     });
     expect(transfers).toHaveLength(1);
     expect(transfers[0]!.toAddress).toBe(order.fundingAddress);
-    expect(transfers[0]!.amount).toBe(order.fundingAmount);
+    expect(fromDbRaw(transfers[0]!.amount)).toBe(order.fundingAmount);
     expect((await withdrawalService.get(ada.id, withdrawal.id)).status).toBe("paid");
 
     let err: unknown;

@@ -56,7 +56,7 @@ export type AuthorizationDto = {
   created_at: string;
 };
 
-// Operations still holding reservations count against a standing total cap.
+// Held reservations and completed spending count against a standing total cap.
 const ACTIVE_OP_STATUSES = [
   "pending",
   "prepared",
@@ -65,6 +65,7 @@ const ACTIVE_OP_STATUSES = [
   "confirmed",
   "unknown",
   "needs_review",
+  "finalized",
 ] as const;
 
 export function authorizationToDto(row: {
@@ -116,11 +117,7 @@ class AuthorizationService {
     idempotencyKey: string,
   ): Promise<{ dto: AuthorizationDto; created: boolean }> {
     const key = `auth:${userId}:${idempotencyKey}`;
-    const requestHash = sha256Hex(
-      canonicalJson(
-        JSON.parse(JSON.stringify(input, (_k, v) => (typeof v === "bigint" ? v.toString() : v))),
-      ),
-    );
+    const requestHash = sha256Hex(canonicalJson(input));
     const existing = await db.investmentAuthorization.findUnique({ where: { key } });
     if (existing) {
       if (existing.requestHash !== requestHash) {
@@ -137,7 +134,7 @@ class AuthorizationService {
         input.quote_kind === "investment"
           ? await db.investmentQuote.findUnique({ where: { id: input.quote_id } })
           : await db.strategyQuote.findUnique({ where: { id: input.quote_id } });
-      if (!quote || quote.userId !== userId) {
+      if (quote?.userId !== userId) {
         throw new NotFoundException("Quote not found", "NOT_FOUND");
       }
       if (quote.consumedAt) {
@@ -204,7 +201,7 @@ class AuthorizationService {
 
   async getOwned(userId: string, id: string): Promise<AuthorizationDto> {
     const row = await db.investmentAuthorization.findUnique({ where: { id } });
-    if (!row || row.userId !== userId) {
+    if (row?.userId !== userId) {
       throw new NotFoundException("Authorization not found", "NOT_FOUND");
     }
     return authorizationToDto(row);
@@ -213,7 +210,7 @@ class AuthorizationService {
   async revoke(userId: string, id: string): Promise<AuthorizationDto> {
     return withTx(async (tx) => {
       const row = await tx.investmentAuthorization.findUnique({ where: { id } });
-      if (!row || row.userId !== userId) {
+      if (row?.userId !== userId) {
         throw new NotFoundException("Authorization not found", "NOT_FOUND");
       }
       if (row.revokedAt) return authorizationToDto(row);
@@ -233,7 +230,7 @@ class AuthorizationService {
   // Re-validated before signing: ownership, active state and expiry.
   async assertActive(tx: Tx, userId: string, authorizationId: string): Promise<void> {
     const auth = await tx.investmentAuthorization.findUnique({ where: { id: authorizationId } });
-    if (!auth || auth.userId !== userId) {
+    if (auth?.userId !== userId) {
       throw new NotFoundException("Authorization not found", "NOT_FOUND");
     }
     if (auth.revokedAt) {
@@ -272,7 +269,7 @@ class AuthorizationService {
     if (auth.kind === "one_time") {
       // All limits resolve from the owned persisted quote the consent is bound to.
       const q = usage.quote;
-      if (!q || q.kind !== auth.quoteKind || q.id !== auth.quoteId) {
+      if (q?.kind !== auth.quoteKind || q.id !== auth.quoteId) {
         throw new UnprocessableEntityException(
           "One-time authorization is bound to a different quote",
           "AUTHORIZATION_EXCEEDED",
@@ -308,11 +305,16 @@ class AuthorizationService {
     if (ngnKobo === 0n && q && q.valueMicroUsd > 0n) {
       let rate: Awaited<ReturnType<typeof ratesService.display>>["payoutRate"];
       try {
-        rate = (await ratesService.display()).payoutRate;
+        const acceptedQuote = q.kind === "investment"
+          ? await tx.investmentQuote.findUnique({ where: { id: q.id } })
+          : await tx.strategyQuote.findUnique({ where: { id: q.id } });
+        const fx = (acceptedQuote?.context as { fxRate?: { kobo: string; microUsd: string } } | null)?.fxRate;
+        if (acceptedQuote && !fx) throw new Error("Accepted quote has no FX basis");
+        rate = fx ? { kobo: BigInt(fx.kobo), microUsd: BigInt(fx.microUsd) } : (await ratesService.display()).payoutRate;
       } catch {
         throw new UnprocessableEntityException("Missing valuation basis for this action", "VALIDATION_FAILED");
       }
-      ngnKobo = usdToNgn(q.valueMicroUsd, rate, "floor");
+      ngnKobo = usdToNgn(q.valueMicroUsd, rate, "ceil");
     }
     if (q && q.valueMicroUsd > 0n && ngnKobo === 0n) {
       throw new UnprocessableEntityException("Missing valuation basis for this action", "VALIDATION_FAILED");
@@ -336,8 +338,7 @@ class AuthorizationService {
       throw new ConflictException("Authorization total cap exceeded", "AUTHORIZATION_EXCEEDED");
     }
     if (q?.feeMicroUsd !== undefined && q.valueMicroUsd > 0n && auth.maxFeeBps !== null) {
-      const feeBps = (q.feeMicroUsd * 10_000n) / q.valueMicroUsd;
-      if (feeBps > BigInt(auth.maxFeeBps)) {
+      if (q.feeMicroUsd * 10_000n > q.valueMicroUsd * BigInt(auth.maxFeeBps)) {
         throw new UnprocessableEntityException("Fee exceeds the authorized ceiling", "AUTHORIZATION_EXCEEDED");
       }
     }

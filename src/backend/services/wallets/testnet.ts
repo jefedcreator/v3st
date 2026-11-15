@@ -2,7 +2,7 @@ import type { Address, Hex } from "viem";
 
 import type { Wallet } from "@/server/prisma";
 import { db } from "@/server/db";
-import { executionAccountAbi, settlementTokenAbi } from "@/backend/services/onchain/abis";
+import { executionAccountAbi } from "@/backend/services/onchain/abis";
 import {
   loadArtifact,
   publicClientFor,
@@ -27,14 +27,15 @@ class TestnetWalletService {
     if (!wallet) {
       throw new NotFoundException("Wallet not provisioned", "WALLET_NOT_READY");
     }
+    const manifest = readManifest();
     if (wallet.executionAddress && wallet.custodyProfileId) {
+      if (wallet.deploymentId !== manifest.deploymentId) throw new NotFoundException("Wallet deployment requires restore or a fresh isolated user", "NETWORK_UNHEALTHY");
       return {
         wallet,
         accountAddress: wallet.executionAddress as Address,
         custodyProfileId: wallet.custodyProfileId,
       };
     }
-    const manifest = readManifest();
     const verified = await testnetService.verify(manifest);
     if (!verified.ok) {
       throw new NotFoundException(`Testnet unavailable: ${verified.reason}`, "NETWORK_UNHEALTHY");
@@ -58,12 +59,13 @@ class TestnetWalletService {
         kind: "application_account",
         label: `application account for ${userId}`,
         walletId: wallet.id,
+        deploymentId: manifest.deploymentId,
       },
       update: {},
     });
     const updated = await db.wallet.update({
       where: { id: wallet.id },
-      data: { executionAddress: accountAddress, custodyProfileId: profile.id },
+      data: { executionAddress: accountAddress, custodyProfileId: profile.id, deploymentId: manifest.deploymentId },
     });
     return { wallet: updated, accountAddress, custodyProfileId: profile.id };
   }
@@ -75,36 +77,14 @@ class TestnetWalletService {
         address: accountAddress,
         abi: executionAccountAbi,
         functionName: "nonce",
-      }) as Promise<bigint>,
+      }),
       publicClient.readContract({
         address: accountAddress,
         abi: executionAccountAbi,
         functionName: "authorizationEpoch",
-      }) as Promise<bigint>,
+      }),
     ]);
     return { nonce, epoch };
-  }
-
-  // Funds the user's testnet execution account with a real local settlement transfer
-  // exactly once per ramp order (callers persist onchainFundedAt as the guard).
-  async fundExecutionAccountOnce(userId: string, amountRaw: bigint): Promise<Hex | null> {
-    const wallet = await db.wallet.findUnique({
-      where: { userId_family: { userId, family: "evm" } },
-    });
-    if (!wallet?.executionAddress) return null;
-    const manifest = readManifest();
-    const settlement = manifest.contracts.TestSettlementToken;
-    if (!settlement) throw new NotFoundException("Settlement token missing from manifest", "NETWORK_UNHEALTHY");
-    const account = relayerAccount();
-    const walletClient = walletClientFor(account);
-    const hash = await walletClient.writeContract({
-      address: settlement.address,
-      abi: settlementTokenAbi,
-      functionName: "mint",
-      args: [wallet.executionAddress as Address, amountRaw],
-    });
-    await publicClientFor().waitForTransactionReceipt({ hash });
-    return hash;
   }
 
   // Revocation must invalidate every execution account the user controls: the

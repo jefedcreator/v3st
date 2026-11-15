@@ -1,3 +1,5 @@
+import { seedLocalTreasury } from "@/backend/services/wallets/local-transfers";
+import { toDbRaw } from "@/utils/asset-units";
 import { Prisma, type ProviderId, type TreasuryOperation } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
 import { now } from "@/backend/clock";
@@ -296,6 +298,10 @@ class TreasuryService {
       await withTx((tx) =>
         ledgerService.post(tx, openingBalance({ account: acct.treasury(chain), amount })),
       );
+      if (chain === "testnet") {
+        const journal = await db.ledgerJournal.findUniqueOrThrow({ where: { key: `opening:${acct.treasury(chain).code}` } });
+        await seedLocalTreasury(journal.id, await walletService.treasuryAddress(chain), toDbRaw(amount));
+      }
       if (mode === "simulated") {
         const address = await walletService.treasuryAddress(chain);
         await simChain.mint(chain, address, amount, `opening:treasury:${chain}`);

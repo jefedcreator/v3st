@@ -63,13 +63,15 @@ class OperationsService {
   }
 
   async onchainStatus(): Promise<OnchainOpsDto> {
-    const network = await db.onchainNetwork.findFirst({ orderBy: { createdAt: "desc" } });
+    let network = await db.onchainNetwork.findFirst({ orderBy: { createdAt: "desc" } });
     let verified = false;
     let verificationReason: string | null = null;
     try {
-      const result = await testnetService.verify(readManifest());
-      verified = result.ok;
-      verificationReason = result.reason ?? null;
+      const manifest = readManifest();
+      network = await db.onchainNetwork.findUnique({ where: { deploymentId: manifest.deploymentId } });
+      const result = await testnetService.verify(manifest);
+      verified = result.ok && network?.networkId === manifest.networkId;
+      verificationReason = verified ? null : result.reason ?? "Active deployment is not registered in this database";
     } catch (error) {
       verificationReason = error instanceof Error ? error.message : "testnet manifest unavailable";
     }

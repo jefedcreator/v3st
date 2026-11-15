@@ -1,3 +1,4 @@
+import { stockAssetKey, readManifest as assetManifest } from "@/backend/services/onchain/testnet";
 import { type Address, type Hex, encodeFunctionData } from "viem";
 
 import { hookFeeAbi } from "@/backend/services/onchain/abis";
@@ -7,7 +8,6 @@ import type {
   StrategyQuote,
   StrategyRequest,
 } from "@/backend/services/onchain/types";
-import { assetKey } from "@/backend/services/onchain/types";
 import { publicClientFor } from "@/backend/services/onchain/testnet";
 import {
   buildClaimPlan,
@@ -98,7 +98,7 @@ class BaseStonkHookAdapter implements StrategyAdapter {
     const launchId = p.launchId as Hex;
     const launch = await assertKnownHook(hook, launchId);
     const feeToken = await readFeeToken(hook, launchId);
-    const feeAsset = assetKey("testnet", input.context.chainId, feeToken.toLowerCase());
+    const feeAsset = stockAssetKey(assetManifest(), feeToken);
     const parsed = parseBaseStonkFee({
       schemaVersion: BASESTONK_SCHEMA_VERSION,
       launchId,

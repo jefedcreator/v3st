@@ -169,6 +169,15 @@ async function claimSettlementReward(ctx: Ctx, launchId: string, amount: bigint)
 }
 
 describe("receipt-backed income conversion and Friday payout", () => {
+  it("repairs a crash after conversion confirmation without a second quote or operation", async () => {
+    const ctx = await setup("RECOVER");
+    const receiptId = await claimStockReward(ctx);
+    const operationId = await rewardService.convert(receiptId, ctx.conversionAuth.id);
+    await db.rewardReceipt.update({ where: { id: receiptId }, data: { state: "received_asset", conversionOperationId: null } });
+    expect(await rewardService.convert(receiptId, ctx.conversionAuth.id)).toBe(operationId);
+    expect(await db.investment.count({ where: { key: `convert:${receiptId}` } })).toBe(1);
+  });
+
   it("unconvertedRewardCannotPayout", { timeout: 90_000 }, async () => {
     const ctx = await setup("UNC");
     const receiptId = await claimStockReward(ctx);

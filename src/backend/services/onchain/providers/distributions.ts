@@ -12,7 +12,7 @@ import type {
   StrategyRequest,
 } from "@/backend/services/onchain/types";
 import { planFingerprint } from "@/backend/services/execution/policy";
-import { chainDeadlineBounded, chainDeadlineFromNow, onchainExpiryMs } from "@/backend/services/onchain/testnet";
+import { chainDeadlineBounded, onchainExpiryMs } from "@/backend/services/onchain/testnet";
 import { db } from "@/server/db";
 import { UnprocessableEntityException } from "@/utils/exceptions";
 

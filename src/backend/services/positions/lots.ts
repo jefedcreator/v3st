@@ -1,6 +1,7 @@
 import type { PositionLot } from "@/server/prisma";
 import type { DbClient } from "@/server/db";
-import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
+import { fromDbRaw, toDbRaw, toDbSignedRaw } from "@/utils/asset-units";
+import { now } from "@/backend/clock";
 
 export type LotFill = {
   userId: string;
@@ -12,6 +13,7 @@ export type LotFill = {
   feeRaw: bigint;
   source: string;
   operationId: string;
+  fxRateKobo?: bigint | null; // kobo per USD at acquisition, when known
 };
 
 export type LotConsumption = {
@@ -25,6 +27,7 @@ export type LotConsumption = {
 // cost is assigned to the final disposal so the remaining lot cost is preserved
 // exactly.
 export async function applyFillToLots(client: DbClient, fill: LotFill): Promise<LotConsumption> {
+  if (fill.quantityRaw <= 0n) throw new Error("Fill quantity must be positive");
   if (fill.side === "buy") {
     const cost = fill.cashRaw + fill.feeRaw;
     await client.positionLot.create({
@@ -35,7 +38,7 @@ export async function applyFillToLots(client: DbClient, fill: LotFill): Promise<
         operationId: fill.operationId,
         quantity: toDbRaw(fill.quantityRaw),
         costUsdc: toDbRaw(cost),
-        fxRateKobo: null,
+        fxRateKobo: fill.fxRateKobo ?? null,
         source: fill.source,
       },
     });
@@ -44,8 +47,11 @@ export async function applyFillToLots(client: DbClient, fill: LotFill): Promise<
   // sell: FIFO consumption
   const lots = await client.positionLot.findMany({
     where: { userId: fill.userId, stockId: fill.stockId, closedAt: null },
-    orderBy: { openedAt: "asc" },
+    orderBy: [{ openedAt: "asc" }, { id: "asc" }],
   });
+  if (lots.reduce((sum, lot) => sum + fromDbRaw(lot.quantity), 0n) < fill.quantityRaw) {
+    throw new Error("Sell exceeds tracked lot quantity");
+  }
   let remaining = fill.quantityRaw;
   let costOfSold = 0n;
   for (const lot of lots) {
@@ -58,21 +64,19 @@ export async function applyFillToLots(client: DbClient, fill: LotFill): Promise<
     const sliceCost = take === lotQty ? lotCost : (lotCost * take) / lotQty;
     costOfSold += sliceCost;
     const left = lotQty - take;
-    if (left === 0n) {
-      await client.positionLot.update({
-        where: { id: lot.id },
-        data: {
-          quantity: toDbRaw(0n),
-          closedAt: new Date(),
-          realizedUsdc: toDbRaw((fill.cashRaw - fill.feeRaw) - costOfSold),
-        },
-      });
-    } else {
-      await client.positionLot.update({
-        where: { id: lot.id },
-        data: { quantity: toDbRaw(left), costUsdc: toDbRaw(lotCost - sliceCost) },
-      });
-    }
+    const takenBefore = fill.quantityRaw - remaining;
+    const takenAfter = takenBefore + take;
+    const proceedsSlice = (fill.cashRaw * takenAfter) / fill.quantityRaw - (fill.cashRaw * takenBefore) / fill.quantityRaw;
+    const feeSlice = (fill.feeRaw * takenAfter) / fill.quantityRaw - (fill.feeRaw * takenBefore) / fill.quantityRaw;
+    await client.positionLot.update({
+      where: { id: lot.id },
+      data: {
+        quantity: toDbRaw(left),
+        costUsdc: toDbRaw(lotCost - sliceCost),
+        closedAt: left === 0n ? now() : null,
+        realizedUsdc: toDbSignedRaw(fromDbRaw(lot.realizedUsdc) + proceedsSlice - feeSlice - sliceCost),
+      },
+    });
     remaining -= take;
   }
   if (remaining > 0n) {

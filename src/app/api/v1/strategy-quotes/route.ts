@@ -1,3 +1,5 @@
+import { ratesService } from "@/backend/services/rates";
+import { ngnToUsd } from "@/utils/money";
 import {
   authMiddleware,
   bodyValidatorMiddleware,
@@ -16,9 +18,10 @@ export const POST = withMiddleware<StrategyQuoteBodySchema, null, null>(
     const body = request.validatedData!;
     let input: StrategyQuoteInput;
     if (body.action === "enter") {
+      const budgetRaw = body.budget_ngn === undefined ? body.budget_raw : ngnToUsd(body.budget_ngn, (await ratesService.display()).depositRate, "floor");
       input =
-        body.budget_raw !== undefined
-          ? { strategyId: body.strategy_id!, action: "enter", budgetInputRaw: body.budget_raw }
+        budgetRaw !== undefined
+          ? { strategyId: body.strategy_id!, action: "enter", budgetInputRaw: budgetRaw }
           : {
               strategyId: body.strategy_id!,
               action: "enter",

@@ -325,6 +325,7 @@ model Wallet {
     providerWalletId  String
     providerMode      ProviderMode
     executionAddress  String?
+    deploymentId      String?
     custodyProfileId  String?
     createdAt         DateTime     @default(now())
 
@@ -811,12 +812,28 @@ model CustodyProfile {
     walletId          String?
     externalProfileId String?
     managedAddress    String?
+    deploymentId      String?
     createdAt         DateTime         @default(now())
 
     operations OnchainOperation[]
 
     @@unique([kind, walletId])
     @@map("custody_profiles")
+}
+
+// Private exact signed payload for local beta wallet transfers. Never serialized.
+model LocalChainTransfer {
+    id           String @id @default(cuid())
+    key          String @unique
+    deploymentId String
+    requestHash  String
+    nonce        Int
+    txHash       String
+    signedTx     String
+    createdAt    DateTime @default(now())
+
+    @@index([deploymentId, nonce])
+    @@map("local_chain_transfers")
 }
 
 model InvestmentAuthorization {
@@ -863,9 +880,12 @@ model InvestmentQuote {
     minOutputRaw      Decimal   @db.Decimal(78, 0)
     budgetNgn         BigInt?
     allowPartialFill  Boolean   @default(false)
+    slippageBps       Int       @default(100)
     feeUsdc           Decimal   @db.Decimal(78, 0)
     fxFeeUsdc         Decimal   @db.Decimal(78, 0) @default(0)
     venueFeeUsdc      Decimal   @db.Decimal(78, 0) @default(0)
+    venueFeeAsset     String?
+    venueFeeRaw       Decimal?  @db.Decimal(78, 0)
     priceImpactBps    Int
     providerId        String
     providerVersion   String
@@ -993,6 +1013,8 @@ model StockAction {
     txHash        String
     logIndex      Int
     blockNumber   Decimal         @db.Decimal(78, 0)
+    blockHash     String?
+    orphanedAt    DateTime?
     multiplierWad Decimal?        @db.Decimal(78, 0)
     effectiveAt   DateTime?
     cancelledAt   DateTime?
@@ -1104,6 +1126,8 @@ model RewardReceipt {
     week                  String?
     state                 ReceiptState    @default(estimated)
     conversionOperationId String?
+    conversionQuoteId     String?
+    conversionAuthorizationId String?
     payoutOrderId         String?
     reinvestTradeId       String?
     createdAt             DateTime        @default(now())
@@ -1111,7 +1135,7 @@ model RewardReceipt {
 
     allocation EarningAllocation?
 
-    @@unique([networkId, source, txHash, logIndex, beneficiary])
+    @@unique([networkId, source, txHash, logIndex, beneficiary, asset], map: "reward_receipt_event_asset_key")
     @@index([beneficiary])
     @@map("reward_receipts")
 }

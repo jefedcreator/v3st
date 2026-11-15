@@ -3,8 +3,8 @@ import { now } from "@/backend/clock";
 import { unpack } from "@/backend/services/execution";
 import { acct } from "@/backend/services/ledger/accounts";
 import { ledgerService } from "@/backend/services/ledger";
-import { positionValueMicroUsd, shareEquivalentRaw, stockActionService } from "@/backend/services/stocks/corporate-actions";
-import { stockService } from "@/backend/services/stocks";
+import { positionValueMicroUsd, shareEquivalentRaw, stockActionService, tokenPriceFromSharePrice } from "@/backend/services/stocks/corporate-actions";
+import { referenceUsable } from "@/backend/services/stocks/reference";
 import type { AssetAmount } from "@/backend/services/onchain/types";
 import type { PositionView } from "@/types/dto";
 import { fromDbRaw } from "@/utils/asset-units";
@@ -22,8 +22,11 @@ export async function applyFill(client: DbClient, operationId: string, feeRaw = 
     expectedOutput: AssetAmount;
   };
   const actual = unpack(op.actual) as { input?: AssetAmount; output?: AssetAmount };
-  const stock = await stockService.get(quote.stockId);
+  const stock = await client.stock.findUniqueOrThrow({ where: { id: quote.stockId } });
   const isBuy = actual.output?.asset === stock.assetKey;
+  const acceptedQuote = op.quoteId ? await client.investmentQuote.findUnique({ where: { id: op.quoteId } }) : null;
+  const expectedFx = (op.expected as { fxRate?: { kobo: string; microUsd: string } } | null)?.fxRate;
+  const fx = (acceptedQuote?.context as { fxRate?: { kobo: string; microUsd: string } } | null)?.fxRate ?? expectedFx;
   await applyFillToLots(client, {
     userId: op.userId,
     stockId: quote.stockId,
@@ -34,6 +37,7 @@ export async function applyFill(client: DbClient, operationId: string, feeRaw = 
     feeRaw,
     source: op.providerId,
     operationId: op.id,
+    fxRateKobo: fx ? (BigInt(fx.kobo) * 1_000_000n) / BigInt(fx.microUsd) : null,
   });
 }
 
@@ -64,15 +68,18 @@ class PositionService {
       const strategyRaw = strategyRawByStock.get(stock.id) ?? 0n;
       if (owned <= 0n && reserved <= 0n && strategyRaw <= 0n) continue;
       const multiplierWad = await stockActionService.effectiveMultiplier(stock.id, now());
-      const shareEquivalent = shareEquivalentRaw(owned, multiplierWad);
+      const totalRaw = owned + reserved;
+      const shareEquivalent = shareEquivalentRaw(totalRaw, multiplierWad);
       const hasLots = await hasAnyLot(db, userId, stock.id);
-      const costBasis = hasLots ? await totalCostBasis(db, userId, stock.id) : null;
+      const lotQuantity = await db.positionLot.aggregate({ where: { userId, stockId: stock.id, closedAt: null }, _sum: { quantity: true } });
+      const knownQuantity = lotQuantity._sum.quantity === null ? 0n : fromDbRaw(lotQuantity._sum.quantity);
+      const costBasis = hasLots && knownQuantity === totalRaw ? await totalCostBasis(db, userId, stock.id) : null;
       const realized = await totalRealized(db, userId, stock.id);
       let valueMicroUsd: bigint | null = null;
       let valuationStatus: "ok" | "unavailable" = "ok";
-      if (stock.referencePriceMicroUsd !== null && stock.referenceAsOf) {
-        // share-equivalent x share price: the multiplier is applied exactly once.
-        valueMicroUsd = positionValueMicroUsd(shareEquivalent, stock.referencePriceMicroUsd, 18);
+      if (stock.referencePriceMicroUsd !== null && referenceUsable(stock, now()) && ["share_price", "token_nav"].includes(stock.referenceBasis ?? "")) {
+        const tokenPrice = stock.referenceBasis === "token_nav" ? stock.referencePriceMicroUsd : tokenPriceFromSharePrice(stock.referencePriceMicroUsd, multiplierWad);
+        valueMicroUsd = positionValueMicroUsd(totalRaw, tokenPrice, stock.decimals);
       } else {
         valuationStatus = "unavailable";
       }

@@ -7,6 +7,8 @@ export const settlementTokenAbi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address,address) view returns (uint256)",
   "function mint(address,uint256)",
+  "function managedTransfer(bytes32,address,address,uint256)",
+  "function managedMint(bytes32,address,uint256)",
   "function approve(address,uint256) returns (bool)",
   "function transfer(address,uint256) returns (bool)",
   "function transferFrom(address,address,uint256) returns (bool)",

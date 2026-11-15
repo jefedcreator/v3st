@@ -24,7 +24,6 @@ import { parseAssetKey } from "@/backend/services/onchain/types";
 import { planFingerprint } from "@/backend/services/execution/policy";
 import { onchainExpiryMs, 
   chainDeadlineBounded,
-  chainDeadlineFromNow,
   publicClientFor,
   readManifest,
   settlementAssetKey,
@@ -134,6 +133,7 @@ class O1ReplicaAdapter implements SpotAdapter {
       expectedOutput: { asset: parsed.output.asset, raw: parsed.output.raw },
       minOutput: { asset: parsed.minOutput.asset, raw: parsed.minOutput.raw },
       userFeeUsdc: 0n,
+      venueFee: { asset: parsed.fee.asset, raw: parsed.fee.raw },
       sponsorCostWei: 0n,
       allowPartialFill: input.allowPartialFill ?? false,
       priceImpactBps: parsed.priceImpactBps,

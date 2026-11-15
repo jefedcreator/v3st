@@ -13,6 +13,7 @@ import { authorizationService } from "@/backend/services/authorizations";
 import { strategyService } from "@/backend/services/strategies";
 import { unpack } from "@/backend/services/execution";
 import type { AssetAmount } from "@/backend/services/onchain/types";
+import { readManifest, settlementAssetKey } from "@/backend/services/onchain/testnet";
 import { userIdForBeneficiary } from "@/backend/services/rewards";
 import type { PaginationQuerySchema } from "@/backend/validators/index.validator";
 import type { EarningsPreferenceDto, EarningsWeekDto } from "@/types/dto";
@@ -71,13 +72,18 @@ class EarningsService {
       if (!userId) throw new NotFoundException("Receipt beneficiary unknown", "NOT_FOUND");
       const stock = await tx.stock.findFirst({ where: { assetKey: receipt.asset } });
       const chain = stock?.chain ?? policy.onchain.networkNamespace;
+      const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: receipt.networkId } });
+      const manifest = readManifest();
+      if (network.deploymentId !== manifest.deploymentId) return;
+      if (!stock && receipt.asset !== settlementAssetKey(manifest)) return;
       let amountUsdc = fromDbRaw(receipt.amountRaw);
       if (stock) {
         const opId = receipt.conversionOperationId;
         if (!opId) return;
         const op = await tx.onchainOperation.findUnique({ where: { id: opId } });
         if (op?.status !== "finalized") return;
-        const actual = unpack(op.actual) as { output?: AssetAmount };
+        const actual = unpack(op.actual) as { input?: AssetAmount; output?: AssetAmount };
+        if (actual.input?.asset !== receipt.asset || actual.input.raw !== fromDbRaw(receipt.amountRaw) || actual.output?.asset !== settlementAssetKey(manifest)) return;
         amountUsdc = actual.output?.raw ?? 0n;
         if (amountUsdc <= 0n) return;
         await ledgerService.post(

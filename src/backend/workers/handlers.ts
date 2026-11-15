@@ -59,6 +59,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   "earnings.harvest": async (job) => {
     await earningsService.harvest(job.subjectId);
   },
+  "earnings.recognize": async (job) => {
+    await earningsService.recognize(job.subjectId);
+  },
   "earnings.float_precheck": async (job) => {
     await earningsBatchService.precheck(job.subjectId);
   },

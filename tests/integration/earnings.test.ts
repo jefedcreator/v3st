@@ -61,7 +61,9 @@ describe("earnings", () => {
     await handle.scheduleMultiplier(token, 2n * 10n ** 18n, past);
     await handle.advanceTime(5);
     await handle.applyDueActions(token);
-    await stockActionService.ingest(network.id, await handle.blockNumber());
+    const throughBlock = await handle.blockNumber();
+    await handle.mine(3);
+    await stockActionService.ingest(network.id, throughBlock);
     const result = await earningsService.harvest("2026-11-09");
     expect(result.recorded).toBe(0);
     expect(await db.earning.count({ where: { userId: holder.id } })).toBe(0);

@@ -129,7 +129,7 @@ async function enter(ctx: Awaited<ReturnType<typeof setup>>, settlementRaw: bigi
       { asset: ctx.settlementKey, raw: settlementRaw },
       { asset: ctx.stock.assetKey!, raw: stockRaw },
     ],
-    context: ctx.context,
+    context: await testnetService.defaultContext("hydrex", "replica-1.0.0", ctx.ref.custodyProfileId),
   });
   return runStrategyOp(ctx, quote);
 }
@@ -145,7 +145,7 @@ async function claim(ctx: Awaited<ReturnType<typeof setup>>, userId = ctx.u.id, 
     positionId: null,
     action: "claim",
     inputs: [],
-    context: ctx.context,
+    context: await testnetService.defaultContext("hydrex", "replica-1.0.0", profileId),
   });
   const op = await executionService.createOperation({
     key: `hydrex-op-${randomUUID()}`,
@@ -175,7 +175,7 @@ async function exitOp(ctx: Awaited<ReturnType<typeof setup>>, shares: bigint) {
     positionId: null,
     action: "exit",
     inputs: [{ asset: ctx.strategy.receiptAsset, raw: shares }],
-    context: ctx.context,
+    context: await testnetService.defaultContext("hydrex", "replica-1.0.0", ctx.ref.custodyProfileId),
   });
   return runStrategyOp(ctx, quote);
 }

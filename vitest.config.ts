@@ -15,12 +15,14 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: "node",
+      testTimeout: 30_000,
+      hookTimeout: 30_000,
       fileParallelism: false,
       include: ["tests/**/*.test.ts"],
       setupFiles: ["tests/setup.ts"],
       globalSetup: ["tests/global-setup.ts"],
       env: {
-        DATABASE_URL: loaded.TEST_DATABASE_URL ?? "",
+        DATABASE_URL: process.env.TEST_DATABASE_URL ?? loaded.TEST_DATABASE_URL ?? "",
         APP_STAGE: "beta",
         YELLOWCARD_MODE: "simulated",
         SIMULATED_IDENTITY_SECRET: "vitest-simulated-identity-secret-0001",

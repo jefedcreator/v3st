@@ -1,3 +1,4 @@
+import { stockAssetKey, readManifest as assetManifest } from "@/backend/services/onchain/testnet";
 import { randomUUID } from "node:crypto";
 
 import { type Address, type Hex } from "viem";
@@ -9,7 +10,6 @@ import type {
   StrategyQuote,
   StrategyRequest,
 } from "@/backend/services/onchain/types";
-import { assetKey } from "@/backend/services/onchain/types";
 import { publicClientFor } from "@/backend/services/onchain/testnet";
 import {
   buildClaimPlan,
@@ -94,7 +94,7 @@ class StonksDistributionAdapter implements StrategyAdapter {
     const launchId = p.launchId;
     await assertGenerationMatches(distribution, launchId, p.generation);
     const rewardToken = await readRewardToken(distribution, launchId);
-    const rewardAsset = assetKey("testnet", input.context.chainId, rewardToken.toLowerCase());
+    const rewardAsset = stockAssetKey(assetManifest(), rewardToken);
     const account = await executionAccountOf(input.userId);
     const entitlement = await readDistributionUint(distribution, "entitlementOf", [launchId as Hex, account]);
     const parsed = parseStonksClaim({

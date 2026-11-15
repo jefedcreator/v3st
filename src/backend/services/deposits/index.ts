@@ -44,6 +44,9 @@ class DepositService {
   ): Promise<{ deposit: DepositDto; created: boolean }> {
     await controlsService.assertOpen("deposits", "DEPOSITS_PAUSED");
     const stock = body.stock_id ? await stockService.get(body.stock_id) : null;
+    const hasLocalCatalog = await db.stock.count({ where: { chain: "testnet", networkId: { not: null }, enabled: true } });
+    const fundingChain = stock?.chain ?? (hasLocalCatalog > 0 ? "testnet" : policy.defaultChain);
+    if (fundingChain === "testnet") await testnetWalletService.ensureExecutionAccount(userId);
     const bankAccount = await bankAccountService.getActiveRow(userId);
     if (!bankAccount) {
       throw new ForbiddenException(
@@ -91,7 +94,7 @@ class DepositService {
           idempotencyKey: key,
           requestHash,
           ngnAmount: body.ngn_amount,
-          chain: stock?.chain ?? policy.defaultChain,
+          chain: fundingChain,
           stockId: stock?.id ?? null,
         },
       });
@@ -333,20 +336,6 @@ class DepositService {
             patch: { holdReason: null },
             actor: "system",
           });
-          // Deposit completion funds the user's testnet execution account through a
-          // real local transfer, exactly once per order.
-          if (!current.onchainFundedAt) {
-            const fundedHash = await testnetWalletService.fundExecutionAccountOnce(
-              current.userId,
-              BigInt(settle.amount),
-            );
-            if (fundedHash) {
-              await tx.rampOrder.update({
-                where: { id: current.id },
-                data: { onchainFundedAt: now() },
-              });
-            }
-          }
           if (order.stockId) {
             await tradeService.createBuy(tx, {
               key: `deposit-buy:${order.id}`,
@@ -495,14 +484,14 @@ class DepositService {
           await orderService.transition(tx, {
             order,
             to: "funded",
-            patch: { holdReason: null },
+            patch: { holdReason: null, onchainFundedAt: t.chain === "testnet" ? now() : null },
             actor: "system",
           });
         } else {
           const funded = await orderService.transition(tx, {
             order,
             to: "funded",
-            patch: { holdReason: null },
+            patch: { holdReason: null, onchainFundedAt: t.chain === "testnet" ? now() : null },
             actor: "system",
           });
           await orderService.transition(tx, { order: funded, to: "settled", actor: "system" });

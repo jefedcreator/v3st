@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { type Address, type Hex, encodeFunctionData, encodePacked, keccak256 } from "viem";
+import { type Address, encodeFunctionData, encodePacked, keccak256 } from "viem";
 
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { hydrexPoolAbi, settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 import type {
   AssetAmount,
-  BetaContext,
   ExecutionPlan,
   ExecutionQuote,
   PreparedCall,
@@ -23,7 +22,6 @@ import { parseAssetKey } from "@/backend/services/onchain/types";
 import { planFingerprint } from "@/backend/services/execution/policy";
 import { onchainExpiryMs, 
   chainDeadlineBounded,
-  chainDeadlineFromNow,
   publicClientFor,
   readManifest,
   settlementAssetKey,
@@ -119,7 +117,7 @@ async function localQuoteTransport(
   input: QuoteRequest,
   pool: Address,
   tokenIn: Address,
-  tokenOut: Address,
+  _tokenOut: Address,
 ): Promise<HydrexQuoteResponse> {
   const { reserveSettlement, reserveStock } = await poolState(pool);
   const settlementIn = tokenIn.toLowerCase() === (await poolAsset(pool, "settlement")).toLowerCase();
@@ -189,6 +187,7 @@ class HydrexSpotReplicaAdapter implements SpotAdapter {
       expectedOutput: { asset: parsed.output.asset, raw: parsed.output.raw },
       minOutput: { asset: parsed.minOutput.asset, raw: parsed.minOutput.raw },
       userFeeUsdc: 0n,
+      venueFee: { asset: parsed.fee.asset, raw: parsed.fee.raw },
       sponsorCostWei: 0n,
       allowPartialFill: input.allowPartialFill ?? false,
       priceImpactBps: parsed.priceImpactBps,
@@ -319,7 +318,7 @@ class HydrexStrategyReplicaAdapter implements StrategyAdapter {
           { asset: settlement, raw: settlementOut },
           { asset: stock.assetKey, raw: stockOut },
         ],
-        maximumInputs: [],
+        maximumInputs: input.inputs,
         userFeeUsdc: 0n,
         expiresAt,
         strategyVersion: strategy.version,

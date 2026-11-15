@@ -1,4 +1,4 @@
-import { decodeAbiParameters, type Address, type Hex } from "viem";
+import { decodeAbiParameters, parseEventLogs, type Address, type Hex } from "viem";
 
 import { policy } from "@/backend/config/policy";
 import { settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
@@ -70,6 +70,24 @@ export async function fetchReceipt(txHash: Hex): Promise<ReceiptView | null> {
   }
 }
 
+// Only transfers emitted by the execution transaction count toward its fill.
+// Donations, later swaps and block-wide balances cannot alter these deltas.
+export async function transactionDeltas(txHash: Hex, assets: string[], account: Address): Promise<AssetDelta[]> {
+  const receipt = await publicClientFor().getTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") return [];
+  const normalized = account.toLowerCase();
+  return [...new Set(assets)].map((asset) => {
+    const token = parseAssetKey(asset).address.toLowerCase();
+    const logs = parseEventLogs({ abi: settlementTokenAbi, eventName: "Transfer", logs: receipt.logs.filter((l) => l.address.toLowerCase() === token) });
+    let signedRaw = 0n;
+    for (const log of logs) {
+      if (log.args.to.toLowerCase() === normalized) signedRaw += log.args.value;
+      if (log.args.from.toLowerCase() === normalized) signedRaw -= log.args.value;
+    }
+    return { account, asset, signedRaw };
+  });
+}
+
 export async function txExists(txHash: Hex): Promise<boolean> {
   const url = testnetRpcUrl();
   const tx = await rpcRequest<{ hash: Hex } | null>(url, "eth_getTransactionByHash", [txHash]);
@@ -89,7 +107,7 @@ export async function revertReasonOf(txHash: Hex): Promise<string | null> {
     gas: Hex;
     blockNumber: Hex | null;
   } | null>(url, "eth_getTransactionByHash", [txHash]);
-  if (!tx?.to || !tx.blockNumber) return null;
+  if (!tx?.to || !tx?.blockNumber) return null;
   try {
     // Replay against the state before the inclusion block: at the post-state the
     // account nonce has already moved, so the replay would revert for the wrong
@@ -104,7 +122,7 @@ export async function revertReasonOf(txHash: Hex): Promise<string | null> {
   } catch (error) {
     const data = (error as TestnetError).data;
     const hex = typeof data === "string" ? data : ((data as { data?: string } | undefined)?.data ?? null);
-    if (hex && hex.startsWith("0x08c379a0")) {
+    if (hex?.startsWith("0x08c379a0")) {
       try {
         return decodeAbiParameters([{ type: "string" }], `0x${hex.slice(10)}`)[0];
       } catch {
@@ -136,10 +154,9 @@ export async function observationState(
   if (!receipt) {
     return (await txExists(txHash)) ? "pending" : "unknown";
   }
-  if (receipt.status === "reverted") return "reverted";
   if (await isReorged(receipt)) return "reorged";
   const latest = await publicClientFor().getBlockNumber();
-  if (receipt.blockNumber + BigInt(requiredConfirmations) <= latest) return "confirmed";
+  if (receipt.blockNumber + BigInt(requiredConfirmations) <= latest) return receipt.status === "reverted" ? "reverted" : "confirmed";
   return "pending";
 }
 

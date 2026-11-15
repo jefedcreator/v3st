@@ -9,7 +9,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
-import { assertChainIdAllowed, parseRpcEndpoint } from "@/backend/integrations/onchain-policy";
+import { assertBetaStage, assertChainIdAllowed, parseRpcEndpoint } from "@/backend/integrations/onchain-policy";
 import type { BetaContext, StockProviderId } from "@/backend/services/onchain/types";
 import { sha256Hex } from "@/utils";
 
@@ -27,7 +27,9 @@ export type TestnetManifest = {
   mode: "simulated";
   rpcUrl: string;
   relayerAddress: Address;
-  contracts: Record<string, { address: Address; abiHash: string }>;
+  contracts: Record<string, { address: Address; abiHash: string; codeHash?: string }>;
+  deploymentBlock?: string;
+  deploymentBlockHash?: Hex;
   createdAt: string;
 };
 
@@ -46,6 +48,7 @@ export function testnetRpcUrl(): string {
 }
 
 export function rpcRequest<T = unknown>(url: string, method: string, params: unknown[] = []): Promise<T> {
+  assertBetaStage();
   const endpoint = parseRpcEndpoint(url);
   return new Promise<T>((resolve, reject) => {
     const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
@@ -54,7 +57,7 @@ export function rpcRequest<T = unknown>(url: string, method: string, params: unk
       { method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) } },
       (res) => {
         const chunks: Buffer[] = [];
-        res.on("data", (c) => chunks.push(c));
+        res.on("data", (c: Buffer) => chunks.push(c));
         res.on("end", () => {
           try {
             const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
@@ -70,7 +73,7 @@ export function rpcRequest<T = unknown>(url: string, method: string, params: unk
               );
             } else resolve(parsed.result as T);
           } catch (error) {
-            reject(error);
+            reject(error instanceof Error ? error : new TestnetError("Invalid RPC response"));
           }
         });
       },
@@ -99,7 +102,7 @@ export function publicClientFor(url: string = testnetRpcUrl()) {
     chain: localChain(),
     transport: custom({
       async request({ method, params }) {
-        return rpcRequest(url, method, params as unknown[]);
+        return rpcRequest(url, String(method), params as unknown[]);
       },
     }),
   });
@@ -178,7 +181,7 @@ export function walletClientFor(account: ReturnType<typeof privateKeyToAccount>,
     chain: localChain(),
     transport: custom({
       async request({ method, params }) {
-        return rpcRequest(url, method, params as unknown[]);
+        return rpcRequest(url, String(method), params as unknown[]);
       },
     }),
   });
@@ -228,6 +231,10 @@ export function startAnvil(opts?: { port?: number; rpcUrl?: string }): ChildProc
     ],
     { stdio: ["ignore", "pipe", "pipe"], detached: false },
   );
+  // Anvil can emit request diagnostics even with --silent. An unread pipe fills
+  // during worker polling and blocks the native process, including its RPCs.
+  child.stdout?.resume();
+  child.stderr?.resume();
   child.on("error", (error) => {
     throw new TestnetError(`Failed to start anvil: ${error.message}`);
   });
@@ -260,7 +267,7 @@ export function abiHash(abi: unknown): string {
 }
 
 export function manifestDir(): string {
-  return path.join(process.cwd(), ".testnet");
+  return process.env.TESTNET_STATE_DIR ?? path.join(process.cwd(), ".testnet");
 }
 
 export function manifestPath(): string {
@@ -294,6 +301,8 @@ class TestnetService {
   }
 
   async chainIdentity(url: string = testnetRpcUrl()): Promise<{ chainId: number; genesisHash: Hex }> {
+    const metadata = await rpcRequest<{ forkedNetwork?: unknown }>(url, "anvil_metadata");
+    if (metadata.forkedNetwork) throw new TestnetError("Forked upstream networks are forbidden in beta");
     const chainIdHex = await rpcRequest<Hex>(url, "eth_chainId");
     const chainId = Number(BigInt(chainIdHex));
     assertChainIdAllowed(chainId);
@@ -329,13 +338,15 @@ class TestnetService {
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       const address = receipt.contractAddress;
       if (!address) throw new TestnetError(`Deployment of ${spec.name} produced no address`);
-      contracts[spec.name] = { address, abiHash: abiHash(artifact.abi) };
+      const code = await rpcRequest<Hex>(url, "eth_getCode", [address, "latest"]);
+      contracts[spec.name] = { address, abiHash: abiHash(artifact.abi), codeHash: sha256Hex(code) };
     }
+    const deploymentBlock = await publicClient.getBlock({ blockTag: "latest" });
     const deploymentId = sha256Hex(
-      JSON.stringify({ genesisHash, chainId, contracts: Object.keys(contracts).sort().map((k) => [k, contracts[k]!.address, contracts[k]!.abiHash]) }),
+      JSON.stringify({ genesisHash, chainId, deploymentBlock: deploymentBlock.hash, contracts: Object.keys(contracts).sort().map((k) => [k, contracts[k]!.address, contracts[k]!.abiHash]) }),
     ).slice(0, 24);
     const manifest: TestnetManifest = {
-      networkId: `testnet:${chainId}:${genesisHash.slice(0, 12)}`,
+      networkId: `testnet:${chainId}:${deploymentId}`,
       chainId,
       genesisHash,
       deploymentId,
@@ -347,6 +358,9 @@ class TestnetService {
       contracts,
       createdAt: new Date().toISOString(),
     };
+    const block = await publicClient.getBlock({ blockTag: "latest" });
+    manifest.deploymentBlock = block.number.toString();
+    manifest.deploymentBlockHash = block.hash;
     writeManifest(manifest);
     return manifest;
   }
@@ -362,9 +376,13 @@ class TestnetService {
     if (genesisHash !== manifest.genesisHash) {
       return { ok: false, reason: "genesis hash mismatch: local chain was reset or redeployed" };
     }
+    if (!manifest.deploymentBlock || !manifest.deploymentBlockHash) return { ok: false, reason: "deployment checkpoint missing; restore or provision a new namespace" };
+    const checkpoint = await rpcRequest<{ hash: Hex } | null>(url, "eth_getBlockByNumber", [`0x${BigInt(manifest.deploymentBlock).toString(16)}`, false]);
+    if (checkpoint?.hash !== manifest.deploymentBlockHash) return { ok: false, reason: "deployment block mismatch: local chain reset" };
     for (const [name, entry] of Object.entries(manifest.contracts)) {
       const code = await rpcRequest<Hex>(url, "eth_getCode", [entry.address, "latest"]);
       if (!code || code === "0x") return { ok: false, reason: `contract ${name} missing at ${entry.address}` };
+      if (!entry.codeHash || sha256Hex(code) !== entry.codeHash) return { ok: false, reason: `contract ${name} code hash mismatch` };
     }
     return { ok: true };
   }
@@ -396,11 +414,11 @@ export const testnetService = new TestnetService();
 export function settlementAssetKey(manifest: TestnetManifest): string {
   const entry = manifest.contracts.TestSettlementToken;
   if (!entry) throw new TestnetError("Manifest has no TestSettlementToken");
-  return `testnet:${manifest.chainId}:${entry.address.toLowerCase()}`;
+  return `testnet-${manifest.deploymentId}:${manifest.chainId}:${entry.address.toLowerCase()}`;
 }
 
 export function stockAssetKey(manifest: TestnetManifest, address: Address): string {
-  return `testnet:${manifest.chainId}:${address.toLowerCase()}`;
+  return `testnet-${manifest.deploymentId}:${manifest.chainId}:${address.toLowerCase()}`;
 }
 
 export function deploymentFingerprint(manifest: TestnetManifest): string {

@@ -11,11 +11,20 @@ const RELAYER_NONCE_LOCK = 72_011n;
 
 export async function allocateRelayerNonce(tx: Tx): Promise<number> {
   await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${RELAYER_NONCE_LOCK}::bigint)`);
-  const nonce = await publicClientFor().getTransactionCount({
+  const chainNonce = await publicClientFor().getTransactionCount({
     address: relayerAccount().address,
     blockTag: "pending",
   });
-  return nonce;
+  const allocated = await tx.onchainOperation.findFirst({
+    where: { relayerNonce: { not: null }, network: { deploymentId: (await import("@/backend/services/onchain/testnet")).readManifest().deploymentId } },
+    orderBy: { relayerNonce: "desc" },
+    select: { relayerNonce: true },
+  });
+  const transfer = await tx.localChainTransfer.findFirst({ where: { deploymentId: (await import("@/backend/services/onchain/testnet")).readManifest().deploymentId }, orderBy: { nonce: "desc" } });
+  const nextTransfer = transfer ? transfer.nonce + 1 : 0;
+  // Every logical operation owns two adjacent transactions, even before either
+  // has reached the node's pending pool.
+  return Math.max(chainNonce, nextTransfer, allocated?.relayerNonce === null || allocated?.relayerNonce === undefined ? 0 : allocated.relayerNonce + 2);
 }
 
 export async function allocateSignerNonce(

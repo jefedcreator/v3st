@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { depositService } from "@/backend/services/deposits";
 import { investmentService } from "@/backend/services/investments";
@@ -14,6 +14,9 @@ import "@/backend/services/onchain/providers";
 import { publicClientFor, testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, ExecutionQuote } from "@/backend/services/onchain/types";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
+import { ratesService } from "@/backend/services/rates";
+import { ngnToUsd } from "@/utils/money";
+import { setNow } from "../helpers/time";
 import { db } from "@/server/db";
 import { fromDbRaw } from "@/utils/asset-units";
 
@@ -34,6 +37,10 @@ async function setup(symbol = "INV") {
   await handle.seedO1Pool(token, 1_000_000_000_000n, 500_000n * 10n ** 18n);
   await handle.mintSettlement(ref.accountAddress, 100_000_000n);
   await fundCash(u.id, 10_000_000n, "testnet");
+  const block = await publicClientFor().getBlock({ blockTag: "latest" });
+  setNow(new Date(Math.max(Date.now(), Number(block.timestamp) * 1000)).toISOString());
+  ratesService.clearCache();
+  await db.stock.update({ where: { id: stock.id }, data: { referenceAsOf: new Date() } });
   return { handle, network, u, ref, stock, token };
 }
 
@@ -61,6 +68,68 @@ async function driveToFinal(ctx: Awaited<ReturnType<typeof setup>>, investmentId
 }
 
 describe("consent-bound investments on the local testnet", () => {
+  it("binds the naira budget and acquisition FX to the accepted rate", async () => {
+    const ctx = await setup("FXLOT");
+    const display = await ratesService.display();
+    const q = await investmentService.quote(ctx.u.id, { stockId: ctx.stock.id, side: "buy", budgetNgn: 150_000n });
+    expect(BigInt(q.input_raw)).toBe(ngnToUsd(150_000n, display.depositRate, "floor"));
+    expect(q.fx_rate?.kobo).toBe(display.depositRate.kobo.toString());
+    const auth = await oneTimeAuth(ctx.u.id, q);
+    const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, `fx-${randomUUID()}`);
+    const spy = vi.spyOn(ratesService, "display").mockResolvedValue({ ...display, depositRate: { kobo: 999n, microUsd: 1n } });
+    try {
+      await driveToFinal(ctx, inv.id);
+    } finally {
+      spy.mockRestore();
+    }
+    const lot = await db.positionLot.findFirstOrThrow({ where: { userId: ctx.u.id } });
+    expect(lot.fxRateKobo).toBe(display.depositRate.kobo * 1_000_000n / display.depositRate.microUsd);
+  });
+
+  it("reserves standing limits with the quote FX even if the rate feed later fails", async () => {
+    const ctx = await setup("CAPFX");
+    const q = await quoteBuy(ctx, 1_000_000n);
+    const fx = q.fx_rate!;
+    const cap = (1_000_000n * BigInt(fx.kobo) + BigInt(fx.micro_usd) - 1n) / BigInt(fx.micro_usd);
+    const auth = await standingAuth(ctx.u.id, { stockIds: [ctx.stock.id] }, ["reinvest"], { maxActionNgn: cap, maxTotalNgn: cap });
+    const spy = vi.spyOn(ratesService, "display").mockRejectedValue(new Error("feed unavailable"));
+    try {
+      const inv = await investmentService.confirm(ctx.u.id, q.id, auth.id, `cap-fx-${randomUUID()}`, { standingAction: "reinvest" });
+      expect(inv.status).toBe("executing");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a standing total cap remains consumed after a successful fill", async () => {
+    const ctx = await setup("SPENTCAP");
+    const budget = 1_000_000n;
+    const standing = await standingAuth(ctx.u.id, { stockIds: [ctx.stock.id] }, ["reinvest"], { maxActionNgn: budget, maxTotalNgn: budget });
+    const firstQuote = await investmentService.quote(ctx.u.id, { stockId: ctx.stock.id, side: "buy", inputRaw: 1_000_000n, budgetNgn: budget });
+    const first = await investmentService.confirm(ctx.u.id, firstQuote.id, standing.id, `spent-a-${randomUUID()}`, { standingAction: "reinvest" });
+    await driveToFinal(ctx, first.id);
+    expect((await investmentService.get(ctx.u.id, first.id))?.status).toBe("filled");
+    const nextQuote = await investmentService.quote(ctx.u.id, { stockId: ctx.stock.id, side: "buy", inputRaw: 1_000_000n, budgetNgn: budget });
+    await expect(investmentService.confirm(ctx.u.id, nextQuote.id, standing.id, `spent-b-${randomUUID()}`, { standingAction: "reinvest" })).rejects.toMatchObject({ code: "AUTHORIZATION_EXCEEDED" });
+  });
+
+  it("unrelated transfers cannot change a finalized fill observation", async () => {
+    const ctx = await setup("DONATION");
+    const quote = await quoteBuy(ctx, 1_000_000n);
+    const auth = await oneTimeAuth(ctx.u.id, quote);
+    const inv = await investmentService.confirm(ctx.u.id, quote.id, auth.id, `donation-${randomUUID()}`);
+    await executionService.progress(inv.operation_id!);
+    const before = await executionService.observe(inv.operation_id!);
+    await ctx.handle.mintSettlement(ctx.ref.accountAddress, 50_000_000n);
+    const after = await executionService.observe(inv.operation_id!);
+    expect(after.actualInput).toEqual(before.actualInput);
+    expect(after.actualOutput).toEqual(before.actualOutput);
+    await driveToFinal(ctx, inv.id);
+    const once = await db.positionLot.count({ where: { userId: ctx.u.id } });
+    await investmentService.progress(inv.id);
+    expect(await db.positionLot.count({ where: { userId: ctx.u.id } })).toBe(once);
+  });
+
   it("twoRequestsReserveOnce: two concurrent 7,000,000 buys against 10,000,000 cash reserve once", { timeout: 60_000 }, async () => {
     const ctx = await setup("TWO");
     const q1 = await quoteBuy(ctx, 7_000_000n);
@@ -137,7 +206,7 @@ describe("consent-bound investments on the local testnet", () => {
 
   it("partialFillReleasesOnlyUnusedInput: partial fill settles actuals and consumes the quote", { timeout: 60_000 }, async () => {
     const ctx = await setup("PART");
-    const q = await quoteBuy(ctx, 10_000_000n, 6_000, true);
+    const q = await quoteBuy(ctx, 10_000_000n, 100, true);
     const auth = await oneTimeAuth(ctx.u.id, q);
     // The pool degrades after quoting: the router pulls only half the input.
     await ctx.handle.setO1PartialFillBps(5_000n);
@@ -166,7 +235,7 @@ describe("consent-bound investments on the local testnet", () => {
 
   it("partialFillWithoutConsentReverts: a smaller input fill cannot finalize without allowPartialFill", { timeout: 60_000 }, async () => {
     const ctx = await setup("PNF");
-    const q = await quoteBuy(ctx, 10_000_000n, 6_000, false);
+    const q = await quoteBuy(ctx, 10_000_000n, 100, false);
     const auth = await oneTimeAuth(ctx.u.id, q);
     await ctx.handle.setO1PartialFillBps(5_000n);
     try {
@@ -236,11 +305,11 @@ describe("consent-bound investments on the local testnet", () => {
     expect(failed.length).toBe(1);
     expect((failed[0]!).reason).toMatchObject({ code: "AUTHORIZATION_EXCEEDED" });
     // Cash was reserved exactly once, by exactly one operation.
-    expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(1_000_000n);
-    expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(9_000_000n);
+    expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(BigInt(q1.input_raw));
+    expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(10_000_000n - BigInt(q1.input_raw));
   });
 
-  it("contractDeadlineCannotBeExtended: inclusion after the quote-expiry bound reverts and releases cash", { timeout: 60_000 }, async () => {
+  it("contractDeadlineCannotBeExtended: an expired signed instruction is never broadcast", { timeout: 60_000 }, async () => {
     const ctx = await setup("DED");
     const q = await quoteBuy(ctx, 2_000_000n);
     const auth = await oneTimeAuth(ctx.u.id, q);
@@ -258,20 +327,17 @@ describe("consent-bound investments on the local testnet", () => {
     const latest = await publicClientFor().getBlock({ blockTag: "latest" });
     const target = Math.max(Number(latest.timestamp) + 1, Math.ceil(quoteRow.expiresAt.getTime() / 1000) + 1);
     await ctx.handle.advanceTime(target - Number(latest.timestamp));
-    // The same signed bytes are broadcast; inclusion after the deadline reverts.
-    await executionService.progress(opId);
-    await ctx.handle.mine(3);
-    await executionService.progress(opId);
+    await expect(executionService.progress(opId)).rejects.toThrow("deadline has passed");
     op = await db.onchainOperation.findUniqueOrThrow({ where: { id: opId } });
-    expect(op.status).toBe("reverted");
-    expect(op.errorReason).toBe("deadline exceeded");
+    expect(op.status).toBe("signed");
     expect(op.txHash).toBe(signed.executeHash);
-    await investmentService.progress(inv.id);
-    const row = await investmentService.get(ctx.u.id, inv.id);
-    expect(row?.status).toBe("failed");
-    // The full reservation returns to cash; nothing was spent.
-    expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(0n);
-    expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(10_000_000n);
+    const transaction = await (await import("@/backend/services/onchain/testnet")).rpcRequest(
+      ctx.handle.url, "eth_getTransactionByHash", [signed.executeHash],
+    );
+    expect(transaction).toBeNull();
+    expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(2_000_000n);
+    expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(8_000_000n);
+    expect(await ledgerService.balance(acct.userStock(ctx.u.id, ctx.stock.id))).toBe(0n);
   });
 
   it("fundingReceiptCannotCreditCashTwice: webhook replay and the confirmed funding receipt credit cash once", { timeout: 90_000 }, async () => {

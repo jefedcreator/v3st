@@ -6,7 +6,7 @@ import { BadRequestException, NotFoundException, UnprocessableEntityException } 
 import { formatMinor } from "@/utils/money";
 
 export function isTestnetStock(stock: Stock): boolean {
-  return stock.assetKey?.startsWith("testnet:") ?? false;
+  return stock.chain === "testnet" && stock.networkId !== null;
 }
 
 function toDto(stock: Stock): StockDto {

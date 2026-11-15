@@ -204,7 +204,7 @@ export async function testnet(): Promise<TestnetHandle> {
         abi: settlementTokenAbi,
         functionName: "balanceOf",
         args: [address],
-      }) as Promise<bigint>;
+      });
     },
     async tokenBalance(token, address) {
       return publicClient.readContract({
@@ -212,14 +212,14 @@ export async function testnet(): Promise<TestnetHandle> {
         abi: stockTokenAbi,
         functionName: "balanceOf",
         args: [address],
-      }) as Promise<bigint>;
+      });
     },
     async tokenMultiplier(token) {
       return publicClient.readContract({
         address: token,
         abi: stockTokenAbi,
         functionName: "multiplierWad",
-      }) as Promise<bigint>;
+      });
     },
     async allowance(token, owner, spender) {
       return publicClient.readContract({
@@ -227,7 +227,7 @@ export async function testnet(): Promise<TestnetHandle> {
         abi: stockTokenAbi,
         functionName: "allowance",
         args: [owner, spender],
-      }) as Promise<bigint>;
+      });
     },
     async sendTx(input) {
       return sendAndWait(wallet.sendTransaction({ to: input.to, data: input.data, value: input.value ?? 0n }));
@@ -364,7 +364,7 @@ export async function makeTestnetStock(input: {
     name: input.name ?? `Test ${input.symbol}`,
   });
   const { keccak256, toHex } = await import("viem");
-  const registryKey = keccak256(toHex(assetKeyValue)) as Hex;
+  const registryKey = keccak256(toHex(assetKeyValue));
   if (input.referencePriceMicroUsd !== undefined) {
     await handle.setReferencePrice(
       registryKey,

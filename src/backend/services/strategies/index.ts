@@ -1,3 +1,4 @@
+import { controlsService } from "@/backend/services/controls";
 import { type Address, type Hex, parseEventLogs } from "viem";
 
 import {
@@ -19,7 +20,7 @@ import {
   registerOperationFinalizer,
   unpack,
 } from "@/backend/services/execution";
-import { captureBalances, deltaVector, receivedOf as deltaReceivedOf, spentOf as deltaSpentOf } from "@/backend/services/execution/receipts";
+import { transactionDeltas, receivedOf as deltaReceivedOf, spentOf as deltaSpentOf } from "@/backend/services/execution/receipts";
 import { jobService } from "@/backend/services/jobs";
 import { acct } from "@/backend/services/ledger/accounts";
 import { ledgerService } from "@/backend/services/ledger";
@@ -51,6 +52,9 @@ import { parseAssetKey } from "@/backend/services/onchain/types";
 import { positionService } from "@/backend/services/positions";
 import { rewardService } from "@/backend/services/rewards";
 import { stockService } from "@/backend/services/stocks";
+import { stockActionService } from "@/backend/services/stocks/corporate-actions";
+import { referenceUsable } from "@/backend/services/stocks/reference";
+import { ratesService } from "@/backend/services/rates";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { canonicalJson, sha256Hex } from "@/utils";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
@@ -181,7 +185,25 @@ type StoredQuoteContext = {
   betaContext: BetaContext;
   strategyQuote: unknown;
   preparatory?: unknown;
+  fxRate?: { kobo: string; microUsd: string } | null;
 };
+
+type ValuationBasis = Record<string, {
+  priceMicroUsd: string;
+  multiplierWad: string;
+  decimals: number;
+  basis: string;
+  asOf: string;
+}>;
+
+function valueAtBasis(amount: AssetAmount, basis: ValuationBasis): bigint | null {
+  if (amount.raw === 0n) return 0n;
+  if (isSettlementAsset(amount.asset)) return amount.raw;
+  const ref = basis[amount.asset];
+  if (!ref) return null;
+  const multiplier = ref.basis === "share_price" ? BigInt(ref.multiplierWad) : 10n ** 18n;
+  return amount.raw * BigInt(ref.priceMicroUsd) * multiplier / (10n ** BigInt(ref.decimals) * 10n ** 18n);
+}
 
 class StrategyService {
   async list(_userId: string): Promise<StrategyDto[]> {
@@ -258,20 +280,28 @@ class StrategyService {
     return withTx((tx) => this.operationDto(tx, op));
   }
 
-  // USDC-equivalent of a multi-asset input vector: settlement at face value, stock
-  // legs valued at the reference share price (18-decimal raw quantities).
-  private async usdcEquivalentOf(tx: Tx, amounts: AssetAmount[]): Promise<bigint> {
+  // Retain the valuation evidence used when authorizing an allocation. Later
+  // settlement uses this snapshot, even after the live reference changes/expires.
+  private async valuationBasis(tx: Tx, assets: string[]): Promise<ValuationBasis> {
+    const basis: ValuationBasis = {};
+    for (const asset of new Set(assets)) {
+      if (isSettlementAsset(asset)) continue;
+      const stock = await tx.stock.findFirst({ where: { assetKey: asset } });
+      if (!stock || !referenceUsable(stock, now()) || stock.referencePriceMicroUsd === null || !["share_price", "token_nav"].includes(stock.referenceBasis ?? "")) continue;
+      basis[asset] = { priceMicroUsd: stock.referencePriceMicroUsd.toString(), multiplierWad: (await stockActionService.effectiveMultiplier(stock.id, now())).toString(), decimals: stock.decimals, basis: stock.referenceBasis!, asOf: stock.referenceAsOf!.toISOString() };
+    }
+    return basis;
+  }
+
+  private async usdcEquivalentOf(tx: Tx, amounts: AssetAmount[], retained?: ValuationBasis): Promise<bigint> {
+    const basis = retained ?? await this.valuationBasis(tx, amounts.map((a) => a.asset));
     let total = 0n;
     for (const a of amounts) {
-      if (isSettlementAsset(a.asset)) {
-        total += a.raw;
-        continue;
-      }
-      const stock = await tx.stock.findFirst({ where: { assetKey: a.asset } });
-      if (!stock?.referencePriceMicroUsd) {
+      const value = valueAtBasis(a, basis);
+      if (value === null) {
         throw new UnprocessableEntityException("Reference price is missing or stale", "STOCK_UNAVAILABLE");
       }
-      total += (a.raw * stock.referencePriceMicroUsd) / 10n ** BigInt(stock.decimals);
+      total += value;
     }
     return total;
   }
@@ -282,9 +312,8 @@ class StrategyService {
     let total = await ledgerService.balance(acct.userCash(userId, CHAIN), tx);
     const stocks = await tx.stock.findMany();
     for (const stock of stocks) {
-      if (stock.referencePriceMicroUsd === null) continue;
-      const owned = await ledgerService.balance(acct.userStock(userId, stock.id), tx);
-      if (owned > 0n) total += (owned * stock.referencePriceMicroUsd) / 10n ** BigInt(stock.decimals);
+      const owned = await ledgerService.balance(acct.userStock(userId, stock.id), tx) + await ledgerService.balance(acct.userStockReserved(userId, stock.id), tx);
+      if (owned > 0n) total += await this.usdcEquivalentOf(tx, [{ asset: stock.assetKey ?? "unavailable", raw: owned }]);
     }
     return total;
   }
@@ -337,6 +366,8 @@ class StrategyService {
       ref.custodyProfileId,
     );
     const adapter = onchainRegistry.strategy(strategy.providerId as StockProviderId, context);
+    const displayRates = await ratesService.display().catch(() => null);
+    const fxRate = displayRates ? { kobo: displayRates.depositRate.kobo.toString(), microUsd: displayRates.depositRate.microUsd.toString() } : null;
 
     let inputs: AssetAmount[] = [];
     let preparatory: ExecutionQuote | null = null;
@@ -429,10 +460,18 @@ class StrategyService {
           betaContext: context,
           strategyQuote: quote,
           preparatory,
+          fxRate,
         }) as Prisma.InputJsonValue,
       },
     });
     return this.quoteToDto(row);
+  }
+
+  async confirmRequest(userId: string, quoteId: string, authorizationId: string, clientKey: string): Promise<{ dto: StrategyOperationDto; created: boolean }> {
+    const key = `strategy:${userId}:${clientKey}`;
+    const existing = await db.onchainOperation.findUnique({ where: { key: `strat-op:${key}` } });
+    const dto = await this.confirm(userId, quoteId, authorizationId, key);
+    return { dto, created: !existing };
   }
 
   async confirm(
@@ -445,8 +484,10 @@ class StrategyService {
     const requestHash = sha256Hex(canonicalJson({ quoteId, authorizationId, key }));
     return withTx(async (tx) => {
       const opKey = `strat-op:${key}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${opKey}))`;
       const existing = await tx.onchainOperation.findUnique({ where: { key: opKey } });
       if (existing) {
+        if (existing.userId !== userId) throw new NotFoundException("Strategy operation not found", "NOT_FOUND");
         if (existing.requestHash !== requestHash) {
           throw new ConflictException("Idempotency key reused with a different payload", "IDEMPOTENCY_KEY_REUSED");
         }
@@ -468,6 +509,7 @@ class StrategyService {
       const quote = unpack(stored.strategyQuote) as StrategyQuote;
       const preparatory = stored.preparatory ? (unpack(stored.preparatory) as ExecutionQuote) : null;
       const action = quote.request.action;
+      if (action === "enter") await controlsService.assertOpen("trading", "TRADING_PAUSED");
       if (action === "claim" && !strategy.separateClaim) {
         throw new UnprocessableEntityException(
           "This strategy realizes fees on exit; separate claim is unsupported",
@@ -475,12 +517,14 @@ class StrategyService {
         );
       }
       const wallet = await tx.wallet.findUniqueOrThrow({ where: { userId_family: { userId, family: "evm" } } });
+      await lockRows(tx, "wallets", [wallet.id]);
       const ref = await testnetWalletService.ensureExecutionAccount(userId);
       const accountAddress = ref.accountAddress;
       const network = await tx.onchainNetwork.findFirst({ where: { chainId: stored.betaContext.chainId } });
       if (!network) throw new NotFoundException("Onchain network not registered", "NETWORK_UNHEALTHY");
 
-      const allocationUsdc = await this.usdcEquivalentOf(tx, quote.maximumInputs);
+      const valuationBasis = await this.valuationBasis(tx, [...quote.maximumInputs, ...quote.minimumOutputs].map((a) => a.asset).concat(strategy.inputAssets as string[]));
+      const allocationUsdc = action === "enter" ? await this.usdcEquivalentOf(tx, quote.maximumInputs, valuationBasis) : action === "claim" ? await this.usdcEquivalentOf(tx, quote.minimumOutputs, valuationBasis) : fromDbRaw((await tx.strategyPosition.findUniqueOrThrow({ where: { id: quote.request.positionId! } })).principalUsdc);
       const usageNgnKobo = await authorizationService.check(tx, userId, authorizationId, {
         // Strategy entry/exit require one-time consent bound to this quote; a claim
         // may instead ride a standing authorization with the claim action.
@@ -500,12 +544,12 @@ class StrategyService {
       });
       if (pending.length > 0) await lockRows(tx, "strategy_positions", pending.map((p) => p.id));
       const exposure = pending.reduce((sum, p) => sum + fromDbRaw(p.principalUsdc), 0n);
-      const investmentValue = await this.investmentValueUsdc(tx, userId);
+      const investmentValue = action === "enter" ? await this.investmentValueUsdc(tx, userId) : 0n;
       const maxByExposure = (BigInt(strategy.capBps) * investmentValue) / 10_000n;
-      if (allocationUsdc > fromDbRaw(strategy.maxUsdEquivalent)) {
+      if (action === "enter" && allocationUsdc > fromDbRaw(strategy.maxUsdEquivalent)) {
         throw new UnprocessableEntityException("Allocation exceeds the strategy fixture ceiling", "LIMIT_EXCEEDED");
       }
-      if (exposure + allocationUsdc > maxByExposure) {
+      if (action === "enter" && exposure + allocationUsdc > maxByExposure) {
         throw new UnprocessableEntityException("Allocation exceeds the strategy exposure cap", "LIMIT_EXCEEDED");
       }
 
@@ -583,6 +627,7 @@ class StrategyService {
             fingerprint: "pending",
             expected: pack({
               quote: preparatory,
+              fxRate: stored.fxRate ?? null,
               recipient: accountAddress,
               reserved: { [settlement]: swapBudget.toString() },
             }) as Prisma.InputJsonValue,
@@ -614,6 +659,7 @@ class StrategyService {
           fingerprint: "pending",
           expected: pack({
             quote,
+            valuationBasis,
             recipient: accountAddress,
             preparatoryOperationId,
             reserved,
@@ -734,7 +780,8 @@ class StrategyService {
           stockReserved({ key: `${parent.key}:reserve:stock:${stock.id}`, userId: current.userId, stockId: stock.id, quantity: amountOut }),
         );
         const expected = (parent.expected ?? {}) as { reserved?: Record<string, string> };
-        expected.reserved = { ...(expected.reserved ?? {}), [stock.assetKey]: amountOut.toString() };
+        expected.reserved ??= {};
+        expected.reserved[stock.assetKey] = amountOut.toString();
         await tx.onchainOperation.update({
           where: { id: parent.id },
           data: { expected },
@@ -811,6 +858,7 @@ class StrategyService {
       plan?: unknown;
       preBalances?: Record<string, string>;
       reserved?: Record<string, string>;
+      valuationBasis?: ValuationBasis;
     };
     if (!expected.quote) return;
     const quote = unpack(expected.quote) as StrategyQuote;
@@ -836,8 +884,7 @@ class StrategyService {
       if (deltas.length === 0) {
         const assets = plan ? [...plan.maximumInputs, ...plan.minimumOutputs].map((a) => a.asset) : [];
         const uniqueAssets = [...new Set(assets)];
-        const post = uniqueAssets.length > 0 ? await captureBalances(uniqueAssets, account) : {};
-        deltas = deltaVector(expected.preBalances ?? {}, post, account);
+        deltas = op.txHash ? await transactionDeltas(op.txHash as Hex, uniqueAssets, account) : [];
       }
       const spentOf = (asset: string): bigint => deltaSpentOf(deltas, asset);
       const receivedOf = (asset: string): bigint => deltaReceivedOf(deltas, asset);
@@ -873,7 +920,9 @@ class StrategyService {
           }
         }
         if (position) {
-          const principal = settleSpent + (stockSpent * (stock?.referencePriceMicroUsd ?? 0n)) / 10n ** BigInt(stock?.decimals ?? 18);
+          const stockValue = stockAsset ? valueAtBasis({ asset: stockAsset, raw: stockSpent }, expected.valuationBasis ?? {}) : 0n;
+          if (stockValue === null) throw new ConflictException("Entry valuation evidence is missing", "OPERATION_UNRESOLVED");
+          const principal = settleSpent + stockValue;
           await tx.strategyPosition.update({
             where: { id: position.id },
             data: {
@@ -887,8 +936,12 @@ class StrategyService {
         }
       } else if (action === "exit") {
         const shares = await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Withdrawn");
-        const settleOut = receivedOf(settlement);
-        const stockOut = stockAsset ? receivedOf(stockAsset) : 0n;
+        const rewards = await rewardService.amountsForOperation(op.id, tx);
+        // Exit transfers contain principal plus any separately logged fees. The
+        // fee receipts credit the latter once; the principal posting excludes it.
+        const settleOut = receivedOf(settlement) - (rewards.get(settlement) ?? 0n);
+        const stockOut = stockAsset ? receivedOf(stockAsset) - (rewards.get(stockAsset) ?? 0n) : 0n;
+        if (settleOut < 0n || stockOut < 0n) throw new ConflictException("Reward exceeds proved exit transfers", "OPERATION_UNRESOLVED");
         const exited = strategyExited({
           key: op.key,
           userId: op.userId,
@@ -901,14 +954,14 @@ class StrategyService {
         if (exited.entries.length > 0) await ledgerService.post(tx, exited);
         if (position) {
           const remaining = fromDbRaw(position.receiptRaw);
-          const value =
-            settleOut + (stockOut * (stock?.referencePriceMicroUsd ?? 0n)) / 10n ** BigInt(stock?.decimals ?? 18);
+          const stockValue = stockAsset ? valueAtBasis({ asset: stockAsset, raw: stockOut }, expected.valuationBasis ?? {}) : 0n;
+          const value = stockValue === null ? null : settleOut + stockValue;
           await tx.strategyPosition.update({
             where: { id: position.id },
             data: {
               state: "exited",
               receiptRaw: toDbRaw(remaining > shares ? remaining - shares : 0n),
-              valueUsdc: toDbRaw(value),
+              valueUsdc: value === null ? null : toDbRaw(value),
             },
           });
           await eventService.emit(tx, op.userId, "strategy.position.updated", position.id, "exited");

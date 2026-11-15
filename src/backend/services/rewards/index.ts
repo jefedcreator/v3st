@@ -1,7 +1,8 @@
+import { stockAssetKey, readManifest as assetManifest } from "@/backend/services/onchain/testnet";
 import { type Address, type Hex, type Log, parseEventLogs } from "viem";
 
 import { type Prisma, type RewardSource } from "@/server/prisma";
-import { db, withTx, type Tx } from "@/server/db";
+import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { accountAddressFor, unpack } from "@/backend/services/execution";
 import { investmentService } from "@/backend/services/investments";
 import { jobService } from "@/backend/services/jobs";
@@ -10,7 +11,6 @@ import { now } from "@/backend/clock";
 import { hookFeeAbi, hydrexPoolAbi, hydropumpLockerAbi, stockDistributionAbi } from "@/backend/services/onchain/abis";
 import { publicClientFor, readManifest, settlementAssetKey } from "@/backend/services/onchain/testnet";
 import type { StrategyQuote } from "@/backend/services/onchain/types";
-import { assetKey } from "@/backend/services/onchain/types";
 import { ledgerService } from "@/backend/services/ledger";
 import { rewardReceived } from "@/backend/services/ledger/postings";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
@@ -149,7 +149,7 @@ async function decodeRewardEvents(input: {
       eventName: ["FeesClaimed"],
     });
     for (const p of parsed) {
-      if (p.args.beneficiary.toLowerCase() !== account) continue;
+      if (p.args.beneficiary.toLowerCase() !== account || p.args.lockId.toString() !== prov.lockId) continue;
       if (p.args.amount <= 0n) continue;
       const locks = await client.readContract({
         address: locker as Address,
@@ -157,10 +157,10 @@ async function decodeRewardEvents(input: {
         functionName: "locks",
         args: [p.args.lockId],
       });
-      const settlement = (locks as unknown as { settlement: Address }).settlement;
+      const settlement = locks[0];
       out.push({
         logIndex: p.logIndex,
-        asset: assetKey("testnet", input.chainId, settlement.toLowerCase()),
+        asset: stockAssetKey(assetManifest(), settlement),
         amountRaw: p.args.amount,
         sourceRef: `${locker}:${p.args.lockId.toString()}`,
       });
@@ -184,9 +184,10 @@ async function decodeRewardEvents(input: {
       functionName: "rewardTokenOf",
       args: [prov.launchId as Hex],
     });
-    const rewardAsset = assetKey("testnet", input.chainId, (rewardTokenValue as Address).toLowerCase());
+    const rewardAsset = stockAssetKey(assetManifest(), rewardTokenValue as Address);
     for (const p of parsed) {
       if (p.args.account.toLowerCase() !== account) continue;
+      if (p.args.epochKey.toLowerCase() !== prov.launchId.toLowerCase()) continue;
       if (p.args.amount <= 0n) continue;
       out.push({ logIndex: p.logIndex, asset: rewardAsset, amountRaw: p.args.amount, sourceRef: prov.launchId });
     }
@@ -207,9 +208,9 @@ async function decodeRewardEvents(input: {
       functionName: "feeTokenOf",
       args: [prov.launchId as Hex],
     });
-    const feeAsset = assetKey("testnet", input.chainId, (feeTokenValue as Address).toLowerCase());
+    const feeAsset = stockAssetKey(assetManifest(), feeTokenValue as Address);
     for (const p of parsed) {
-      if (p.args.recipient.toLowerCase() !== account) continue;
+      if (p.args.recipient.toLowerCase() !== account || p.args.launchId.toLowerCase() !== prov.launchId.toLowerCase()) continue;
       if (p.args.amount <= 0n) continue;
       out.push({ logIndex: p.logIndex, asset: feeAsset, amountRaw: p.args.amount, sourceRef: prov.launchId });
     }
@@ -242,6 +243,17 @@ export async function userIdForBeneficiary(
 }
 
 class RewardService {
+  async amountsForOperation(operationId: string, client: Tx): Promise<Map<string, bigint>> {
+    const op = await client.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
+    const quote = unpack((op.expected as { quote: unknown }).quote) as StrategyQuote;
+    const strategy = await client.strategy.findUniqueOrThrow({ where: { id: quote.request.strategyId } });
+    const events = await decodeRewardEvents({ providerId: op.providerId, provenance: strategy.provenance,
+      logs: op.txHash ? await txLogs(op.txHash as Hex) : [], account: await accountAddressFor(client, op), chainId: quote.request.context.chainId });
+    const amounts = new Map<string, bigint>();
+    for (const event of events) amounts.set(event.asset, (amounts.get(event.asset) ?? 0n) + event.amountRaw);
+    return amounts;
+  }
+
   // Records finalized onchain reward/fee realizations as immutable receipts keyed
   // by (network, source, txHash, logIndex, beneficiary): replaying the same event
   // (worker retry or a second operation carrying the same tx) yields one receipt
@@ -263,7 +275,11 @@ class RewardService {
             : SOURCE_FOR[op.providerId];
       if (!source) return;
       const account = await accountAddressFor(client, op);
-      const logs = await txLogs(op.txHash as Hex);
+      const receipt = await publicClientFor().getTransactionReceipt({ hash: op.txHash as Hex });
+      if (receipt.status !== "success" || receipt.blockHash !== op.blockHash) return;
+      const sourceBlock = await publicClientFor().getBlock({ blockHash: receipt.blockHash });
+      const sourceAt = new Date(Number(sourceBlock.timestamp) * 1000);
+      const logs = receipt.logs;
       const events = await decodeRewardEvents({
         providerId: op.providerId,
         provenance: strategy.provenance,
@@ -274,19 +290,22 @@ class RewardService {
       const beneficiary = account.toLowerCase();
       for (const event of events) {
         if (event.amountRaw <= 0n) continue;
+        const knownAsset = await client.stock.findFirst({ where: { assetKey: event.asset } });
+        if (!knownAsset && event.asset !== settlementAssetKey(readManifest())) continue;
         const existing = await client.rewardReceipt.findUnique({
           where: {
-            networkId_source_txHash_logIndex_beneficiary: {
+            networkId_source_txHash_logIndex_beneficiary_asset: {
               networkId: op.networkId,
               source,
               txHash: op.txHash,
               logIndex: event.logIndex,
               beneficiary,
+              asset: event.asset,
             },
           },
         });
         if (existing) continue;
-        const week = lagosWeek(now());
+        const week = lagosWeek(sourceAt);
         const row = await client.rewardReceipt.create({
           data: {
             networkId: op.networkId,
@@ -323,7 +342,7 @@ class RewardService {
           // conversion sell has a tracked basis and its gain is classified as a
           // sale gain, separate from the distribution receipt itself.
           const existingLot = await client.positionLot.findFirst({
-            where: { userId: op.userId, stockId: stock.id, operationId: op.id, source: `reward:${source}` },
+            where: { userId: op.userId, stockId: stock.id, operationId: op.id, source: `reward:${source}:${row.id}` },
           });
           if (!existingLot) {
             await client.positionLot.create({
@@ -334,11 +353,12 @@ class RewardService {
                 operationId: op.id,
                 quantity: toDbRaw(event.amountRaw),
                 costUsdc: toDbRaw(0n),
-                source: `reward:${source}`,
+                source: `reward:${source}:${row.id}`,
               },
             });
           }
         }
+        await jobService.enqueue(client, { kind: "earnings.recognize", subjectId: row.id });
       }
     };
     if (tx) return run(tx);
@@ -351,7 +371,8 @@ class RewardService {
   // records the proceeds once. Replaying returns the same operation.
   async convert(receiptId: string, authorizationId: string): Promise<string> {
     const receipt = await db.rewardReceipt.findUniqueOrThrow({ where: { id: receiptId } });
-    if (receipt.state === "conversion_pending" && receipt.conversionOperationId) {
+    if (receipt.conversionAuthorizationId && receipt.conversionAuthorizationId !== authorizationId) throw new ConflictException("Conversion authorization differs from accepted instruction", "IDEMPOTENCY_KEY_REUSED");
+    if (receipt.conversionOperationId) {
       return receipt.conversionOperationId;
     }
     if (receipt.state !== "received_asset") {
@@ -394,12 +415,27 @@ class RewardService {
       throw new NotFoundException("Receipt not found", "NOT_FOUND");
     }
     const key = `convert:${receiptId}`;
-    const quote = await investmentService.quote(auth.userId, {
-      stockId: stock.id,
-      side: "sell",
-      inputRaw: fromDbRaw(receipt.amountRaw),
-    });
-    const investment = await investmentService.confirm(auth.userId, quote.id, authorizationId, key, {
+    // Resolve the accepted operation before making a new quote. This also repairs
+    // a crash between confirmation and linking the receipt.
+    const prior = await db.investment.findUnique({ where: { key } });
+    let acceptedQuoteId = receipt.conversionQuoteId ?? prior?.quoteId;
+    if (!acceptedQuoteId) {
+      const quote = await investmentService.quote(auth.userId, {
+        stockId: stock.id, side: "sell", inputRaw: fromDbRaw(receipt.amountRaw), allowPartialFill: false,
+      });
+      await withTx(async (tx) => {
+        await lockRows(tx, "reward_receipts", [receiptId]);
+        const fresh = await tx.rewardReceipt.findUniqueOrThrow({ where: { id: receiptId } });
+        if (!fresh.conversionQuoteId) await tx.rewardReceipt.update({ where: { id: receiptId }, data: {
+          conversionQuoteId: quote.id, conversionAuthorizationId: authorizationId,
+        } });
+      });
+      const fresh = await db.rewardReceipt.findUniqueOrThrow({ where: { id: receiptId } });
+      if (fresh.conversionAuthorizationId !== authorizationId) throw new ConflictException("Conversion already accepted", "IDEMPOTENCY_KEY_REUSED");
+      acceptedQuoteId = fresh.conversionQuoteId;
+    }
+    if (!acceptedQuoteId) throw new ConflictException("Conversion quote unavailable", "NEEDS_CONFIRMATION");
+    const investment = await investmentService.confirm(auth.userId, acceptedQuoteId, authorizationId, key, {
       standingAction: "reward_conversion",
     });
     if (!investment.operation_id) {
@@ -407,7 +443,7 @@ class RewardService {
     }
     await db.rewardReceipt.update({
       where: { id: receiptId },
-      data: { state: "conversion_pending", conversionOperationId: investment.operation_id },
+      data: { state: "conversion_pending", conversionOperationId: investment.operation_id, conversionAuthorizationId: authorizationId },
     });
     await jobService.enqueue(db, { kind: "operation.progress", subjectId: investment.operation_id });
     return investment.operation_id;

@@ -1,11 +1,10 @@
-import { type Address, type Hex } from "viem";
+import { type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 import { now } from "@/backend/clock";
 import type { OnchainOperation } from "@/server/prisma";
 import { db } from "@/server/db";
 import { RetryableError } from "@/backend/services/jobs/types";
-import { executionAccountAbi } from "@/backend/services/onchain/abis";
 import {
   loadArtifact,
   publicClientFor,
@@ -45,6 +44,11 @@ export class BankrGatewayReplica {
     if (!verified.ok) {
       throw new ServiceUnavailableException(`Testnet unavailable: ${verified.reason}`, "NETWORK_UNHEALTHY");
     }
+    const existing = await db.custodyProfile.findUnique({ where: { kind_walletId: { kind: "provider_managed", walletId: wallet.id } } });
+    if (existing) {
+      if (existing.deploymentId !== manifest.deploymentId) throw new ServiceUnavailableException("Managed account deployment requires restore", "NETWORK_UNHEALTHY");
+      return { custodyProfileId: existing.id, walletId: wallet.id };
+    }
     const serverKey = privateKeyToAccount(generatePrivateKey());
     const relayer = relayerAccount();
     const walletClient = walletClientFor(relayer);
@@ -66,6 +70,7 @@ export class BankrGatewayReplica {
         walletId: wallet.id,
         externalProfileId: `bankr-server-key:${serverKey.address.toLowerCase()}`,
         managedAddress: receipt.contractAddress,
+        deploymentId: manifest.deploymentId,
       },
       update: {},
     });

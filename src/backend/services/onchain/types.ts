@@ -62,6 +62,7 @@ export type ExecutionQuote = {
   expectedOutput: AssetAmount;
   minOutput: AssetAmount;
   userFeeUsdc: bigint;
+  venueFee?: AssetAmount;
   sponsorCostWei: bigint;
   allowPartialFill: boolean;
   priceImpactBps: number;
@@ -151,12 +152,12 @@ export function assetKey(namespace: string, chainId: number | bigint, address: s
 
 export function parseAssetKey(asset: AssetKey): { namespace: string; chainId: number; address: string } {
   const parts = asset.split(":");
-  if (parts.length !== 3) {
+  if (parts.length !== 3 || !parts[0] || !/^0x[0-9a-fA-F]{40}$/.test(parts[2] ?? "")) {
     throw new Error(`Invalid asset key: ${asset}`);
   }
   const chainId = Number(parts[1]);
   if (!Number.isSafeInteger(chainId) || chainId <= 0) {
     throw new Error(`Invalid chain id in asset key: ${asset}`);
   }
-  return { namespace: parts[0]!, chainId, address: parts[2]! };
+  return { namespace: parts[0], chainId, address: parts[2]! };
 }

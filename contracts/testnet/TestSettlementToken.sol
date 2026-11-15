@@ -12,6 +12,10 @@ contract TestSettlementToken {
     address public owner;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
+    // Test-only managed transfer rail, modelling the beta wallet provider. The
+    // application validates its bounded persisted transfer before the relayer
+    // signs. Replaying a rail operation cannot move test funds twice.
+    mapping(bytes32 => bytes32) public railOperations;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -45,6 +49,27 @@ contract TestSettlementToken {
         allowance[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
+    }
+
+    function managedTransfer(bytes32 operationId, address from, address to, uint256 amount) external onlyOwner {
+        bytes32 payload = keccak256(abi.encode(from, to, amount));
+        if (railOperations[operationId] != bytes32(0)) {
+            require(railOperations[operationId] == payload, "operation payload changed");
+            return;
+        }
+        railOperations[operationId] = payload;
+        _transfer(from, to, amount);
+    }
+
+    function managedMint(bytes32 operationId, address to, uint256 amount) external onlyOwner {
+        bytes32 payload = keccak256(abi.encode(address(0), to, amount));
+        if (railOperations[operationId] != bytes32(0)) {
+            require(railOperations[operationId] == payload, "operation payload changed");
+            return;
+        }
+        railOperations[operationId] = payload;
+        balanceOf[to] += amount;
+        emit Transfer(address(0), to, amount);
     }
 
     function transfer(address to, uint256 amount) external returns (bool) {

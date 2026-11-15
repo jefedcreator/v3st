@@ -41,7 +41,9 @@ class TradeRouter {
   }
 
   venueById(id: string): Venue {
-    return venues.find((v) => v.id === id) ?? simulatedVenue;
+    const venue = venues.find((v) => v.id === id);
+    if (!venue) throw new ConflictException("Unknown venue", "NO_ROUTE");
+    return venue;
   }
 }
 

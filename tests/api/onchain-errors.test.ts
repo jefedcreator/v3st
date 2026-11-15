@@ -239,10 +239,8 @@ describe("onchain API error contract", () => {
       body: JSON.stringify({ quote_id: quote.id, authorization_id: authId }),
       headers: authHeaders(ctx.session, randomUUID()),
     });
-    expect(confirm.status).toBe(202);
-    const inv = (confirm.json as { data: InvestmentDto }).data;
-    expect(inv.status).toBe("needs_confirmation");
-    expect(inv.operation_id).toBeNull();
+    expect(confirm.status).toBe(409);
+    expect(confirm.json).toMatchObject({ code: "QUOTE_EXPIRED", data: null });
     expect(await ledgerService.balance(acct.userCash(ctx.u.id, "testnet"))).toBe(cashBefore);
 
     // Inadequate balance: 409 INSUFFICIENT_FUNDS, nothing reserved.

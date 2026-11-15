@@ -11,6 +11,7 @@ import { hydrexPoolAbi, settlementTokenAbi, stockTokenAbi } from "@/backend/serv
 import "@/backend/services/onchain/providers";
 import { chainDeadlineFromNow, publicClientFor, settlementAssetKey } from "@/backend/services/onchain/testnet";
 import { strategyService } from "@/backend/services/strategies";
+import { stockActionService } from "@/backend/services/stocks/corporate-actions";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { db, withTx } from "@/server/db";
 import { openingBalance } from "@/backend/services/ledger/postings";
@@ -194,6 +195,37 @@ async function positionOf(ctx: Ctx) {
 }
 
 describe("opt-in strategy lifecycle on the local testnet", () => {
+  it("uses the multiplier once for exposure and retains the accepted token-NAV valuation", async () => {
+    const ctx = await setup("VALBASIS");
+    await ctx.handle.scheduleMultiplier(ctx.token, 2n * 10n ** 18n, Math.floor(Date.now() / 1000) - 1);
+    await ctx.handle.advanceTime(5);
+    await ctx.handle.applyDueActions(ctx.token);
+    const throughBlock = await ctx.handle.blockNumber();
+    await ctx.handle.mine(3);
+    await stockActionService.ingest(ctx.network.id, throughBlock);
+    const input = { strategyId: ctx.strategy.id, action: "enter" as const, inputs: [{ asset: ctx.settlementKey, raw: 1_000_000n }, { asset: ctx.stock.assetKey!, raw: 40n * 10n ** 18n }] };
+    const shareQuote = await strategyService.quote(ctx.u.id, input);
+    const shareAuth = await oneTimeAuth(ctx.u.id, shareQuote, "strategy");
+    await expect(strategyService.confirm(ctx.u.id, shareQuote.id, shareAuth.id, `share-cap-${randomUUID()}`)).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
+    await db.stock.update({ where: { id: ctx.stock.id }, data: { referenceBasis: "token_nav", referenceAsOf: new Date() } });
+    const navQuote = await strategyService.quote(ctx.u.id, input);
+    const navAuth = await oneTimeAuth(ctx.u.id, navQuote, "strategy");
+    const confirmed = await strategyService.confirm(ctx.u.id, navQuote.id, navAuth.id, `nav-${randomUUID()}`);
+    expect(fromDbRaw((await positionOf(ctx)).principalUsdc)).toBe(81_000_000n);
+    await db.stock.update({ where: { id: ctx.stock.id }, data: { referencePriceMicroUsd: 999_000_000n } });
+    expect((await drive(ctx, confirmed.operation_id)).status).toBe("finalized");
+    expect(fromDbRaw((await positionOf(ctx)).principalUsdc)).toBe(81_000_000n);
+  });
+
+  it("rejects stale reference values when authorizing new exposure", async () => {
+    const ctx = await setup("STALECAP");
+    const q = await strategyService.quote(ctx.u.id, { strategyId: ctx.strategy.id, action: "enter", inputs: [{ asset: ctx.settlementKey, raw: 1_000_000n }, { asset: ctx.stock.assetKey!, raw: 10n ** 18n }] });
+    const auth = await oneTimeAuth(ctx.u.id, q, "strategy");
+    await db.stock.update({ where: { id: ctx.stock.id }, data: { referenceAsOf: new Date(Date.now() - 120_000) } });
+    await expect(strategyService.confirm(ctx.u.id, q.id, auth.id, `stale-${randomUUID()}`)).rejects.toMatchObject({ code: "STOCK_UNAVAILABLE" });
+    expect(await db.strategyPosition.count()).toBe(0);
+  });
+
   it("enterThenExitSettlesReservationsAndReceiptExactly", { timeout: 90_000 }, async () => {
     const ctx = await setup("LIFE");
     // A direct stock purchase never selects a strategy.

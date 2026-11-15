@@ -87,6 +87,13 @@ export const withMiddleware = <B = null, P = null, Q = null>(
       });
       request.parsedQuery = query;
 
+      // Authenticate before parsing or validating untrusted financial input.
+      const authenticateFirst = middlewares[0] === authMiddleware;
+      if (authenticateFirst) {
+        const result = await authMiddleware(request);
+        if (!result.next) return errorJson(result.statusCode, result.message, result.code ?? statusToCode(result.statusCode), request.requestId);
+      }
+
       if (
         bodyMode !== "none" &&
         request.method !== "GET" &&
@@ -118,7 +125,7 @@ export const withMiddleware = <B = null, P = null, Q = null>(
         }
       }
 
-      for (const middleware of middlewares) {
+      for (const middleware of middlewares.slice(authenticateFirst ? 1 : 0)) {
         const result = await middleware(request);
         if (!result.next) {
           return errorJson(

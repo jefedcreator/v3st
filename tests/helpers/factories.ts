@@ -47,6 +47,12 @@ export async function seedTreasury(chain: string, microUsdc: bigint): Promise<vo
       openingBalance({ account: acct.treasury(chain), amount: microUsdc }),
     ),
   );
+  if (chain === "testnet") {
+    const { seedLocalTreasury } = await import("@/backend/services/wallets/local-transfers");
+    const { toDbRaw } = await import("@/utils/asset-units");
+    const journal = await db.ledgerJournal.findUniqueOrThrow({ where: { key: `opening:${acct.treasury(chain).code}` } });
+    await seedLocalTreasury(journal.id, await walletService.treasuryAddress("testnet"), toDbRaw(microUsdc));
+  }
 }
 
 export async function creditFloat(provider: ProviderId, microUsd: bigint): Promise<void> {

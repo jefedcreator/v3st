@@ -58,18 +58,9 @@ const testSpotAdapter: SpotAdapter = {
         to: settlement,
         data: encodeFunctionData({
           abi: settlementTokenAbi,
-          functionName: "approve",
-          args: [registry, quote.input.raw],
-        }) as Hex,
-        value: 0n,
-      },
-      {
-        to: settlement,
-        data: encodeFunctionData({
-          abi: settlementTokenAbi,
           functionName: "transfer",
           args: [recipient, quote.input.raw],
-        }) as Hex,
+        }),
         value: 0n,
       },
     ];
@@ -175,6 +166,22 @@ async function settle(handle: ReturnType<typeof testnet> extends Promise<infer T
 }
 
 describe("testnet execution", () => {
+  it("a changed deployment cannot broadcast a prepared operation", async () => {
+    const ctx = await setupUser();
+    const { op } = await makeOperation(ctx, 1_000_000n);
+    await executionService.prepare(op.id);
+    const snapshot = await ctx.handle.snapshot();
+    try {
+      const { rpcRequest } = await import("@/backend/services/onchain/testnet");
+      await rpcRequest(ctx.handle.url, "anvil_setCode", [ctx.handle.settlement, "0x"]);
+      await expect(executionService.submit(op.id)).rejects.toMatchObject({ code: "NETWORK_UNHEALTHY" });
+      expect(await db.signedPayload.count({ where: { operationId: op.id } })).toBe(0);
+      expect((await db.onchainOperation.findUniqueOrThrow({ where: { id: op.id } })).status).toBe("needs_review");
+    } finally {
+      await ctx.handle.revert(snapshot);
+    }
+  });
+
   it("broadcastCrashHasOneEffect: a crash after signing replays the same transaction, never a duplicate", { timeout: 60_000 }, async () => {
     const ctx = await setupUser();
     const { op } = await makeOperation(ctx, 5_000_000n);
@@ -228,7 +235,7 @@ describe("testnet execution", () => {
             abi: settlementTokenAbi,
             functionName: "transfer",
             args: ["0x000000000000000000000000000000000000dEaD", 100n],
-          }) as Hex,
+          }),
           value: 0n,
         },
       ],
@@ -246,7 +253,7 @@ describe("testnet execution", () => {
             abi: settlementTokenAbi,
             functionName: "approve",
             args: [registry, 2n ** 256n - 1n],
-          }) as Hex,
+          }),
           value: 0n,
         },
       ],

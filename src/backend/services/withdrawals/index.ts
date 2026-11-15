@@ -70,7 +70,7 @@ class WithdrawalService {
       throw new UnprocessableEntityException("Net amount is zero or negative", "BELOW_MINIMUM");
     }
     const debitUsdc = ngnToUsd(body.ngn_amount, providerQuote.rate, "ceil");
-    const chain = (body.stock_id ? (await db.stock.findUnique({ where: { id: body.stock_id } }))?.chain : null) ?? policy.defaultChain;
+    const chain = (body.stock_id ? (await db.stock.findUnique({ where: { id: body.stock_id } }))?.chain : null) ?? ((await db.wallet.findFirst({ where: { userId, executionAddress: { not: null } } })) ? "testnet" : policy.defaultChain);
 
     let stockId: string | null = null;
     let sellQuantity: bigint | null = null;

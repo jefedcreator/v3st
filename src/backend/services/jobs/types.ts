@@ -8,6 +8,7 @@ export type JobKind =
   | "treasury.progress"
   | "treasury.rebalance"
   | "earnings.harvest"
+  | "earnings.recognize"
   | "earnings.float_precheck"
   | "earnings.payout_batch"
   | "reconcile.run"

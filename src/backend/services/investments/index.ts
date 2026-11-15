@@ -5,6 +5,7 @@ import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { authorizationService, type StandingAction } from "@/backend/services/authorizations";
+import { controlsService } from "@/backend/services/controls";
 import { eventService } from "@/backend/services/events";
 import { executionService, pack, unpack } from "@/backend/services/execution";
 import { jobService } from "@/backend/services/jobs";
@@ -16,19 +17,22 @@ import { settlementAssetKey, testnetService } from "@/backend/services/onchain/t
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
 import { referenceUsable } from "@/backend/services/stocks/reference";
 import { stockService } from "@/backend/services/stocks";
+import { ratesService } from "@/backend/services/rates";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { canonicalJson, sha256Hex } from "@/utils";
 import { fromDbRaw, fromDbRawNullable, toDbRaw } from "@/utils/asset-units";
+import { ngnToUsd } from "@/utils/money";
 import {
   ConflictException,
   NotFoundException,
   UnprocessableEntityException,
+  ServiceUnavailableException,
 } from "@/utils/exceptions";
 
 export type InvestmentQuoteInput = {
   stockId: string;
   side: "buy" | "sell";
-  inputRaw: bigint;
+  inputRaw?: bigint;
   budgetNgn?: bigint;
   slippageBps?: number;
   allowPartialFill?: boolean;
@@ -49,6 +53,10 @@ export type InvestmentQuoteDto = {
   price_impact_bps: number;
   allow_partial_fill: boolean;
   provider_id: string;
+  venue_fee_asset: string | null;
+  venue_fee_raw: string | null;
+  beta_context: BetaContext;
+  fx_rate: { kobo: string; micro_usd: string; as_of: string; expires_at: string } | null;
   expires_at: string;
   created_at: string;
 };
@@ -70,6 +78,7 @@ export type InvestmentDto = {
 };
 
 function quoteToDto(q: InvestmentQuote, providerId: string): InvestmentQuoteDto {
+  const fx = (q.context as { fxRate?: { kobo: string; microUsd: string; asOf: string; expiresAt: string } }).fxRate;
   return {
     id: q.id,
     stock_id: q.stockId,
@@ -85,6 +94,10 @@ function quoteToDto(q: InvestmentQuote, providerId: string): InvestmentQuoteDto 
     price_impact_bps: q.priceImpactBps,
     allow_partial_fill: q.allowPartialFill,
     provider_id: providerId,
+    venue_fee_asset: q.venueFeeAsset,
+    venue_fee_raw: q.venueFeeRaw === null ? null : fromDbRaw(q.venueFeeRaw).toString(),
+    beta_context: (q.context as { betaContext: BetaContext }).betaContext,
+    fx_rate: fx ? { kobo: fx.kobo, micro_usd: fx.microUsd, as_of: fx.asOf, expires_at: fx.expiresAt } : null,
     expires_at: q.expiresAt.toISOString(),
     created_at: q.createdAt.toISOString(),
   };
@@ -110,7 +123,7 @@ export function investmentToDto(i: Investment, providerId: string | null): Inves
 
 const QUOTE_TIMEOUT_MS = 3_000;
 // Spot-capable beta providers, in deterministic tie-break order.
-const SPOT_PROVIDERS: StockProviderId[] = ["bankr", "hydrex", "o1"];
+const SPOT_PROVIDERS: StockProviderId[] = ["hydrex", "o1"];
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -135,6 +148,24 @@ async function custodyProfileFor(tx: Tx, userId: string, providerId: StockProvid
 
 class InvestmentService {
   async quote(userId: string, input: InvestmentQuoteInput): Promise<InvestmentQuoteDto> {
+    await controlsService.assertOpen("trading", "TRADING_PAUSED");
+    let inputRaw = input.inputRaw;
+    let fxRate: { kobo: string; microUsd: string; asOf: string; expiresAt: string } | null = null;
+    try {
+      const display = await ratesService.display();
+      const rate = input.side === "buy" ? display.depositRate : display.payoutRate;
+      fxRate = { kobo: rate.kobo.toString(), microUsd: rate.microUsd.toString(), asOf: display.asOf.toISOString(), expiresAt: display.expiresAt.toISOString() };
+      if (input.budgetNgn !== undefined) {
+        if (input.side !== "buy" || input.budgetNgn <= 0n) throw new UnprocessableEntityException("Only buys accept a positive naira budget", "VALIDATION_FAILED");
+        inputRaw = ngnToUsd(input.budgetNgn, rate, "floor");
+      }
+    } catch (error) {
+      if (error instanceof UnprocessableEntityException) throw error;
+      if (input.budgetNgn !== undefined) throw new ServiceUnavailableException("Rates unavailable", "RATES_UNAVAILABLE");
+    }
+    if (inputRaw === undefined || inputRaw <= 0n) throw new UnprocessableEntityException("Input must be positive", "VALIDATION_FAILED");
+    const acceptedInputRaw = inputRaw;
+    if ((input.slippageBps ?? policy.trading.maxSlippageBps) > 100) throw new UnprocessableEntityException("Slippage exceeds beta limit", "VALIDATION_FAILED");
     const stock = await stockService.get(input.stockId);
     if (!stock.assetKey || !stock.networkId) {
       throw new UnprocessableEntityException("Stock has no onchain route in this beta", "STOCK_UNAVAILABLE");
@@ -165,7 +196,7 @@ class InvestmentService {
               side,
               input: {
                 asset: side === "buy" ? settlement : stock.assetKey!,
-                raw: input.inputRaw,
+                raw: acceptedInputRaw,
               },
               outputAsset: side === "buy" ? stock.assetKey! : settlement,
               slippageBps,
@@ -219,14 +250,18 @@ class InvestmentService {
         minOutputRaw: toDbRaw(best.quote.minOutput.raw),
         budgetNgn: input.budgetNgn ?? null,
         allowPartialFill: input.allowPartialFill ?? false,
+        slippageBps,
+        venueFeeAsset: best.quote.venueFee?.asset ?? null,
+        venueFeeRaw: best.quote.venueFee ? toDbRaw(best.quote.venueFee.raw) : null,
         feeUsdc: toDbRaw(0n),
         fxFeeUsdc: toDbRaw(0n),
-        venueFeeUsdc: toDbRaw(0n),
+        venueFeeUsdc: toDbRaw(best.quote.venueFee ? (input.side === "buy" ? best.quote.venueFee.raw : (best.quote.venueFee.raw * (stock.referencePriceMicroUsd ?? 0n)) / 10n ** BigInt(stock.decimals)) : 0n),
         priceImpactBps: best.quote.priceImpactBps,
         providerId: best.providerId,
         providerVersion: best.context.providerVersion,
         context: {
           betaContext: best.context,
+          fxRate,
           executionQuote: {
             id: best.quote.id,
             userId,
@@ -263,8 +298,10 @@ class InvestmentService {
   ): Promise<InvestmentDto> {
     const requestHash = sha256Hex(canonicalJson({ quoteId, authorizationId, key }));
     return withTx(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
       const existing = await tx.investment.findUnique({ where: { key } });
       if (existing) {
+        if (existing.userId !== userId) throw new NotFoundException("Investment not found", "NOT_FOUND");
         if (existing.requestHash !== requestHash) {
           throw new ConflictException("Idempotency key reused with a different payload", "IDEMPOTENCY_KEY_REUSED");
         }
@@ -305,6 +342,7 @@ class InvestmentService {
           valueMicroUsd:
             quote.side === "buy" ? fromDbRaw(quote.inputRaw) : fromDbRaw(quote.expectedOutputRaw),
           budgetNgnKobo: quote.budgetNgn === null ? null : BigInt(quote.budgetNgn),
+          slippageBps: quote.slippageBps,
           feeMicroUsd: fromDbRaw(quote.feeUsdc) + fromDbRaw(quote.fxFeeUsdc) + fromDbRaw(quote.venueFeeUsdc),
         },
       });
@@ -404,6 +442,18 @@ class InvestmentService {
     }, { timeoutMs: 30_000 });
   }
 
+  async confirmRequest(userId: string, quoteId: string, authorizationId: string, clientKey: string): Promise<{ dto: InvestmentDto; created: boolean }> {
+    const key = `invest:${userId}:${clientKey}`;
+    const existing = await db.investment.findUnique({ where: { key } });
+    if (!existing) {
+      const quote = await db.investmentQuote.findUnique({ where: { id: quoteId } });
+      if (quote?.userId !== userId) throw new NotFoundException("Quote not found", "NOT_FOUND");
+      if (quote.expiresAt <= now()) throw new ConflictException("Quote expired", "QUOTE_EXPIRED");
+    }
+    const dto = await this.confirm(userId, quoteId, authorizationId, key);
+    return { dto, created: !existing };
+  }
+
   async get(userId: string, id: string): Promise<InvestmentDto | undefined> {
     const inv = await db.investment.findUnique({ where: { id } });
     if (inv?.userId !== userId) return undefined;
@@ -427,6 +477,7 @@ class InvestmentService {
     const inv = await db.investment.findUniqueOrThrow({ where: { id } });
     if (!inv.operationId) return;
     const before = inv.status;
+    if (["filled", "partial", "failed", "cancelled"].includes(before)) return;
     await executionService.progress(inv.operationId);
     const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: inv.operationId } });
     if (!["finalized", "reverted"].includes(op.status)) {
@@ -441,10 +492,11 @@ class InvestmentService {
     if (op.status === "finalized" && before !== "filled") {
       const actual = unpack(op.actual) as { input?: AssetAmount; output?: AssetAmount };
       const expectedQuote = unpack((op.expected as { quote?: unknown }).quote) as ExecutionQuote;
-      const stock = await stockService.get(inv.stockId);
+      const stock = await db.stock.findUniqueOrThrow({ where: { id: inv.stockId } });
       await withTx(async (tx) => {
         const current = await tx.investment.findUniqueOrThrow({ where: { id: inv.id } });
-        if (current.status === "filled") return;
+        await lockRows(tx, "investments", [inv.id]);
+        if (["filled", "partial"].includes((await tx.investment.findUniqueOrThrow({ where: { id: inv.id } })).status)) return;
         const amountOut = actual.output?.raw ?? 0n;
         await positionService.applyFill(tx, op.id);
         const actualIn = actual.input?.raw ?? fromDbRaw(current.amountIn);
@@ -479,7 +531,8 @@ class InvestmentService {
         // Actual output below the quoted expectation is a partial fill; only the
         // actual input is spent and the remainder needs a fresh quote (single-use).
         const expectedOut = expectedQuote.expectedOutput.raw;
-        const settledStatus = amountOut < expectedOut ? "partial" : "filled";
+        const settledStatus = actualIn < fromDbRaw(current.amountIn) ? "partial" : "filled";
+        void expectedOut;
         await tx.investment.update({
           where: { id: current.id },
           data: {
@@ -498,7 +551,7 @@ class InvestmentService {
       return;
     }
     if (op.status === "reverted" && !["failed", "cancelled"].includes(before)) {
-      const stock = await stockService.get(inv.stockId);
+      const stock = await db.stock.findUniqueOrThrow({ where: { id: inv.stockId } });
       await withTx(async (tx) => {
         const current = await tx.investment.findUniqueOrThrow({ where: { id: inv.id } });
         if (["failed", "cancelled", "filled"].includes(current.status)) return;

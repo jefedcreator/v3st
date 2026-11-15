@@ -1,5 +1,6 @@
+import { progressLocalTransfer } from "./local-transfers";
 import { Prisma, type ChainTransfer, type TransferPurpose, type TransferStatus, type TreasuryWallet, type Wallet } from "@/server/prisma";
-import { db, withTx, type Tx } from "@/server/db";
+import { db, withTx, type Tx, type DbClient } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { integrationModes } from "@/backend/integrations/beta-policy";
@@ -111,7 +112,7 @@ class WalletService {
     if (!wallet) {
       throw new NotFoundException("Wallet not provisioned", "WALLET_NOT_READY");
     }
-    return wallet.address;
+    return chain === "testnet" && wallet.executionAddress ? wallet.executionAddress : wallet.address;
   }
 
   private async resolveTo(tx: Tx, chain: Chain, to: TransferTo): Promise<string> {
@@ -123,7 +124,7 @@ class WalletService {
     if (!wallet) {
       throw new NotFoundException("Wallet not provisioned", "WALLET_NOT_READY");
     }
-    return wallet.address;
+    return chain === "testnet" && wallet.executionAddress ? wallet.executionAddress : wallet.address;
   }
 
   async createTransfer(tx: Tx, spec: TransferSpec): Promise<ChainTransfer> {
@@ -163,15 +164,15 @@ class WalletService {
     return created;
   }
 
-  private async specFromTransfer(tx: Tx, t: ChainTransfer): Promise<TransferSpec> {
+  private async specFromTransfer(tx: DbClient, t: ChainTransfer): Promise<TransferSpec> {
     const chain = assertChain(t.chain);
     const treasury = await this.treasuryAddress(chain);
     let from: TransferFrom;
     if (t.fromAddress === treasury) {
       from = { kind: "treasury" };
     } else {
-      const wallet = await tx.wallet.findUnique({
-        where: { family_address: { family: CHAINS[chain].family, address: t.fromAddress } },
+      const wallet = await tx.wallet.findFirst({
+        where: { family: CHAINS[chain].family, OR: [{ address: t.fromAddress }, { executionAddress: t.fromAddress }] },
       });
       if (!wallet) throw new NotFoundException("Source wallet unknown", "WALLET_NOT_READY");
       from = { kind: "user", userId: wallet.userId };
@@ -180,8 +181,8 @@ class WalletService {
     if (t.toAddress === treasury) {
       to = { kind: "treasury" };
     } else {
-      const wallet = await tx.wallet.findUnique({
-        where: { family_address: { family: CHAINS[chain].family, address: t.toAddress } },
+      const wallet = await tx.wallet.findFirst({
+        where: { family: CHAINS[chain].family, OR: [{ address: t.toAddress }, { executionAddress: t.toAddress }] },
       });
       to = wallet ? { kind: "user", userId: wallet.userId } : { kind: "external", address: t.toAddress };
     }
@@ -198,7 +199,7 @@ class WalletService {
   }
 
   private async boundAddress(
-    tx: Tx,
+    tx: DbClient,
     chain: Chain,
     spec: TransferSpec,
   ): Promise<string | null> {
@@ -229,6 +230,15 @@ class WalletService {
   }
 
   async progressTransfer(transferId: string): Promise<ChainTransfer> {
+    const local = await db.chainTransfer.findUniqueOrThrow({ where: { id: transferId } });
+    if (local.chain === "testnet" && !["awaiting_approval", "confirmed", "failed"].includes(local.status)) {
+      const spec = await this.specFromTransfer(db, local);
+      const bound = await this.boundAddress(db, "testnet", spec);
+      const screened = await screeningService.screen("testnet", local.toAddress);
+      if (screened !== "allow") throw new PolicyViolation("SCREENING_DENIED");
+      assertTransferPolicy(spec, { fromAddress: local.fromAddress, toAddress: local.toAddress, boundAddress: bound });
+      return progressLocalTransfer(local);
+    }
     return withTx(async (tx) => {
       const t = await tx.chainTransfer.findUniqueOrThrow({ where: { id: transferId } });
       if (t.status === "awaiting_approval" || t.status === "confirmed" || t.status === "failed") {

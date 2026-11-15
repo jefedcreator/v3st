@@ -1,3 +1,4 @@
+import { stockAssetKey, readManifest as assetManifest } from "@/backend/services/onchain/testnet";
 import { type Address, type Hex } from "viem";
 
 import { stockDistributionAbi } from "@/backend/services/onchain/abis";
@@ -7,7 +8,6 @@ import type {
   StrategyQuote,
   StrategyRequest,
 } from "@/backend/services/onchain/types";
-import { assetKey } from "@/backend/services/onchain/types";
 import { publicClientFor } from "@/backend/services/onchain/testnet";
 import {
   buildClaimPlan,
@@ -80,7 +80,7 @@ class FeelDistributionAdapter implements StrategyAdapter {
     const distribution = p.distribution as Address;
     const launchId = p.launchId as Hex;
     const rewardToken = await readRewardToken(distribution, launchId);
-    const rewardAsset = assetKey("testnet", input.context.chainId, rewardToken.toLowerCase());
+    const rewardAsset = stockAssetKey(assetManifest(), rewardToken);
     const account = await executionAccountOf(input.userId);
     // Entitlement comes from the launch-holding snapshot; prior-holder entitlements are
     // preserved even if balances change after the snapshot.

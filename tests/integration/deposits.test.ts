@@ -240,7 +240,8 @@ describe("deposits", () => {
       ngnAmount: 500_000_000n,
       senderName: "ADAEZE OBI",
     });
-    await drainJobs();
+    await depositService.progress(d.id);
+    await expect(depositService.progress(d.id)).rejects.toMatchObject({ code: "TREASURY_SHORT" });
     let dto = await depositService.get(ada.id, d.id);
     expect(dto.status).toBe("received");
     expect(dto.hold_reason).toBe("treasury_short");

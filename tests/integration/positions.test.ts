@@ -21,6 +21,12 @@ import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../helpers/test
 
 useTestDatabase();
 
+async function ingestConfirmed(networkId: string, throughBlock: bigint) {
+  await (await testnet()).mine(3);
+  return stockActionService.ingest(networkId, throughBlock);
+}
+
+
 const SHARE_PRICE = 100_000_000n; // $100 per share, micro-USD
 
 async function setup(symbol = "POS") {
@@ -83,7 +89,7 @@ async function applySplit(ctx: Awaited<ReturnType<typeof setup>>, toWad: bigint,
   await ctx.handle.scheduleMultiplier(ctx.token, toWad, past);
   await ctx.handle.advanceTime(5);
   await ctx.handle.applyDueActions(ctx.token);
-  await stockActionService.ingest(ctx.network.id, await ctx.handle.blockNumber());
+  await ingestConfirmed(ctx.network.id, await ctx.handle.blockNumber());
   await ctx.handle.setReferencePrice(ctx.registryKey, newSharePrice, "share_price", Math.floor(Date.now() / 1000));
   await db.stock.update({
     where: { id: ctx.stock.id },
@@ -92,6 +98,27 @@ async function applySplit(ctx: Awaited<ReturnType<typeof setup>>, toWad: bigint,
 }
 
 describe("multiplier-aware positions and performance", () => {
+  it("keeps holdings visible with unavailable values when the reference is stale", async () => {
+    const ctx = await setup("STALEPOS");
+    await fakeFill(ctx, "buy", 10n ** 18n, 100_000_000n);
+    await db.stock.update({ where: { id: ctx.stock.id }, data: { referenceAsOf: new Date(Date.now() - 120_000) } });
+    const [position] = await positionService.list(ctx.u.id);
+    expect(position).toMatchObject({ raw_owned: (10n ** 18n).toString(), value_usdc: null, unrealized_usdc: null, valuation_status: "unavailable" });
+    const portfolio = await portfolioService.get(ctx.u.id);
+    expect(portfolio.holdings[0]).toMatchObject({ price_usdc: null, value_usdc: null });
+    expect(portfolio.valuation).toBe("partial");
+  });
+
+  it("values token NAV without applying the multiplier again", async () => {
+    const ctx = await setup("TOKENNAV");
+    await fakeFill(ctx, "buy", 2n * 10n ** 18n, 200_000_000n);
+    await applySplit(ctx, 2n * 10n ** 18n, SHARE_PRICE);
+    await db.stock.update({ where: { id: ctx.stock.id }, data: { referenceBasis: "token_nav" } });
+    const [position] = await positionService.list(ctx.u.id);
+    expect(position!.value_usdc).toBe("200000000");
+    expect(position!.share_equivalent_raw).toBe((4n * 10n ** 18n).toString());
+  });
+
   it("stockSplitDoesNotChangeCostBasis", { timeout: 60_000 }, async () => {
     const ctx = await setup("SPLIT");
     await fakeFill(ctx, "buy", 2n * 10n ** 18n, 200_000_000n);
@@ -147,6 +174,6 @@ describe("multiplier-aware positions and performance", () => {
     const position = positions.find((p) => p.stock_id === ctx.stock.id);
     expect(position?.realized_usdc).toBe("1900000");
     // Principal of 10,000,000 was returned, not counted as profit.
-    expect(fromDbRaw(lots[0]!.costUsdc)).toBe(10_000_000n);
+    expect(fromDbRaw(lots[0]!.costUsdc)).toBe(0n);
   });
 });

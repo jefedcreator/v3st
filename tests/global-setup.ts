@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { loadEnv } from "vite";
 
 export default async function globalSetup(): Promise<() => void> {
@@ -37,6 +40,8 @@ export default async function globalSetup(): Promise<() => void> {
     "../src/backend/services/onchain/testnet"
   );
   const { generatePrivateKey } = await import("viem/accounts");
+  const stateDir = mkdtempSync(path.join(tmpdir(), "v3st-testnet-"));
+  process.env.TESTNET_STATE_DIR = stateDir;
   process.env.TESTNET_RPC_URL = url;
   process.env.TESTNET_SIGNER_PRIVATE_KEY = generatePrivateKey();
   const child = startAnvil({ rpcUrl: url });
@@ -61,5 +66,6 @@ export default async function globalSetup(): Promise<() => void> {
   );
   return () => {
     child.kill("SIGTERM");
+    rmSync(stateDir, { recursive: true, force: true });
   };
 }

@@ -1,3 +1,4 @@
+import { Prisma } from "@/server/prisma";
 import { describe, expect, it } from "vitest";
 
 import { now } from "@/backend/clock";
@@ -34,7 +35,7 @@ describe("trades", () => {
     await drainJobs();
     expect(await db.tradeOrder.findUniqueOrThrow({ where: { id: t.id } })).toMatchObject({
       status: "filled",
-      amountOut: 5_000_000n,
+      amountOut: new Prisma.Decimal("5000000"),
     });
     expect(await ledgerService.balance(acct.userStock(u.id, s.id))).toBe(5_000_000n);
     expect(await ledgerService.balance(acct.userCash(u.id, "base"))).toBe(0n);
@@ -94,7 +95,7 @@ describe("trades", () => {
     await drainJobs();
     expect(
       await db.tradeOrder.findUniqueOrThrow({ where: { id: r1.id } }),
-    ).toMatchObject({ status: "filled", amountOut: 5_000_000n });
+    ).toMatchObject({ status: "filled", amountOut: new Prisma.Decimal("5000000") });
   });
 
   it("never buys twice when progress repeats after a fill", async () => {
@@ -205,7 +206,7 @@ describe("trades", () => {
     await drainJobs();
     expect(await db.tradeOrder.findUniqueOrThrow({ where: { id: t.id } })).toMatchObject({
       status: "filled",
-      amountOut: 10_000_000n,
+      amountOut: new Prisma.Decimal("10000000"),
     });
     expect(await ledgerService.balance(acct.userCash(u.id, "base"))).toBe(10_000_000n);
   });

@@ -12,7 +12,6 @@ import { onchainRegistry } from "@/backend/services/onchain/registry";
 import type {
   AssetAmount,
   AssetDelta,
-  BetaContext,
   ExecutionObservation,
   ExecutionPlan,
   ExecutionQuote,
@@ -28,6 +27,7 @@ import {
   rpcRequest,
   testnetRpcUrl,
   walletClientFor,
+  testnetService,
 } from "@/backend/services/onchain/testnet";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { canonicalJson, sha256Hex } from "@/utils";
@@ -39,12 +39,11 @@ import {
 } from "@/utils/exceptions";
 
 import { accountOperationNonce, allocateSignerNonce } from "./nonce";
-import { assertExecutionPlan, callHashOf, ExecutionPlanRejected, operationKeyBytes32 } from "./policy";
+import { assertExecutionPlan, assertQuoteBinding, callHashOf, ExecutionPlanRejected, operationKeyBytes32 } from "./policy";
 import {
   assertPartialFill,
   buildObservation,
-  captureBalances,
-  deltaVector,
+  transactionDeltas,
   PartialFillViolation,
   fetchReceipt,
   observationState,
@@ -191,6 +190,7 @@ class ExecutionService {
       const adapter = onchainRegistry.strategy(op.providerId as StockProviderId, context);
       plan = await adapter.prepare(quote as StrategyQuote, operationId);
     }
+    assertQuoteBinding(plan, quote, op, String((op.expected as { recipient: string }).recipient));
     await assertExecutionPlan(plan);
     // The quote expiry is the latest permitted acceptance and broadcast bound; a
     // plan deadline that extends past it is rejected, never silently extended.
@@ -230,7 +230,7 @@ class ExecutionService {
     // One advisory lock serializes all sponsor reservations, so concurrent
     // operations never race the upsert's create branch on the shared daily scope;
     // the per-row lock then serializes the spend check below.
-    await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(72_012::bigint)`);
+    await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(72012::bigint)`);
     for (const [scope, defaultCap] of scopes) {
       const row = await tx.sponsorBudget.upsert({
         where: { scope },
@@ -327,9 +327,13 @@ class ExecutionService {
     }
     if (["finalized", "reverted"].includes(op.status)) return;
 
+    await this.assertDeployment(op);
+
     if (op.status === "prepared") {
       const plan = this.planOf(op);
       const quote = this.quoteOf(op);
+      assertQuoteBinding(plan, quote, op, String((op.expected as { recipient: string }).recipient));
+      await assertExecutionPlan(plan);
       const context = (quote as ExecutionQuote).context;
       const manifest = readManifest();
       const client = publicClientFor();
@@ -347,14 +351,14 @@ class ExecutionService {
           await authorizationService.assertActive(tx, current.userId, current.authorizationId);
         }
         const gasPrice = BigInt(await rpcRequest<Hex>(testnetRpcUrl(), "eth_gasPrice"));
-        const estWei = gasPrice * 1_500_000n + 1n;
+        const estWei = gasPrice * 4_000_000n + 1n;
         await this.reserveSponsorBudget(tx, op.id, estWei);
         const accountAddress = await accountAddressFor(tx, current);
         // Execution-account operation nonce and shared relayer transaction nonce are
         // distinct persisted resources under separate concurrency controls.
         const opNonce = await accountOperationNonce(accountAddress);
         const signerNonce = await allocateSignerNonce(tx, current.id, relayerAccount().address);
-        const pre = await captureBalances(planAssets(plan), accountAddress);
+
         const signed = await this.signOperation(current, plan, signerNonce, accountAddress, opNonce);
         await tx.signedPayload.upsert({
           where: { operationId: current.id },
@@ -368,7 +372,8 @@ class ExecutionService {
           update: {},
         });
         const expected = (current.expected as Record<string, unknown>) ?? {};
-        expected.preBalances = pre;
+        expected.sponsor = { reservedWei: estWei.toString(), dailyScope: `daily:${now().toISOString().slice(0, 10)}`, settled: false };
+
         expected.approveTxHash = signed.approveHash;
         await tx.onchainOperation.update({
           where: { id: current.id },
@@ -387,10 +392,19 @@ class ExecutionService {
   }
 
   private async broadcast(operationId: string): Promise<void> {
+    const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
+    await this.assertDeployment(op);
     const payload = await db.signedPayload.findUnique({ where: { operationId } });
     if (!payload) throw new NotFoundException("No signed payload", "OPERATION_UNRESOLVED");
     const url = testnetRpcUrl();
     const client = publicClientFor();
+    // Already accepted transactions always reconcile. Revocation or expiry can
+    // stop new economic execution, but cannot erase a possible earlier effect.
+    if (!(await txExists(payload.executeHash as Hex))) {
+      const plan = this.planOf(op);
+      await assertExecutionPlan(plan);
+      if (op.authorizationId) await authorizationService.assertActive(db, op.userId, op.authorizationId);
+    }
     const fault = await db.simFault.findUnique({
       where: { scope_key: { scope: "execution.broadcast", key: operationId } },
     });
@@ -420,6 +434,7 @@ class ExecutionService {
 
   async observe(operationId: string): Promise<ExecutionObservation> {
     const op = await db.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
+    await this.assertDeployment(op);
     const expected = (op.expected as { plan?: unknown; preBalances?: Record<string, string> }) ?? {};
     const plan = expected.plan ? (unpackInner(expected.plan) as ExecutionPlan | StrategyPlan) : null;
     const txHash = op.txHash as Hex | null;
@@ -434,11 +449,7 @@ class ExecutionService {
       const inputAsset = "expectedInput" in plan ? plan.expectedInput.asset : plan.maximumInputs[0]?.asset;
       const outputAsset = "minimumOutput" in plan ? plan.minimumOutput.asset : plan.minimumOutputs[0]?.asset;
       const accountAddress = await accountAddressFor(db, op);
-      const post: Record<string, string> = {};
-      for (const asset of assets) {
-        post[asset] = (await captureBalances([asset], accountAddress))[asset]!;
-      }
-      deltas = deltaVector(expected.preBalances ?? {}, post, accountAddress);
+      deltas = receipt ? await transactionDeltas(txHash, assets, accountAddress) : [];
       const obs = buildObservation({
         operationId,
         txHash,
@@ -455,6 +466,11 @@ class ExecutionService {
         actualOutput = obs.actualOutput;
       }
       gasCostWei = obs.gasCostWei;
+      const approveHash = (op.expected as { approveTxHash?: Hex }).approveTxHash;
+      if (gasCostWei !== null && approveHash) {
+        const approval = await fetchReceipt(approveHash);
+        if (approval) gasCostWei += approval.gasUsed * approval.effectiveGasPrice;
+      }
     }
     const observation: ExecutionObservation = {
       operationId,
@@ -506,11 +522,22 @@ class ExecutionService {
     await withTx(async (tx) => {
       await lockRows(tx, "onchain_operations", [operationId]);
       const op = await tx.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
-      if (op.status === "finalized" || op.status === "reverted") return;
+      if (op.status === "finalized" || (op.expected as { settled?: boolean } | null)?.settled) return;
       const expected = (op.expected as { plan?: unknown }) ?? {};
       const plan = expected.plan ? (unpackInner(expected.plan) as ExecutionPlan | StrategyPlan) : null;
       const quote = this.quoteOf(op);
       if (observation.state === "confirmed" && plan) {
+        if ("maximumInputs" in plan) {
+          const spent = (asset: string): bigint => {
+            const delta = observation.deltas.find((d) => d.asset === asset)?.signedRaw ?? 0n;
+            return delta < 0n ? -delta : 0n;
+          };
+          const received = (asset: string): bigint => observation.deltas.find((d) => d.asset === asset)?.signedRaw ?? 0n;
+          if (plan.maximumInputs.some((a) => spent(a.asset) > a.raw) || plan.minimumOutputs.some((a) => received(a.asset) < a.raw)) {
+            await tx.onchainOperation.update({ where: { id: operationId }, data: { status: "needs_review", errorReason: "STRATEGY_DELTA_MISMATCH" } });
+            return;
+          }
+        }
         const minimum = "minimumOutput" in plan ? plan.minimumOutput : plan.minimumOutputs[0];
         if (op.kind === "spot" && minimum) {
           // Accepted-quote partial-fill rules: without allowPartialFill a smaller
@@ -533,13 +560,6 @@ class ExecutionService {
             );
           } catch (error) {
             if (error instanceof PartialFillViolation) {
-              if (actualIn < spotPlan.expectedInput.raw && !(eq.allowPartialFill ?? false)) {
-                await tx.onchainOperation.update({
-                  where: { id: operationId },
-                  data: { status: "reverted", errorReason: "MIN_OUTPUT_BREACH" },
-                });
-                return;
-              }
               await tx.onchainOperation.update({
                 where: { id: operationId },
                 data: { status: "needs_review", errorReason: "PARTIAL_FILL_VIOLATION" },
@@ -561,6 +581,7 @@ class ExecutionService {
           deltas: observation.deltas,
           gasCostWei: observation.gasCostWei,
         });
+        await this.settleSponsor(tx, op, observation.gasCostWei);
         await tx.onchainOperation.update({
           where: { id: operationId },
           data: {
@@ -576,9 +597,12 @@ class ExecutionService {
         return;
       }
       if (observation.state === "reverted") {
+        await this.settleSponsor(tx, op, observation.gasCostWei);
+        const expectedState = (op.expected ?? {}) as Prisma.JsonObject;
+        expectedState.settled = true;
         await tx.onchainOperation.update({
           where: { id: operationId },
-          data: { status: "reverted", errorReason: "EXECUTION_REVERTED" },
+          data: { status: "reverted", errorReason: op.errorReason ?? "EXECUTION_REVERTED", expected: expectedState },
         });
         const reloaded = await tx.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
         const finalizer = finalizers.get(op.kind) ?? finalizers.get("*");
@@ -603,7 +627,7 @@ class ExecutionService {
       await this.submit(operationId);
     }
     const after = await db.onchainOperation.findUniqueOrThrow({ where: { id: operationId } });
-    if (["broadcast", "confirmed", "unknown"].includes(after.status)) {
+    if (["broadcast", "confirmed", "unknown", "reverted"].includes(after.status)) {
       const observation = await this.observe(operationId);
       if (observation.state === "pending") {
         await jobService.enqueue(db, {
@@ -619,6 +643,31 @@ class ExecutionService {
     if (after.status === "confirmed") {
       await this.finalize(operationId);
     }
+  }
+
+  private async assertDeployment(op: OnchainOperation): Promise<void> {
+    const network = await db.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
+    const manifest = readManifest();
+    const verified = await testnetService.verify(manifest);
+    if (!verified.ok || network.deploymentId !== manifest.deploymentId || network.networkId !== manifest.networkId) {
+      await db.onchainOperation.update({ where: { id: op.id }, data: { status: "needs_review", errorReason: "DEPLOYMENT_MISMATCH" } });
+      throw new ServiceUnavailableException("Execution deployment requires reconciliation", "NETWORK_UNHEALTHY");
+    }
+  }
+
+  private async settleSponsor(tx: Tx, op: OnchainOperation, gas: bigint | null): Promise<void> {
+    const expected = (op.expected ?? {}) as Prisma.JsonObject;
+    const sponsor = expected.sponsor as { reservedWei: string; dailyScope: string; settled: boolean } | undefined;
+    if (!sponsor || sponsor.settled || gas === null) return;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(72012::bigint)`;
+    for (const scope of [`operation:${op.id}`, sponsor.dailyScope]) {
+      const row = await tx.sponsorBudget.findUniqueOrThrow({ where: { scope } });
+      const spent = fromDbRaw(row.spentWei) - BigInt(sponsor.reservedWei) + gas;
+      if (spent < 0n || spent > fromDbRaw(row.capWei)) throw new ConflictException("Sponsor spend requires reconciliation", "OPERATION_UNRESOLVED");
+      await tx.sponsorBudget.update({ where: { id: row.id }, data: { spentWei: toDbRaw(spent) } });
+    }
+    sponsor.settled = true;
+    await tx.onchainOperation.update({ where: { id: op.id }, data: { expected } });
   }
 }
 

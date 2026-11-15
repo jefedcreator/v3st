@@ -31,6 +31,7 @@ export async function withTx<T>(
 
 type LockableTable =
   | "users"
+  | "wallets"
   | "ramp_orders"
   | "ledger_accounts"
   | "trade_orders"
@@ -41,7 +42,8 @@ type LockableTable =
   | "investments"
   | "strategy_quotes"
   | "strategy_positions"
-  | "sponsor_budgets";
+  | "sponsor_budgets"
+  | "reward_receipts";
 
 export async function lockRows(
   tx: Tx,

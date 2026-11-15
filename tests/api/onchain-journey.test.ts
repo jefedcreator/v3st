@@ -41,7 +41,7 @@ import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 
 import { callRoute } from "../helpers/http";
 import { useTestDatabase } from "../helpers/db";
-import { fundCash, makeUser, makeVerifiedUser, seedFloat, seedTreasury } from "../helpers/factories";
+import { makeUser, makeVerifiedUser, seedFloat, seedTreasury } from "../helpers/factories";
 import {
   JOURNEY_PHONE,
   authHeaders,
@@ -79,8 +79,19 @@ function cookieOnly(token: string): Record<string, string> {
 
 const NO_SIGNING_MATERIAL = /signed_?payload|approve_?tx|execute_?tx|serialized_?transaction|unsigned_?tx|private_?key/i;
 
+let payoutAt: Date;
 beforeEach(async () => {
-  setNow("2026-11-12T20:00:00Z"); // Thursday 21:00 Lagos
+  // Keep both clocks in the same week. A fixed historical app date against a
+  // real-time Anvil node cannot produce a valid short-lived FX/contract deadline.
+  const block = await publicClientFor().getBlock({ blockTag: "latest" });
+  const chainAt = new Date(Number(block.timestamp) * 1000);
+  const thursday = new Date(chainAt);
+  thursday.setUTCDate(thursday.getUTCDate() + (4 - thursday.getUTCDay() + 7) % 7);
+  thursday.setUTCHours(20, 0, 0, 0); // Thursday 21:00 Lagos
+  if (thursday <= chainAt) thursday.setUTCDate(thursday.getUTCDate() + 7);
+  await (await testnet()).advanceTime(Math.ceil((thursday.getTime() - chainAt.getTime()) / 1000));
+  setNow(thursday.toISOString());
+  payoutAt = new Date(thursday.getTime() + 11 * 60 * 60 * 1000);
   await seedTreasury("base", 1_000_000_000_000n);
   await seedTreasury("testnet", 1_000_000_000_000n);
   await seedFloat("yellowcard", 10_000_000_000n);
@@ -218,14 +229,13 @@ describe("onchain beta HTTP journey", () => {
       });
       // Local testnet fixture funding: ledger cash plus onchain settlement held by
       // the user's execution account (the relayer pays all gas).
-      await fundCash(userId, 50_000_000n, "testnet");
-      await handle.mintSettlement(ref.accountAddress, 100_000_000n);
+      // Customer funds are supplied only by the bank-receipt funding workflow.
 
       // 2. Test bank receipt over HTTP: fiat deposit paid through the simulated ramp.
       const depRes = await callRoute(depositsPOST, {
         method: "POST",
         url: `${ORIGIN}/api/v1/deposits`,
-        body: JSON.stringify({ ngn_amount: "2000000" }),
+        body: JSON.stringify({ ngn_amount: "10000000" }),
         headers: authHeaders(session, randomUUID()),
       });
       expect([200, 201, 202]).toContain(depRes.status);
@@ -340,7 +350,7 @@ describe("onchain beta HTTP journey", () => {
       });
       expect(confirmReplay.status).toBe(200);
       expect((confirmReplay.json as { data: { id: string } }).data.id).toBe(investment.id);
-      expect(await db.investment.count({ where: { key: buyKey } })).toBe(1);
+      expect(await db.investment.count({ where: { key: `invest:${userId}:${buyKey}` } })).toBe(1);
 
       const getInvestment = async (): Promise<InvestmentDto> => {
         const res = await callRoute(investmentGET, {
@@ -454,7 +464,7 @@ describe("onchain beta HTTP journey", () => {
       expect((enterReplay.json as { data: { operation_id: string } }).data.operation_id).toBe(
         enterOp.operation_id,
       );
-      expect(await db.onchainOperation.count({ where: { key: `strat-op:${enterKey}` } })).toBe(1);
+      expect(await db.onchainOperation.count({ where: { key: `strat-op:strategy:${userId}:${enterKey}` } })).toBe(1);
 
       const getStrategyOp = async (): Promise<StrategyOperationDto> => {
         const res = await callRoute(strategyOperationGET, {
@@ -606,7 +616,7 @@ describe("onchain beta HTTP journey", () => {
           max_fx_bps: 25,
         },
       });
-      setNow("2026-11-13T07:00:00Z"); // Friday 08:00 Lagos: payout batch
+      setNow(payoutAt.toISOString()); // Friday 08:00 Lagos: payout batch
       for (let i = 0; i < 6; i += 1) {
         await drainJobs();
         await handle.mine(3);

@@ -33,6 +33,12 @@ export function toDbRaw(value: bigint): Prisma.Decimal {
   return new Prisma.Decimal(assertRaw(value).toString());
 }
 
+// Performance is signed; ownership, allowances and cash remain unsigned.
+export function toDbSignedRaw(value: bigint): Prisma.Decimal {
+  if (value < -RAW_MAX || value > RAW_MAX) throw new RawAmountError("Signed amount exceeds uint256 magnitude");
+  return new Prisma.Decimal(value.toString());
+}
+
 export function decimalTextToBigInt(text: string): bigint {
   const match = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]\+?(\d+))?$/.exec(text);
   if (!match) {

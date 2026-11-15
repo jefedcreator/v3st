@@ -29,7 +29,8 @@ export const GET = withMiddleware<null, null, EventsQuerySchema>(
         cursor = 0n;
       }
     }
-    const sessionToken = req.cookies.get(SESSION_COOKIE_NAME)?.value ?? "";
+    const sessionToken = req.cookies.get(SESSION_COOKIE_NAME)?.value ?? req.headers.get("authorization")?.slice(7) ?? "";
+    let cancelled = false;
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
@@ -45,7 +46,7 @@ export const GET = withMiddleware<null, null, EventsQuerySchema>(
         const startedAt = Date.now();
         let lastHeartbeat = Date.now();
         try {
-          while (Date.now() - startedAt < MAX_STREAM_MS) {
+          while (!cancelled && !req.signal.aborted && Date.now() - startedAt < MAX_STREAM_MS) {
             if (!(await eventService.sessionExists(sessionToken))) break;
             const events = await eventService.list(userId, cursor);
             for (const event of events) {
@@ -67,6 +68,7 @@ export const GET = withMiddleware<null, null, EventsQuerySchema>(
           // already closed
         }
       },
+      cancel() { cancelled = true; },
     });
 
     return new Response(stream, {

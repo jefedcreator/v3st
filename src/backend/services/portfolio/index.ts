@@ -5,6 +5,8 @@ import { integrationModes } from "@/backend/integrations/beta-policy";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { ratesService } from "@/backend/services/rates";
+import { stockActionService, tokenPriceFromSharePrice } from "@/backend/services/stocks/corporate-actions";
+import { referenceUsable } from "@/backend/services/stocks/reference";
 import { tradeRouter } from "@/backend/services/trades/router";
 import { positionService } from "@/backend/services/positions";
 import { rewardService } from "@/backend/services/rewards";
@@ -13,7 +15,8 @@ import { formatMinor, rateToDto, usdToNgn, type Rate } from "@/utils/money";
 
 class PortfolioService {
   async get(userId: string): Promise<PortfolioDto> {
-    const chain = policy.defaultChain;
+    const localWallet = await db.wallet.findFirst({ where: { userId, executionAddress: { not: null } } });
+    const chain = localWallet ? "testnet" : policy.defaultChain;
     const balances = await ledgerService.balancesForUser(userId);
     const cash = balances.get(acct.userCash(userId, chain).code) ?? 0n;
     const reserved = balances.get(acct.userReserved(userId, chain).code) ?? 0n;
@@ -40,12 +43,16 @@ class PortfolioService {
     const stocks = await db.stock.findMany();
     const holdings: PortfolioHoldingDto[] = [];
     for (const stock of stocks) {
-      const quantity = balances.get(acct.userStock(userId, stock.id).code) ?? 0n;
+      const quantity = (balances.get(acct.userStock(userId, stock.id).code) ?? 0n) + (balances.get(acct.userStockReserved(userId, stock.id).code) ?? 0n);
       if (quantity <= 0n) continue;
       let priceUsdc: string | null = null;
       let valueUsdc: string | null = null;
       try {
-        const price = await tradeRouter.priceOneShare(stock);
+        let price: bigint;
+        if (stock.networkId) {
+          if (stock.referencePriceMicroUsd === null || !referenceUsable(stock, now())) throw new Error("Reference unavailable");
+          price = stock.referenceBasis === "token_nav" ? stock.referencePriceMicroUsd : tokenPriceFromSharePrice(stock.referencePriceMicroUsd, await stockActionService.effectiveMultiplier(stock.id, now()));
+        } else price = await tradeRouter.priceOneShare(stock);
         priceUsdc = formatMinor(price);
         const scale = 10n ** BigInt(stock.decimals);
         valueUsdc = formatMinor((quantity * price) / scale);

@@ -1,3 +1,4 @@
+import { onchainChecks } from "./onchain";
 import type { ReconciliationRun } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
@@ -14,13 +15,13 @@ import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import { simulatedWalletProvider } from "@/backend/services/wallets/simulated";
 import { walletService } from "@/backend/services/wallets";
 
-type CheckResult = {
+export type CheckResult = {
   check: string;
   expected: string;
   observed: string | null;
   delta: string | null;
   threshold: string;
-  status: "ok" | "breach" | "unavailable";
+  status: "ok" | "breach" | "unavailable" | "in_flight";
 };
 
 class ReconciliationService {
@@ -59,6 +60,7 @@ class ReconciliationService {
       }
       results.push(this.makeCheck(`treasury:${chain}`, expected, observed, threshold));
     }
+    results.push(...await onchainChecks());
     return results;
   }
 
@@ -139,6 +141,9 @@ class ReconciliationService {
         reason: `reconciliation:${run.id}`,
         actorId: null,
       });
+      if (results.some((r) => r.check.startsWith("onchain:") && (r.status === "breach" || r.status === "unavailable"))) {
+        await controlsService.set(db, { scope: "trading", paused: true, reason: `reconciliation:${run.id}`, actorId: null });
+      }
       for (const r of results) {
         if (r.status === "breach") {
           await alertService.raise(db, {

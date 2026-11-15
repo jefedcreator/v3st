@@ -58,7 +58,7 @@ async function main(): Promise<void> {
       ] as const) {
         const entry = manifest.contracts[contractName];
         if (!entry) continue;
-        const assetKeyValue = `testnet:${manifest.chainId}:${entry.address.toLowerCase()}`;
+        const assetKeyValue = `testnet-${manifest.deploymentId}:${manifest.chainId}:${entry.address.toLowerCase()}`;
         await stockService.upsertCatalog([
           {
             symbol,

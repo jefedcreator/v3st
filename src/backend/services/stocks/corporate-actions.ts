@@ -1,8 +1,9 @@
 import { decodeEventLog, getEventSelector, type Hex, type Log, parseAbiItem } from "viem";
 
 import { db } from "@/server/db";
+import { policy } from "@/backend/config/policy";
 import { now } from "@/backend/clock";
-import { publicClientFor, testnetRpcUrl } from "@/backend/services/onchain/testnet";
+import { publicClientFor, readManifest, testnetService, testnetRpcUrl } from "@/backend/services/onchain/testnet";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 
 export const WAD = 10n ** 18n;
@@ -44,7 +45,7 @@ function decodeActionLog(log: Log): {
       const decoded = decodeEventLog({
         abi: [multiplierScheduledEvent],
         data: log.data,
-        topics: log.topics as [Hex, ...Hex[]],
+        topics: log.topics,
       });
       const args = decoded.args as unknown as { actionId: bigint; toWad: bigint; effectiveAt: bigint };
       return {
@@ -62,9 +63,9 @@ function decodeActionLog(log: Log): {
       const decoded = decodeEventLog({
         abi: [actionCancelledEvent],
         data: log.data,
-        topics: log.topics as [Hex, ...Hex[]],
+        topics: log.topics,
       });
-      const args = decoded.args as unknown as { actionId: bigint };
+      const args = decoded.args;
       return { kind: "action_cancelled", actionId: args.actionId, multiplierWad: null, effectiveAt: null };
     } catch {
       return null;
@@ -79,12 +80,12 @@ class StockActionService {
     if (!stock) throw new StockActionError(`Unknown stock ${stockId}`);
     if (!stock.networkId) return fromDbRaw(stock.multiplierWad);
     const actions = await db.stockAction.findMany({
-      where: { networkId: stock.networkId, stockId },
-      orderBy: [{ blockNumber: "asc" }, { logIndex: "asc" }],
+      where: { networkId: stock.networkId, stockId, orphanedAt: null },
+      orderBy: [{ effectiveAt: "asc" }, { blockNumber: "asc" }, { logIndex: "asc" }],
     });
     const cancelled = new Set<bigint>();
     for (const action of actions) {
-      if (action.kind !== "action_cancelled") continue;
+      if (action.kind !== "action_cancelled" || (action.cancelledAt && action.cancelledAt > at)) continue;
       const payload = action.payload as { actionId?: string } | null;
       if (payload?.actionId) cancelled.add(BigInt(payload.actionId));
     }
@@ -104,7 +105,11 @@ class StockActionService {
     if (!network) throw new StockActionError(`Unknown network ${networkId}`);
     const stocks = await db.stock.findMany({ where: { networkId } });
     if (stocks.length === 0) return 0;
+    const manifest = readManifest();
+    if (network.deploymentId !== manifest.deploymentId || !(await testnetService.verify(manifest)).ok) throw new StockActionError("Deployment identity mismatch");
     const client = publicClientFor(testnetRpcUrl());
+    const head = await client.getBlockNumber();
+    if (throughBlock + BigInt(policy.onchain.requiredConfirmations) > head) throw new StockActionError("Action ingestion requires finalized blocks");
     const tokenAddresses = stocks.map((s) => s.tokenAddress as Hex);
     const logs = await client.getLogs({
       address: tokenAddresses,
@@ -126,6 +131,7 @@ class StockActionService {
             txHash: log.transactionHash ?? "0x",
             logIndex: log.logIndex,
             blockNumber: toDbRaw(log.blockNumber ?? 0n),
+            blockHash: log.blockHash,
             multiplierWad: decoded.multiplierWad === null ? null : toDbRaw(decoded.multiplierWad),
             effectiveAt: decoded.effectiveAt,
             cancelledAt: decoded.kind === "action_cancelled" ? now() : null,
@@ -153,13 +159,16 @@ class StockActionService {
   }
 
   async rollbackAfterFinality(networkId: string, finalizedBlock: bigint): Promise<number> {
-    const result = await db.stockAction.deleteMany({
-      where: { networkId, blockNumber: { gt: toDbRaw(finalizedBlock) } },
+    const result = await db.stockAction.updateMany({
+      where: { networkId, blockNumber: { gt: toDbRaw(finalizedBlock) }, orphanedAt: null },
+      data: { orphanedAt: now() },
     });
     await db.onchainNetwork.update({
       where: { id: networkId },
       data: { finalizedBlock: toDbRaw(finalizedBlock) },
     });
+    const stocks = await db.stock.findMany({ where: { networkId } });
+    for (const stock of stocks) await db.stock.update({ where: { id: stock.id }, data: { multiplierWad: toDbRaw(await this.effectiveMultiplier(stock.id, now())) } });
     return result.count;
   }
 
