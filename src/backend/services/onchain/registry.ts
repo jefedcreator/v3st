@@ -27,6 +27,9 @@ type AdapterFactory = {
   spot?: () => SpotAdapter;
   strategy?: () => StrategyAdapter;
   actual?: () => never;
+  // Real provider adapters for a verified provider testnet; only registered for
+  // providers whose evidence is verified (hydrex on Base Sepolia in Phase A).
+  verified?: { spot?: () => SpotAdapter; strategy?: () => StrategyAdapter };
 };
 
 class OnchainRegistry {
@@ -48,14 +51,14 @@ class OnchainRegistry {
     if (evidence.betaAdapter !== "local_testnet_replica") {
       throw new UnverifiedProviderError(`Provider ${id} has no enabled beta adapter`);
     }
-    if (context.integrationKind === "verified_provider_testnet") {
-      throw new UnverifiedProviderError(
-        `Provider ${id} has no verified testnet evidence; only local_testnet_replica is enabled`,
-      );
-    }
     const factory = this.adapters.get(id);
     if (!factory) {
       throw new UnsupportedCapabilityError(`No adapter registered for provider ${id}`);
+    }
+    if (context.integrationKind === "verified_provider_testnet" && !factory.verified) {
+      throw new UnverifiedProviderError(
+        `Provider ${id} has no verified testnet evidence; only local_testnet_replica is enabled`,
+      );
     }
     return factory;
   }
@@ -80,9 +83,14 @@ class OnchainRegistry {
 
   spot(id: StockProviderId, context: BetaContext): SpotAdapter {
     const factory = this.resolve(id, context);
-    if (factory.actual && context.integrationKind === "verified_provider_testnet") {
+    if (context.integrationKind === "verified_provider_testnet") {
+      if (!factory.verified?.spot) {
+        throw new UnverifiedProviderError(`Provider ${id} exposes no verified testnet spot adapter`);
+      }
       this.actualFactoryCalls += 1;
-      factory.actual();
+      const adapter = factory.verified.spot();
+      this.checkCapabilities(adapter.capabilities, "spot", context);
+      return adapter;
     }
     if (!factory.spot) {
       throw new UnsupportedCapabilityError(`Provider ${id} exposes no spot adapter in beta`);
@@ -94,6 +102,15 @@ class OnchainRegistry {
 
   strategy(id: StockProviderId, context: BetaContext): StrategyAdapter {
     const factory = this.resolve(id, context);
+    if (context.integrationKind === "verified_provider_testnet") {
+      if (!factory.verified?.strategy) {
+        throw new UnverifiedProviderError(`Provider ${id} exposes no verified testnet strategy adapter`);
+      }
+      this.actualFactoryCalls += 1;
+      const adapter = factory.verified.strategy();
+      this.checkCapabilities(adapter.capabilities, "strategy", context);
+      return adapter;
+    }
     if (!factory.strategy) {
       throw new UnsupportedCapabilityError(`Provider ${id} exposes no strategy adapter in beta`);
     }

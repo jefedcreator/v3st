@@ -34,6 +34,12 @@ import {
   tradeFilled,
 } from "@/backend/services/ledger/postings";
 import { hydrexPoolAbi } from "@/backend/services/onchain/abis";
+import { contextOn, publicClientOn } from "@/backend/services/onchain/chains";
+import { manifestFor } from "@/backend/services/onchain/manifests";
+import { assetKey } from "@/backend/services/onchain/types";
+import { parseHydrexFill } from "@/backend/services/onchain/providers/hydrex/events";
+import { HYDREX_ACTUAL_VERSION } from "@/backend/services/onchain/providers/hydrex/actual";
+import { executionAccounts } from "@/backend/services/wallets/execution-accounts";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import "@/backend/services/onchain/providers";
 import { onchainExpiryMs, publicClientFor, readManifest, settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
@@ -359,12 +365,20 @@ class StrategyService {
       );
     }
     const wallet = await db.wallet.findUniqueOrThrow({ where: { userId_family: { userId, family: "evm" } } });
-    const ref = await testnetWalletService.ensureExecutionAccount(userId);
-    const context = await testnetService.defaultContext(
-      strategy.providerId as StockProviderId,
-      strategy.version,
-      ref.custodyProfileId,
-    );
+    const provChain = (strategy.provenance as { chainId?: number } | null)?.chainId ?? 31337;
+    const ref =
+      provChain === 31337
+        ? await testnetWalletService.ensureExecutionAccount(userId)
+        : await executionAccounts.ensure(userId, provChain);
+    const context =
+      provChain === 31337
+        ? await testnetService.defaultContext(strategy.providerId as StockProviderId, strategy.version, ref.custodyProfileId)
+        : await contextOn(
+            provChain,
+            strategy.providerId as StockProviderId,
+            strategy.providerId === "hydrex" ? HYDREX_ACTUAL_VERSION : strategy.version,
+            ref.custodyProfileId,
+          );
     const adapter = onchainRegistry.strategy(strategy.providerId as StockProviderId, context);
     const displayRates = await ratesService.display().catch(() => null);
     const fxRate = displayRates ? { kobo: displayRates.depositRate.kobo.toString(), microUsd: displayRates.depositRate.microUsd.toString() } : null;
@@ -377,7 +391,10 @@ class StrategyService {
       } else if ("budgetInputRaw" in input) {
         const budget = input.budgetInputRaw;
         if (budget <= 0n) throw new UnprocessableEntityException("Enter budget must be positive", "VALIDATION_FAILED");
-        const settlement = settlementAssetKey(readManifest());
+        const settlement =
+          provChain === 31337
+            ? settlementAssetKey(readManifest())
+            : assetKey("basesepolia", provChain, manifestFor(provChain).contracts.TestSettlementToken!.address);
         const allowedAssets = new Set((strategy.inputAssets as string[]) ?? []);
         const stockAsset = [...allowedAssets].find((a) => a !== settlement);
         const settlementLeg = budget / 2n;
@@ -607,7 +624,11 @@ class StrategyService {
 
       let preparatoryOperationId: string | null = null;
       if (preparatory && action === "enter") {
-        const settlement = settlementAssetKey(readManifest());
+        const prepChainId = (preparatory as ExecutionQuote).context?.chainId ?? 31337;
+        const settlement =
+          prepChainId === 31337
+            ? settlementAssetKey(readManifest())
+            : assetKey("basesepolia", prepChainId, manifestFor(prepChainId).contracts.TestSettlementToken!.address);
         const prepKey = `strat-prep:${key}`;
         const swapBudget = preparatory.input.raw;
         const prep = await tx.onchainOperation.create({
@@ -869,6 +890,7 @@ class StrategyService {
       ? await tx.strategyPosition.findUnique({ where: { id: quote.request.positionId } })
       : await tx.strategyPosition.findFirst({ where: { operationId: op.id } });
     const account = await accountAddressFor(tx, op);
+    const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
     const settlement = settlementAssetKey(readManifest());
     const prov = strategy.provenance as { pool?: string; stockId?: string } | null;
     const stock = prov?.stockId ? await tx.stock.findUnique({ where: { id: prov.stockId } }) : null;
@@ -890,8 +912,17 @@ class StrategyService {
       }
       const spentOf = (asset: string): bigint => deltaSpentOf(deltas, asset);
       const receivedOf = (asset: string): bigint => deltaReceivedOf(deltas, asset);
+      const isHydrexNft = (prov as { kind?: string } | null)?.kind === "hydrex_nft";
+      const hydrexFill = async (act: "enter" | "exit") => {
+        if (!op.txHash || !prov || isHydrexNft !== true) return null;
+        const receipt = await publicClientOn(network.chainId).getTransactionReceipt({ hash: op.txHash as Hex });
+        const pm = (prov as { positionManager?: string }).positionManager;
+        if (!pm) return null;
+        return parseHydrexFill(act, receipt.logs, pm as Address, account);
+      };
       if (action === "enter") {
-        const shares = await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Deposited");
+        const fill = await hydrexFill("enter");
+        const shares = fill && fill.kind === "enter" ? fill.liquidity : await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Deposited");
         const settleSpent = spentOf(settlement);
         const stockSpent = stockAsset ? spentOf(stockAsset) : 0n;
         const entered = strategyEntered({
@@ -925,19 +956,23 @@ class StrategyService {
           const stockValue = stockAsset ? valueAtBasis({ asset: stockAsset, raw: stockSpent }, expected.valuationBasis ?? {}) : 0n;
           if (stockValue === null) throw new ConflictException("Entry valuation evidence is missing", "OPERATION_UNRESOLVED");
           const principal = settleSpent + stockValue;
+          const enterFill = await hydrexFill("enter");
+          const positionData: Prisma.StrategyPositionUpdateInput = {
+            state: "active",
+            receiptRaw: toDbRaw(fromDbRaw(position.receiptRaw) + shares),
+            principalUsdc: toDbRaw(principal),
+            valueUsdc: toDbRaw(principal),
+          };
+          if (enterFill && enterFill.kind === "enter") positionData.externalTokenId = toDbRaw(enterFill.tokenId);
           await tx.strategyPosition.update({
             where: { id: position.id },
-            data: {
-              state: "active",
-              receiptRaw: toDbRaw(fromDbRaw(position.receiptRaw) + shares),
-              principalUsdc: toDbRaw(principal),
-              valueUsdc: toDbRaw(principal),
-            },
+            data: positionData,
           });
           await eventService.emit(tx, op.userId, "strategy.position.updated", position.id, "active");
         }
       } else if (action === "exit") {
-        const shares = await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Withdrawn");
+        const fill = await hydrexFill("exit");
+        const shares = fill && fill.kind === "exit" ? fill.principal0 + fill.principal1 : await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Withdrawn");
         const rewards = await rewardService.amountsForOperation(op.id, tx);
         // Exit transfers contain principal plus any separately logged fees. The
         // fee receipts credit the latter once; the principal posting excludes it.
@@ -958,11 +993,12 @@ class StrategyService {
           const remaining = fromDbRaw(position.receiptRaw);
           const stockValue = stockAsset ? valueAtBasis({ asset: stockAsset, raw: stockOut }, expected.valuationBasis ?? {}) : 0n;
           const value = stockValue === null ? null : settleOut + stockValue;
+          const exitFill = await hydrexFill("exit");
           await tx.strategyPosition.update({
             where: { id: position.id },
             data: {
               state: "exited",
-              receiptRaw: toDbRaw(remaining > shares ? remaining - shares : 0n),
+              receiptRaw: toDbRaw(exitFill && exitFill.kind === "exit" ? 0n : remaining > shares ? remaining - shares : 0n),
               valueUsdc: value === null ? null : toDbRaw(value),
             },
           });

@@ -10,6 +10,11 @@ import { lagosWeek } from "@/backend/services/jobs/schedule";
 import { now } from "@/backend/clock";
 import { hookFeeAbi, hydrexPoolAbi, hydropumpLockerAbi, stockDistributionAbi } from "@/backend/services/onchain/abis";
 import { publicClientFor, readManifest, settlementAssetKey } from "@/backend/services/onchain/testnet";
+import { publicClientOn } from "@/backend/services/onchain/chains";
+import { manifestFor } from "@/backend/services/onchain/manifests";
+import { assetKey, type StrategyAction } from "@/backend/services/onchain/types";
+import { parseHydrexFill } from "@/backend/services/onchain/providers/hydrex/events";
+import { readPoolOn } from "@/backend/services/onchain/providers/hydrex/pool";
 import type { StrategyQuote } from "@/backend/services/onchain/types";
 import { ledgerService } from "@/backend/services/ledger";
 import { rewardReceived } from "@/backend/services/ledger/postings";
@@ -92,9 +97,16 @@ const SOURCE_FOR: Record<string, RewardSource> = {
   basestonk: "basestonk_hook_fees",
 };
 
-async function txLogs(txHash: Hex): Promise<readonly Log[]> {
-  const receipt = await publicClientFor().getTransactionReceipt({ hash: txHash });
+async function txLogs(txHash: Hex, chainId: number = 31337): Promise<readonly Log[]> {
+  const receipt = await publicClientOn(chainId).getTransactionReceipt({ hash: txHash });
   return receipt.logs;
+}
+
+function settlementAssetKeyFor(chainId: number): string {
+  if (chainId === 31337) return settlementAssetKey(readManifest());
+  const entry = manifestFor(chainId).contracts.TestSettlementToken;
+  if (!entry) throw new Error(`Manifest for chain ${chainId} has no TestSettlementToken`);
+  return assetKey("basesepolia", chainId, entry.address);
 }
 
 // Recognize only actual fee/distribution realization proved by logs of the source
@@ -105,11 +117,32 @@ async function decodeRewardEvents(input: {
   logs: readonly Log[];
   account: Address;
   chainId: number;
+  action?: string;
 }): Promise<RewardEvent[]> {
-  const prov = (input.provenance ?? {}) as Provenance;
+  const prov = (input.provenance ?? {}) as Provenance & { kind?: string; positionManager?: string };
   const account = input.account.toLowerCase();
   const out: RewardEvent[] = [];
-  const client = publicClientFor();
+  const client = publicClientOn(input.chainId);
+  // Real Hydrex NFT positions: fees come only from the position manager's Collect
+  // (minus the decreased principal on exit); returned principal is never income, and
+  // a zero collect creates no receipt.
+  if (prov.kind === "hydrex_nft" && typeof prov.positionManager === "string" && typeof prov.pool === "string") {
+    const action: StrategyAction = input.action === "exit" ? "exit" : input.action === "enter" ? "enter" : "claim";
+    if (action === "enter") return out;
+    const fill = parseHydrexFill(action, input.logs, prov.positionManager as Address, input.account);
+    const state = await readPoolOn(input.chainId, prov.pool as Address);
+    const settlement = settlementAssetKeyFor(input.chainId);
+    const stock = prov.stockId ? await db.stock.findUnique({ where: { id: prov.stockId } }) : null;
+    const assetOf = (token: Address): string | null =>
+      token.toLowerCase() === state.token0.toLowerCase() ? settlement : token.toLowerCase() === state.token1.toLowerCase() ? (stock?.assetKey ?? null) : null;
+    const asset0 = assetOf(state.token0);
+    const asset1 = assetOf(state.token1);
+    if (fill.kind !== "enter") {
+      if (fill.fee0 > 0n && asset0) out.push({ logIndex: 0, asset: asset0, amountRaw: fill.fee0, sourceRef: prov.positionManager });
+      if (fill.fee1 > 0n && asset1) out.push({ logIndex: 0, asset: asset1, amountRaw: fill.fee1, sourceRef: prov.positionManager });
+    }
+    return out;
+  }
   if (typeof prov.pool === "string") {
     const pool = prov.pool;
     const stock = prov.stockId ? await db.stock.findUnique({ where: { id: prov.stockId } }) : null;
@@ -248,7 +281,7 @@ class RewardService {
     const quote = unpack((op.expected as { quote: unknown }).quote) as StrategyQuote;
     const strategy = await client.strategy.findUniqueOrThrow({ where: { id: quote.request.strategyId } });
     const events = await decodeRewardEvents({ providerId: op.providerId, provenance: strategy.provenance,
-      logs: op.txHash ? await txLogs(op.txHash as Hex) : [], account: await accountAddressFor(client, op), chainId: quote.request.context.chainId });
+      logs: op.txHash ? await txLogs(op.txHash as Hex, quote.request.context.chainId) : [], account: await accountAddressFor(client, op), chainId: quote.request.context.chainId, action: quote.request.action });
     const amounts = new Map<string, bigint>();
     for (const event of events) amounts.set(event.asset, (amounts.get(event.asset) ?? 0n) + event.amountRaw);
     return amounts;
@@ -275,9 +308,10 @@ class RewardService {
             : SOURCE_FOR[op.providerId];
       if (!source) return;
       const account = await accountAddressFor(client, op);
-      const receipt = await publicClientFor().getTransactionReceipt({ hash: op.txHash as Hex });
+      const chainId = quote.request.context.chainId;
+      const receipt = await publicClientOn(chainId).getTransactionReceipt({ hash: op.txHash as Hex });
       if (receipt.status !== "success" || receipt.blockHash !== op.blockHash) return;
-      const sourceBlock = await publicClientFor().getBlock({ blockHash: receipt.blockHash });
+      const sourceBlock = await publicClientOn(chainId).getBlock({ blockHash: receipt.blockHash });
       const sourceAt = new Date(Number(sourceBlock.timestamp) * 1000);
       const logs = receipt.logs;
       const events = await decodeRewardEvents({
@@ -285,13 +319,14 @@ class RewardService {
         provenance: strategy.provenance,
         logs,
         account,
-        chainId: quote.request.context.chainId,
+        chainId,
+        action: quote.request.action,
       });
       const beneficiary = account.toLowerCase();
       for (const event of events) {
         if (event.amountRaw <= 0n) continue;
         const knownAsset = await client.stock.findFirst({ where: { assetKey: event.asset } });
-        if (!knownAsset && event.asset !== settlementAssetKey(readManifest())) continue;
+        if (!knownAsset && event.asset !== settlementAssetKeyFor(quote.request.context.chainId)) continue;
         const existing = await client.rewardReceipt.findUnique({
           where: {
             networkId_source_txHash_logIndex_beneficiary_asset: {

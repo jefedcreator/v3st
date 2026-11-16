@@ -343,15 +343,13 @@ class ExecutionService {
       const quote = this.quoteOf(op);
       assertQuoteBinding(plan, quote, op, String((op.expected as { recipient: string }).recipient));
       await assertExecutionPlan(plan);
-      const context = (quote as ExecutionQuote).context;
-      const chainId = context.chainId;
+      const chainId = operationChainId(quote);
       const manifest = manifestFor(chainId);
       const client = publicClientOn(chainId);
       const nodeChainId = await client.getChainId();
       if (nodeChainId !== chainId || nodeChainId !== manifest.chainId) {
         throw new ServiceUnavailableException("Network unhealthy", "NETWORK_UNHEALTHY");
       }
-      void context;
       await withTx(async (tx) => {
         await lockRows(tx, "onchain_operations", [op.id]);
         const current = await tx.onchainOperation.findUniqueOrThrow({ where: { id: op.id } });
