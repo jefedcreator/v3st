@@ -49,7 +49,7 @@ export function testnetRpcUrl(): string {
 
 export function rpcRequest<T = unknown>(url: string, method: string, params: unknown[] = []): Promise<T> {
   assertBetaStage();
-  const endpoint = parseRpcEndpoint(url);
+  const endpoint = parseRpcEndpoint(url, TESTNET_CHAIN_ID);
   return new Promise<T>((resolve, reject) => {
     const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
     const req = http.request(
@@ -367,7 +367,7 @@ class TestnetService {
 
   async verify(manifest: TestnetManifest, url: string = testnetRpcUrl()): Promise<{ ok: boolean; reason?: string }> {
     try {
-      parseRpcEndpoint(url);
+      parseRpcEndpoint(url, TESTNET_CHAIN_ID);
     } catch {
       return { ok: false, reason: "RPC endpoint is not loopback" };
     }

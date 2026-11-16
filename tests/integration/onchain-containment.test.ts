@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseRpcEndpoint, assertOnchainContext } from "@/backend/integrations/onchain-policy";
+import { TESTNET_CHAIN_ID, parseRpcEndpoint, assertOnchainContext } from "@/backend/integrations/onchain-policy";
 import { readManifest, testnetService } from "@/backend/services/onchain/testnet";
 import { testnet } from "../helpers/testnet";
 
@@ -16,7 +16,7 @@ describe("optimized beta containment", () => {
       expect(await testnetService.verify(readManifest())).toMatchObject({ ok: true });
       expect(() => assertOnchainContext({ ...context, chainId: 8453 })).toThrow();
       expect(() => assertOnchainContext({ ...context, mode: "sandbox" })).toThrow();
-      expect(() => parseRpcEndpoint("https://mainnet.base.org")).toThrow();
+      expect(() => parseRpcEndpoint("https://mainnet.base.org", TESTNET_CHAIN_ID)).toThrow();
       expect(await handle.chainId()).toBe(31337);
     } finally {
       vi.unstubAllEnvs();

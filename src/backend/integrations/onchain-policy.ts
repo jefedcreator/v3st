@@ -13,32 +13,59 @@ export class OnchainPolicyError extends Error {
   }
 }
 
-export type RpcEndpoint = { url: string; loopback: boolean };
+export type RpcEndpoint = { url: string; loopback: boolean; chainId: number };
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
-export function parseRpcEndpoint(url: string): RpcEndpoint {
+export const ALLOWED_REFERENCE_HOST = "api.coinbase.com";
+
+export function parseRpcEndpoint(url: string, chainId: number): RpcEndpoint {
+  assertChainIdAllowed(chainId);
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     throw new OnchainPolicyError(`Invalid RPC URL: ${url}`);
   }
-  const loopback = LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase());
-  if (!loopback) {
-    throw new OnchainPolicyError(
-      `Onchain RPC endpoints must be loopback-only in beta (got host ${parsed.hostname})`,
-    );
-  }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new OnchainPolicyError(`Unsupported RPC protocol: ${parsed.protocol}`);
   }
-  return { url, loopback };
+  const loopback = LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase());
+  if (chainId === TESTNET_CHAIN_ID) {
+    if (!loopback) {
+      throw new OnchainPolicyError(
+        `Chain ${TESTNET_CHAIN_ID} RPC endpoints must be loopback-only in beta (got host ${parsed.hostname})`,
+      );
+    }
+    return { url, loopback, chainId };
+  }
+  if (chainId === BASE_SEPOLIA_CHAIN_ID) {
+    if (parsed.protocol !== "https:") {
+      throw new OnchainPolicyError(
+        `Base Sepolia RPC endpoints must use https (got ${parsed.protocol}//${parsed.host})`,
+      );
+    }
+    const configured = process.env.BASE_SEPOLIA_RPC_URL;
+    let configuredHost = "";
+    try {
+      configuredHost = new URL(configured ?? "").host;
+    } catch {
+      configuredHost = "";
+    }
+    if (!configuredHost) {
+      throw new OnchainPolicyError("BASE_SEPOLIA_RPC_URL is not configured; Base Sepolia access is disabled");
+    }
+    if (parsed.host !== configuredHost) {
+      throw new OnchainPolicyError(`Base Sepolia RPC host must be ${configuredHost} (got ${parsed.host})`);
+    }
+    return { url, loopback, chainId };
+  }
+  throw new OnchainPolicyError(`Chain ${chainId} has no RPC endpoint policy`);
 }
 
 export function isLoopbackRpcUrl(url: string): boolean {
   try {
-    return parseRpcEndpoint(url).loopback;
+    return parseRpcEndpoint(url, TESTNET_CHAIN_ID).loopback;
   } catch {
     return false;
   }
@@ -51,14 +78,14 @@ export function assertBetaStage(): void {
 }
 
 export function assertChainIdAllowed(chainId: number): void {
-  if (chainId === TESTNET_CHAIN_ID) return;
+  if (chainId === TESTNET_CHAIN_ID || chainId === BASE_SEPOLIA_CHAIN_ID) return;
   if (chainId === BASE_MAINNET_CHAIN_ID || chainId === 1) {
     throw new OnchainPolicyError(
       `Mainnet chain ${chainId} is never allowed in beta, including with NODE_ENV=production`,
     );
   }
   throw new OnchainPolicyError(
-    `Chain ${chainId} is not on the beta allowlist (isolated local testnet ${TESTNET_CHAIN_ID} only)`,
+    `Chain ${chainId} is not on the beta allowlist (isolated local testnet ${TESTNET_CHAIN_ID} and Base Sepolia ${BASE_SEPOLIA_CHAIN_ID} only)`,
   );
 }
 

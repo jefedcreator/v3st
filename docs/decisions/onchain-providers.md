@@ -31,9 +31,9 @@ Date: 2026-11-14. Scope: backend/API only. This record is the source of truth fo
 
 | Provider | Verified public surface (checked 2026-11-14) | Beta adapter |
 | --- | --- | --- |
-| o1 Exchange | Aggregator quote + unsigned tx; launchpad API separate; documented deployment is Base mainnet | Local router replica; actual adapter disabled |
+| o1 Exchange | Trading API (unsigned transactions, checked 2026-11-16); launchpad API separate; documented deployment is Base mainnet | Local router replica; actual adapter disabled |
 | Bankr | Deterministic wallet swap API; partner provisioning; location clearance separate from quotes | Local managed-wallet profile replica; disabled |
-| Hydrex/Hydropump | Manual LP fees; account-locking incentives; Hydropump permanent lock + fee destinations | Local pool + locker replicas; disabled |
+| Hydrex/Hydropump | `@hydrexfi/hydrex-sdk@1.2.8` lists Base Sepolia pool deployer, position manager and swap router (verified 2026-11-16); manual LP fees; Hydropump permanent lock + fee destinations | Local pool + locker replicas (verified 84532 evidence recorded; real adapter stays disabled until Phase A routing) |
 | Stonks Exchange | Stock-paired launches; versioned routers/lockers; holder stock distributions | Local versioned distribution replica; disabled |
 | BaseStonk | Uniswap v4 hook launches; public API/user-signed txs described; no verified ABI | Local hook/fee replica; disabled |
 | Feel.cash | Stock-paired launchpad; one published holder stock-reward example | Local distribution replica; disabled |
@@ -41,6 +41,27 @@ Date: 2026-11-14. Scope: backend/API only. This record is the source of truth fo
 Enabling a verified provider testnet later requires affirmative endpoint/account/network/
 asset/sponsorship evidence plus a reviewed configuration change — never an operator toggle
 or a caller-supplied mode flag.
+
+## 2026-11-16 amendment (Phase A: Hydrex on Base Sepolia)
+
+This amendment replaces rules 3 to 5 above for Phase A only (see
+`docs/superpowers/specs/2026-11-16-v3st-real-provider-integration-design.md`):
+
+1. Chain `84532` (Base Sepolia) is allowed, only with `integrationKind:
+   verified_provider_testnet`, only for provider `hydrex`. Chain `31337` (loopback only)
+   stays the local replica target. Chain `1`, Base mainnet `8453` and every other ID stay
+   rejected in Phase A.
+2. Hydrex's evidence record is `verified` for chain `84532`, citing
+   `@hydrexfi/hydrex-sdk@1.2.8` and its Base Sepolia pool deployer, position manager and
+   swap router addresses (all returning code from `sepolia.base.org`, checked 2026-11-16).
+   The other five providers stay `unverified`.
+3. A non-loopback RPC is allowed only over HTTPS and only when its host equals the host of
+   the configured `BASE_SEPOLIA_RPC_URL`; the node's reported chain ID must be `84532`.
+   Chain `31337` still requires a loopback host.
+4. One read-only mainnet HTTP source is allowed: `GET https://api.coinbase.com/v1/tokenized-stocks`
+   and its documented sub-paths. No other mainnet read, and no mainnet RPC.
+5. `BASE_SEPOLIA_RELAYER_PRIVATE_KEY` must be a fresh testnet-only key — never the local
+   test key and never a key that has held mainnet funds.
 
 ## Bankr managed-wallet profile (beta)
 
