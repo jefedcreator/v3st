@@ -329,9 +329,27 @@ model Wallet {
     custodyProfileId  String?
     createdAt         DateTime     @default(now())
 
+    executionAccounts ExecutionAccount[]
+
     @@unique([userId, family])
     @@unique([family, address])
     @@map("wallets")
+}
+
+// One execution account per user per network. Chain 31337 additionally mirrors the
+// address on Wallet.executionAddress so existing readers keep working.
+model ExecutionAccount {
+    id               String   @id @default(cuid())
+    walletId         String
+    wallet           Wallet   @relation(fields: [walletId], references: [id])
+    chainId          Int
+    deploymentId     String
+    address          String
+    custodyProfileId String
+    createdAt        DateTime @default(now())
+
+    @@unique([walletId, deploymentId])
+    @@map("execution_accounts")
 }
 
 model TreasuryWallet {
@@ -1078,6 +1096,8 @@ model StrategyPosition {
     operation     OnchainOperation?      @relation(fields: [operationId], references: [id])
     state         StrategyPositionState  @default(reserved)
     receiptRaw    Decimal                @db.Decimal(78, 0) @default(0)
+    // Provider position NFT id (e.g. Hydrex); null for replica positions.
+    externalTokenId Decimal?             @db.Decimal(78, 0)
     principalUsdc Decimal                @db.Decimal(78, 0) @default(0)
     valueUsdc     Decimal?               @db.Decimal(78, 0)
     createdAt     DateTime               @default(now())

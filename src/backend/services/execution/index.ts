@@ -222,10 +222,17 @@ class ExecutionService {
     });
   }
 
-  private async reserveSponsorBudget(tx: Tx, operationId: string, estWei: bigint): Promise<void> {
+  private async reserveSponsorBudget(tx: Tx, operationId: string, estWei: bigint, chainId: number): Promise<void> {
+    // Sponsor budgets are scoped per network so a public testnet relayer has its own
+    // daily cap, separate from the local node's.
+    const caps = policy.onchain.sponsor.byChain[chainId] ?? {
+      dailyCapWei: policy.onchain.sponsor.dailyCapWei,
+      perOperationCapWei: policy.onchain.sponsor.perOperationCapWei,
+    };
+    const dailyScope = `relayer:${chainId}:${now().toISOString().slice(0, 10)}`;
     const scopes: [string, bigint][] = [
-      [`operation:${operationId}`, policy.onchain.sponsor.perOperationCapWei],
-      [`daily:${now().toISOString().slice(0, 10)}`, policy.onchain.sponsor.dailyCapWei],
+      [`operation:${operationId}`, caps.perOperationCapWei],
+      [dailyScope, caps.dailyCapWei],
     ];
     // One advisory lock serializes all sponsor reservations, so concurrent
     // operations never race the upsert's create branch on the shared daily scope;
@@ -355,7 +362,7 @@ class ExecutionService {
         }
         const gasPrice = BigInt(await rpcRequest<Hex>(chainTarget(chainId).rpcUrl, chainId, "eth_gasPrice"));
         const estWei = gasPrice * 4_000_000n + 1n;
-        await this.reserveSponsorBudget(tx, op.id, estWei);
+        await this.reserveSponsorBudget(tx, op.id, estWei, chainId);
         const accountAddress = await accountAddressFor(tx, current);
         // Execution-account operation nonce and shared relayer transaction nonce are
         // distinct persisted resources under separate concurrency controls.
@@ -375,7 +382,7 @@ class ExecutionService {
           update: {},
         });
         const expected = (current.expected as Record<string, unknown>) ?? {};
-        expected.sponsor = { reservedWei: estWei.toString(), dailyScope: `daily:${now().toISOString().slice(0, 10)}`, settled: false };
+        expected.sponsor = { reservedWei: estWei.toString(), dailyScope: `relayer:${chainId}:${now().toISOString().slice(0, 10)}`, settled: false };
 
         expected.approveTxHash = signed.approveHash;
         await tx.onchainOperation.update({

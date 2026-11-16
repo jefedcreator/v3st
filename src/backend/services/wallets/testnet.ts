@@ -1,74 +1,21 @@
 import type { Address, Hex } from "viem";
 
-import type { Wallet } from "@/server/prisma";
 import { db } from "@/server/db";
+import { TESTNET_CHAIN_ID } from "@/backend/integrations/onchain-policy";
 import { executionAccountAbi } from "@/backend/services/onchain/abis";
 import { publicClientOn } from "@/backend/services/onchain/chains";
 import {
-  loadArtifact,
   publicClientFor,
-  readManifest,
   relayerAccount,
-  testnetService,
   walletClientFor,
 } from "@/backend/services/onchain/testnet";
-import { NotFoundException } from "@/utils/exceptions";
+import { executionAccounts, type ExecutionAccountRef } from "@/backend/services/wallets/execution-accounts";
 
-export type ExecutionAccountRef = {
-  wallet: Wallet;
-  accountAddress: Address;
-  custodyProfileId: string;
-};
+export type { ExecutionAccountRef };
 
 class TestnetWalletService {
   async ensureExecutionAccount(userId: string): Promise<ExecutionAccountRef> {
-    const wallet = await db.wallet.findUnique({
-      where: { userId_family: { userId, family: "evm" } },
-    });
-    if (!wallet) {
-      throw new NotFoundException("Wallet not provisioned", "WALLET_NOT_READY");
-    }
-    const manifest = readManifest();
-    if (wallet.executionAddress && wallet.custodyProfileId) {
-      if (wallet.deploymentId !== manifest.deploymentId) throw new NotFoundException("Wallet deployment requires restore or a fresh isolated user", "NETWORK_UNHEALTHY");
-      return {
-        wallet,
-        accountAddress: wallet.executionAddress as Address,
-        custodyProfileId: wallet.custodyProfileId,
-      };
-    }
-    const verified = await testnetService.verify(manifest);
-    if (!verified.ok) {
-      throw new NotFoundException(`Testnet unavailable: ${verified.reason}`, "NETWORK_UNHEALTHY");
-    }
-    const account = relayerAccount();
-    const walletClient = walletClientFor(account);
-    const publicClient = publicClientFor();
-    const artifact = loadArtifact("TestExecutionAccount");
-    const hash = await walletClient.deployContract({
-      abi: artifact.abi as never,
-      bytecode: artifact.bytecode as Hex,
-      args: [wallet.address as Address, account.address],
-    });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    const accountAddress = receipt.contractAddress;
-    if (!accountAddress) throw new NotFoundException("Execution account deployment failed", "NETWORK_UNHEALTHY");
-
-    const profile = await db.custodyProfile.upsert({
-      where: { kind_walletId: { kind: "application_account", walletId: wallet.id } },
-      create: {
-        kind: "application_account",
-        label: `application account for ${userId}`,
-        walletId: wallet.id,
-        deploymentId: manifest.deploymentId,
-      },
-      update: {},
-    });
-    const updated = await db.wallet.update({
-      where: { id: wallet.id },
-      data: { executionAddress: accountAddress, custodyProfileId: profile.id, deploymentId: manifest.deploymentId },
-    });
-    return { wallet: updated, accountAddress, custodyProfileId: profile.id };
+    return executionAccounts.ensure(userId, TESTNET_CHAIN_ID);
   }
 
   async accountState(accountAddress: Address, chainId: number = 31337): Promise<{ nonce: bigint; epoch: bigint }> {

@@ -40,6 +40,10 @@ export const policy = {
     sponsor: {
       dailyCapWei: 10n ** 21n,
       perOperationCapWei: 10n ** 19n,
+      // Per-network overrides; chains not listed keep the defaults above.
+      byChain: {
+        84532: { dailyCapWei: 2n * 10n ** 16n, perOperationCapWei: 2n * 10n ** 15n },
+      } as Record<number, { dailyCapWei: bigint; perOperationCapWei: bigint }>,
     },
   },
   rates: {
