@@ -16,7 +16,7 @@ resources, `403` for non-operators on `/ops/*`.
 
 | Endpoint | Notes |
 | --- | --- |
-| `GET /stocks` | Catalog; `tradable`, `asset_key`, reference price basis and test provenance per row. On Base Sepolia, `provenance.stand_in_for` names the live tokenized-stock asset key the test stand-in tracks (e.g. `tAAPL` → the AAPLc contract); reference prices sync from Base's tokenized stocks API |
+| `GET /stocks` | Catalog; `tradable`, `asset_key`, reference price basis and test provenance per row. On Base Sepolia, `stand_in_for` names the live tokenized-stock asset key the test stand-in tracks (e.g. `tAAPL` → the AAPLc contract); reference prices sync from Base's tokenized stocks API |
 | `GET /stocks/:id` | Detail; unknown IDs are `404`, paused/delisted rows stay visible with flags |
 | `GET /strategies`, `GET /strategies/:id` | Enabled versioned mechanisms: input/receipt/reward assets, `separate_claim`, lock and caps, provenance |
 

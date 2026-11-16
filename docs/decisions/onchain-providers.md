@@ -63,6 +63,27 @@ This amendment replaces rules 3 to 5 above for Phase A only (see
 5. `BASE_SEPOLIA_RELAYER_PRIVATE_KEY` must be a fresh testnet-only key — never the local
    test key and never a key that has held mainnet funds.
 
+### Implementation notes (verification pass, 2026-11-16)
+
+- Hydrex V3ST pools are **base** Algebra pools. The `deployer` argument of
+  `createAndInitializePoolIfNecessary`, `mint` and `exactInputSingle` is the custom-pool
+  deployer slot and is `address(0)`; the pool address follows the SDK's
+  `computePoolAddress` with the main pool deployer. Execution policy rejects any other value.
+- `sqrtPriceX96For(num, den)` takes Algebra's price, raw token1 per raw token0. The plan
+  named the parameters `token0PerToken1`, which is the inverse.
+- The stock stand-in reuses the existing `TestStockToken` fixture, whose decimals are fixed
+  at 18 (the plan said 6). The deploy script, seed and quotes all use 18.
+- Every network has its own execution account (`execution_accounts`); operation signing,
+  receipts, rewards ownership and reconciliation resolve the account of the operation's
+  own network. Ledger cash is namespaced per network: `testnet` for 31337, `basesepolia`
+  for 84532, matching asset keys and `Stock.chain`.
+- The relayer key for 84532 is refused if it equals `TESTNET_SIGNER_PRIVATE_KEY` or a
+  public Anvil development key.
+- **Open decision:** `policy.onchain.referenceMaxAgeSeconds` (60 s) is applied to the
+  live API's `nav_price_updated_at`. Base publishes NAV far less often than every minute,
+  so live stand-in trades are blocked as stale until the operator sets a freshness window
+  for the live feed. The code fails closed until then.
+
 ## Bankr managed-wallet profile (beta)
 
 Bankr is modeled as `custody: provider_managed`, not as an application-account route.
