@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 
 import { createPublicClient, createWalletClient, custom, type Address, type Hex } from "viem";
@@ -47,12 +48,14 @@ export function testnetRpcUrl(): string {
   return process.env.TESTNET_RPC_URL ?? "http://127.0.0.1:8545";
 }
 
-export function rpcRequest<T = unknown>(url: string, method: string, params: unknown[] = []): Promise<T> {
+export function rpcRequest<T = unknown>(url: string, chainId: number, method: string, params: unknown[] = []): Promise<T> {
   assertBetaStage();
-  const endpoint = parseRpcEndpoint(url, TESTNET_CHAIN_ID);
+  const endpoint = parseRpcEndpoint(url, chainId);
+  // Non-loopback endpoints (Base Sepolia) are https-only per policy; loopback stays http.
+  const transport = endpoint.loopback ? http : https;
   return new Promise<T>((resolve, reject) => {
     const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
-    const req = http.request(
+    const req = transport.request(
       endpoint.url,
       { method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) } },
       (res) => {
@@ -102,29 +105,35 @@ export function publicClientFor(url: string = testnetRpcUrl()) {
     chain: localChain(),
     transport: custom({
       async request({ method, params }) {
-        return rpcRequest(url, String(method), params as unknown[]);
+        return rpcRequest(url, TESTNET_CHAIN_ID, String(method), params as unknown[]);
       },
     }),
   });
 }
 
+async function chainBlock(chainId: number) {
+  if (chainId === TESTNET_CHAIN_ID) return publicClientFor().getBlock({ blockTag: "latest" });
+  const { publicClientOn } = await import("./chains");
+  return publicClientOn(chainId).getBlock({ blockTag: "latest" });
+}
+
 // Onchain deadlines must be derived from the chain clock, not the wall clock: on the
 // local testnet rapid block mining can run block.timestamp ahead of wall time.
-export async function chainDeadlineFromNow(extraSeconds?: number): Promise<Date> {
-  const block = await publicClientFor().getBlock({ blockTag: "latest" });
+export async function chainDeadlineFromNow(extraSeconds?: number, chainId: number = TESTNET_CHAIN_ID): Promise<Date> {
+  const block = await chainBlock(chainId);
   const window = extraSeconds ?? policy.onchain.executionWindowSeconds;
   return new Date((Number(block.timestamp) + window) * 1000);
 }
 
 // The quote expiry is the latest permitted acceptance and broadcast bound, so a
 // plan/contract deadline is derived from the chain clock but never extends past it.
-export async function chainDeadlineBounded(latestMs: number, extraSeconds?: number): Promise<Date> {
-  const chainDeadline = await chainDeadlineFromNow(extraSeconds);
+export async function chainDeadlineBounded(latestMs: number, extraSeconds?: number, chainId: number = TESTNET_CHAIN_ID): Promise<Date> {
+  const chainDeadline = await chainDeadlineFromNow(extraSeconds, chainId);
   return new Date(Math.min(chainDeadline.getTime(), latestMs));
 }
 
-export async function chainNowMs(): Promise<number> {
-  const block = await publicClientFor().getBlock({ blockTag: "latest" });
+export async function chainNowMs(chainId: number = TESTNET_CHAIN_ID): Promise<number> {
+  const block = await chainBlock(chainId);
   return Number(block.timestamp) * 1000;
 }
 
@@ -133,8 +142,8 @@ export async function chainNowMs(): Promise<number> {
 // while acceptance checks compare it against the app clock, so the bound must
 // satisfy both (rapid local mining can run the chain clock ahead of the wall
 // clock, and evm_revert can run it behind).
-export async function onchainExpiryMs(ttlSeconds: number): Promise<number> {
-  const chain = await chainNowMs();
+export async function onchainExpiryMs(ttlSeconds: number, chainId: number = TESTNET_CHAIN_ID): Promise<number> {
+  const chain = await chainNowMs(chainId);
   return Math.max(now().getTime(), chain) + ttlSeconds * 1000;
 }
 
@@ -181,7 +190,7 @@ export function walletClientFor(account: ReturnType<typeof privateKeyToAccount>,
     chain: localChain(),
     transport: custom({
       async request({ method, params }) {
-        return rpcRequest(url, String(method), params as unknown[]);
+        return rpcRequest(url, TESTNET_CHAIN_ID, String(method), params as unknown[]);
       },
     }),
   });
@@ -204,7 +213,7 @@ export function findAnvilBinary(): string {
 export async function waitForRpc(url: string, attempts = 60): Promise<void> {
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const chainId = await rpcRequest<Hex>(url, "eth_chainId");
+      const chainId = await rpcRequest<Hex>(url, TESTNET_CHAIN_ID, "eth_chainId");
       assertChainIdAllowed(Number(BigInt(chainId)));
       return;
     } catch {
@@ -293,7 +302,7 @@ export type DeployContractSpec = { name: string; artifact: string; args: unknown
 class TestnetService {
   async isReachable(url: string = testnetRpcUrl()): Promise<boolean> {
     try {
-      const chainId = await rpcRequest<Hex>(url, "eth_chainId");
+      const chainId = await rpcRequest<Hex>(url, TESTNET_CHAIN_ID, "eth_chainId");
       return Number(BigInt(chainId)) === TESTNET_CHAIN_ID;
     } catch {
       return false;
@@ -301,21 +310,21 @@ class TestnetService {
   }
 
   async chainIdentity(url: string = testnetRpcUrl()): Promise<{ chainId: number; genesisHash: Hex }> {
-    const metadata = await rpcRequest<{ forkedNetwork?: unknown }>(url, "anvil_metadata");
+    const metadata = await rpcRequest<{ forkedNetwork?: unknown }>(url, TESTNET_CHAIN_ID, "anvil_metadata");
     if (metadata.forkedNetwork) throw new TestnetError("Forked upstream networks are forbidden in beta");
-    const chainIdHex = await rpcRequest<Hex>(url, "eth_chainId");
+    const chainIdHex = await rpcRequest<Hex>(url, TESTNET_CHAIN_ID, "eth_chainId");
     const chainId = Number(BigInt(chainIdHex));
     assertChainIdAllowed(chainId);
-    const genesis = await rpcRequest<{ hash: Hex }>(url, "eth_getBlockByNumber", ["0x0", false]);
+    const genesis = await rpcRequest<{ hash: Hex }>(url, TESTNET_CHAIN_ID, "eth_getBlockByNumber", ["0x0", false]);
     return { chainId, genesisHash: genesis.hash };
   }
 
   async fundEphemeral(account: ReturnType<typeof privateKeyToAccount>, url: string = testnetRpcUrl()): Promise<void> {
-    const version = await rpcRequest<string>(url, "web3_clientVersion");
+    const version = await rpcRequest<string>(url, TESTNET_CHAIN_ID, "web3_clientVersion");
     if (!/anvil/i.test(version)) {
       throw new TestnetError("Ephemeral signer funding requires a local anvil node");
     }
-    await rpcRequest(url, "anvil_setBalance", [account.address, `0x${(10n ** 24n).toString(16)}`]);
+    await rpcRequest(url, TESTNET_CHAIN_ID, "anvil_setBalance", [account.address, `0x${(10n ** 24n).toString(16)}`]);
   }
 
   async deploy(specs: DeployContractSpec[], opts?: { url?: string; label?: string }): Promise<TestnetManifest> {
@@ -338,7 +347,7 @@ class TestnetService {
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       const address = receipt.contractAddress;
       if (!address) throw new TestnetError(`Deployment of ${spec.name} produced no address`);
-      const code = await rpcRequest<Hex>(url, "eth_getCode", [address, "latest"]);
+      const code = await rpcRequest<Hex>(url, TESTNET_CHAIN_ID, "eth_getCode", [address, "latest"]);
       contracts[spec.name] = { address, abiHash: abiHash(artifact.abi), codeHash: sha256Hex(code) };
     }
     const deploymentBlock = await publicClient.getBlock({ blockTag: "latest" });
@@ -377,10 +386,10 @@ class TestnetService {
       return { ok: false, reason: "genesis hash mismatch: local chain was reset or redeployed" };
     }
     if (!manifest.deploymentBlock || !manifest.deploymentBlockHash) return { ok: false, reason: "deployment checkpoint missing; restore or provision a new namespace" };
-    const checkpoint = await rpcRequest<{ hash: Hex } | null>(url, "eth_getBlockByNumber", [`0x${BigInt(manifest.deploymentBlock).toString(16)}`, false]);
+    const checkpoint = await rpcRequest<{ hash: Hex } | null>(url, TESTNET_CHAIN_ID, "eth_getBlockByNumber", [`0x${BigInt(manifest.deploymentBlock).toString(16)}`, false]);
     if (checkpoint?.hash !== manifest.deploymentBlockHash) return { ok: false, reason: "deployment block mismatch: local chain reset" };
     for (const [name, entry] of Object.entries(manifest.contracts)) {
-      const code = await rpcRequest<Hex>(url, "eth_getCode", [entry.address, "latest"]);
+      const code = await rpcRequest<Hex>(url, TESTNET_CHAIN_ID, "eth_getCode", [entry.address, "latest"]);
       if (!code || code === "0x") return { ok: false, reason: `contract ${name} missing at ${entry.address}` };
       if (!entry.codeHash || sha256Hex(code) !== entry.codeHash) return { ok: false, reason: `contract ${name} code hash mismatch` };
     }

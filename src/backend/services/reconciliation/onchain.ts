@@ -3,9 +3,10 @@ import { type Address, type Hex } from "viem";
 import { db } from "@/server/db";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
-import { policy } from "@/backend/config/policy";
 import { hydrexPoolAbi, settlementTokenAbi } from "@/backend/services/onchain/abis";
-import { publicClientFor, readManifest, testnetService } from "@/backend/services/onchain/testnet";
+import { publicClientOn } from "@/backend/services/onchain/chains";
+import { manifestFor, verifyManifest } from "@/backend/services/onchain/manifests";
+import { requiredConfirmations } from "@/backend/services/execution/receipts";
 import { fromDbRaw } from "@/utils/asset-units";
 import type { CheckResult } from ".";
 
@@ -23,16 +24,17 @@ export async function onchainChecks(): Promise<CheckResult[]> {
       results.push({ check: `${check}:${reason}`, expected: "0", observed: null, delta: null, threshold: "0", status: "unavailable" });
     };
     try {
-      const manifest = readManifest();
-      const verified = await testnetService.verify(manifest);
+      const chainId = network.chainId;
+      const manifest = manifestFor(chainId);
+      const verified = await verifyManifest(chainId);
       if (!verified.ok || manifest.deploymentId !== network.deploymentId || manifest.networkId !== network.networkId) {
         unavailable("deployment_mismatch");
         await db.onchainOperation.updateMany({ where: { networkId: network.id, status: { in: [...UNRESOLVED] } }, data: { status: "needs_review", errorReason: "DEPLOYMENT_MISMATCH" } });
         continue;
       }
-      const client = publicClientFor();
+      const client = publicClientOn(chainId);
       const head = await client.getBlockNumber();
-      const depth = BigInt(policy.onchain.requiredConfirmations);
+      const depth = BigInt(requiredConfirmations(chainId));
       if (head < depth) { unavailable("finality_unavailable"); continue; }
       const cutoff = await client.getBlock({ blockNumber: head - depth });
       const wallets = await db.wallet.findMany({ where: { executionAddress: { not: null } } });

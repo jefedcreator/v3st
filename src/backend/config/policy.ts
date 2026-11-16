@@ -27,6 +27,7 @@ export const policy = {
     chainId: 31337,
     networkNamespace: "testnet",
     requiredConfirmations: 2,
+    confirmations: { 31337: 2, 84532: 3, 8453: 5 } as Record<number, number>,
     quoteTtlSeconds: 30,
     executionWindowSeconds: 120,
     referenceMaxAgeSeconds: 60,

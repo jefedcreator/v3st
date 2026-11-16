@@ -3,6 +3,7 @@ import type { Address, Hex } from "viem";
 import type { Wallet } from "@/server/prisma";
 import { db } from "@/server/db";
 import { executionAccountAbi } from "@/backend/services/onchain/abis";
+import { publicClientOn } from "@/backend/services/onchain/chains";
 import {
   loadArtifact,
   publicClientFor,
@@ -70,8 +71,8 @@ class TestnetWalletService {
     return { wallet: updated, accountAddress, custodyProfileId: profile.id };
   }
 
-  async accountState(accountAddress: Address): Promise<{ nonce: bigint; epoch: bigint }> {
-    const publicClient = publicClientFor();
+  async accountState(accountAddress: Address, chainId: number = 31337): Promise<{ nonce: bigint; epoch: bigint }> {
+    const publicClient = chainId === 31337 ? publicClientFor() : publicClientOn(chainId);
     const [nonce, epoch] = await Promise.all([
       publicClient.readContract({
         address: accountAddress,

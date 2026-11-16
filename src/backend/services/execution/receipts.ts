@@ -2,14 +2,12 @@ import { decodeAbiParameters, parseEventLogs, type Address, type Hex } from "vie
 
 import { policy } from "@/backend/config/policy";
 import { settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
+import { chainTarget, publicClientOn } from "@/backend/services/onchain/chains";
 import type { AssetAmount, AssetDelta, ExecutionObservation } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
 import {
-  publicClientFor,
   rpcRequest,
-  testnetRpcUrl,
   type TestnetError,
-  type TestnetManifest,
 } from "@/backend/services/onchain/testnet";
 
 export class ReceiptValidationError extends Error {
@@ -22,8 +20,8 @@ export class ReceiptValidationError extends Error {
 const tokenReadAbi = [...settlementTokenAbi, ...stockTokenAbi] as never;
 
 export async function readTokenBalance(asset: string, account: Address): Promise<bigint> {
-  const { address } = parseAssetKey(asset);
-  const client = publicClientFor();
+  const { address, chainId } = parseAssetKey(asset);
+  const client = publicClientOn(chainId);
   const balance = await client.readContract({
     address: address as Address,
     abi: tokenReadAbi,
@@ -53,8 +51,8 @@ export type ReceiptView = {
   transactionHash: Hex;
 };
 
-export async function fetchReceipt(txHash: Hex): Promise<ReceiptView | null> {
-  const client = publicClientFor();
+export async function fetchReceipt(txHash: Hex, chainId: number): Promise<ReceiptView | null> {
+  const client = publicClientOn(chainId);
   try {
     const receipt = await client.getTransactionReceipt({ hash: txHash });
     return {
@@ -72,8 +70,8 @@ export async function fetchReceipt(txHash: Hex): Promise<ReceiptView | null> {
 
 // Only transfers emitted by the execution transaction count toward its fill.
 // Donations, later swaps and block-wide balances cannot alter these deltas.
-export async function transactionDeltas(txHash: Hex, assets: string[], account: Address): Promise<AssetDelta[]> {
-  const receipt = await publicClientFor().getTransactionReceipt({ hash: txHash });
+export async function transactionDeltas(txHash: Hex, assets: string[], account: Address, chainId: number): Promise<AssetDelta[]> {
+  const receipt = await publicClientOn(chainId).getTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") return [];
   const normalized = account.toLowerCase();
   return [...new Set(assets)].map((asset) => {
@@ -88,17 +86,17 @@ export async function transactionDeltas(txHash: Hex, assets: string[], account: 
   });
 }
 
-export async function txExists(txHash: Hex): Promise<boolean> {
-  const url = testnetRpcUrl();
-  const tx = await rpcRequest<{ hash: Hex } | null>(url, "eth_getTransactionByHash", [txHash]);
+export async function txExists(txHash: Hex, chainId: number): Promise<boolean> {
+  const url = chainTarget(chainId).rpcUrl;
+  const tx = await rpcRequest<{ hash: Hex } | null>(url, chainId, "eth_getTransactionByHash", [txHash]);
   return tx !== null;
 }
 
 // Replays a reverted transaction with eth_call at its inclusion block (a reverted
 // tx leaves state untouched, so the replay reverts identically) and decodes the
 // Error(string) reason when the fixture produced one.
-export async function revertReasonOf(txHash: Hex): Promise<string | null> {
-  const url = testnetRpcUrl();
+export async function revertReasonOf(txHash: Hex, chainId: number): Promise<string | null> {
+  const url = chainTarget(chainId).rpcUrl;
   const tx = await rpcRequest<{
     from: Hex;
     to: Hex | null;
@@ -106,7 +104,7 @@ export async function revertReasonOf(txHash: Hex): Promise<string | null> {
     value: Hex;
     gas: Hex;
     blockNumber: Hex | null;
-  } | null>(url, "eth_getTransactionByHash", [txHash]);
+  } | null>(url, chainId, "eth_getTransactionByHash", [txHash]);
   if (!tx?.to || !tx?.blockNumber) return null;
   try {
     // Replay against the state before the inclusion block: at the post-state the
@@ -114,7 +112,7 @@ export async function revertReasonOf(txHash: Hex): Promise<string | null> {
     // reason. A reverted tx leaves no state changes, so the pre-state reproduces
     // the original revert data.
     const preBlock = `0x${(BigInt(tx.blockNumber) - 1n).toString(16)}`;
-    await rpcRequest<Hex>(url, "eth_call", [
+    await rpcRequest<Hex>(url, chainId, "eth_call", [
       { from: tx.from, to: tx.to, data: tx.input, value: tx.value, gas: tx.gas },
       preBlock,
     ]);
@@ -135,9 +133,9 @@ export async function revertReasonOf(txHash: Hex): Promise<string | null> {
   }
 }
 
-export async function isReorged(receipt: ReceiptView): Promise<boolean> {
-  const url = testnetRpcUrl();
-  const block = await rpcRequest<{ hash: Hex; number: Hex } | null>(url, "eth_getBlockByNumber", [
+export async function isReorged(receipt: ReceiptView, chainId: number): Promise<boolean> {
+  const url = chainTarget(chainId).rpcUrl;
+  const block = await rpcRequest<{ hash: Hex; number: Hex } | null>(url, chainId, "eth_getBlockByNumber", [
     `0x${receipt.blockNumber.toString(16)}`,
     false,
   ]);
@@ -148,14 +146,15 @@ export async function isReorged(receipt: ReceiptView): Promise<boolean> {
 export async function observationState(
   txHash: Hex | null,
   requiredConfirmations: number,
+  chainId: number,
 ): Promise<ExecutionObservation["state"]> {
   if (!txHash) return "pending";
-  const receipt = await fetchReceipt(txHash);
+  const receipt = await fetchReceipt(txHash, chainId);
   if (!receipt) {
-    return (await txExists(txHash)) ? "pending" : "unknown";
+    return (await txExists(txHash, chainId)) ? "pending" : "unknown";
   }
-  if (await isReorged(receipt)) return "reorged";
-  const latest = await publicClientFor().getBlockNumber();
+  if (await isReorged(receipt, chainId)) return "reorged";
+  const latest = await publicClientOn(chainId).getBlockNumber();
   if (receipt.blockNumber + BigInt(requiredConfirmations) <= latest) return receipt.status === "reverted" ? "reverted" : "confirmed";
   return "pending";
 }
@@ -262,7 +261,10 @@ export function assertMinimumOutput(
   }
 }
 
-export function requiredConfirmations(manifest: TestnetManifest): number {
-  void manifest;
-  return policy.onchain.requiredConfirmations;
+export function requiredConfirmations(chainId: number): number {
+  const confirmations = policy.onchain.confirmations[chainId];
+  if (confirmations === undefined) {
+    throw new ReceiptValidationError(`Chain ${chainId} has no confirmation policy`);
+  }
+  return confirmations;
 }

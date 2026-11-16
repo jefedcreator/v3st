@@ -884,7 +884,9 @@ class StrategyService {
       if (deltas.length === 0) {
         const assets = plan ? [...plan.maximumInputs, ...plan.minimumOutputs].map((a) => a.asset) : [];
         const uniqueAssets = [...new Set(assets)];
-        deltas = op.txHash ? await transactionDeltas(op.txHash as Hex, uniqueAssets, account) : [];
+        const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
+        const chainId = plan?.context.chainId ?? network.chainId;
+        deltas = op.txHash ? await transactionDeltas(op.txHash as Hex, uniqueAssets, account, chainId) : [];
       }
       const spentOf = (asset: string): bigint => deltaSpentOf(deltas, asset);
       const receivedOf = (asset: string): bigint => deltaReceivedOf(deltas, asset);

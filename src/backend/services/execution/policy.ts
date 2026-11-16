@@ -4,7 +4,8 @@ import { assertOnchainContext } from "@/backend/integrations/onchain-policy";
 import { hydrexPoolAbi, o1RouterAbi, stockDistributionAbi, hookFeeAbi, hydropumpLockerAbi, settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 import type { AssetAmount, ExecutionPlan, ExecutionQuote, PreparedCall, StrategyPlan, StrategyQuote } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
-import { chainNowMs, readManifest } from "@/backend/services/onchain/testnet";
+import { manifestFor } from "@/backend/services/onchain/manifests";
+import { chainNowMs } from "@/backend/services/onchain/testnet";
 import { db } from "@/server/db";
 import { canonicalJson, sha256Hex } from "@/utils";
 
@@ -35,7 +36,7 @@ export function planFingerprint(plan: ExecutionPlan | StrategyPlan): string {
 // Approved call targets: manifest contracts, plan asset addresses, and pool
 // addresses recorded in stock/strategy provenance (pools are deployed per test).
 async function allowedTargets(plan: ExecutionPlan | StrategyPlan): Promise<Set<string>> {
-  const manifest = readManifest();
+  const manifest = manifestFor(plan.context.chainId);
   const targets = new Set<string>();
   for (const entry of Object.values(manifest.contracts)) {
     targets.add(entry.address.toLowerCase());
@@ -180,7 +181,7 @@ export async function assertExecutionPlan(plan: ExecutionPlan | StrategyPlan): P
   assertOnchainContext(plan.context);
   // The plan deadline is enforced onchain against block.timestamp, so the
   // passed-check uses the chain clock, not the (fakeable) app wall clock.
-  if (plan.deadline.getTime() <= (await chainNowMs())) {
+  if (plan.deadline.getTime() <= (await chainNowMs(plan.context.chainId))) {
     throw new ExecutionPlanRejected("Plan deadline has passed");
   }
   if (plan.calls.length === 0 || plan.calls.length > 8) {
