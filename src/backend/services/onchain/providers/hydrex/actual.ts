@@ -31,7 +31,9 @@ import { db } from "@/server/db";
 import { fromDbRaw } from "@/utils/asset-units";
 import { UnprocessableEntityException } from "@/utils/exceptions";
 
-import { fullRangeTicks, quoteExactIn, readPool } from "./pool";
+import { fullRangeTicks, quoteExactIn, readPoolOn } from "./pool";
+
+export { __setPoolReaderForTests } from "./pool";
 
 export const HYDREX_ACTUAL_VERSION = "hydrex-sdk-1.2.8";
 
@@ -54,11 +56,6 @@ export const hydrexActualCapabilities: ProviderCapabilities = {
   exactOutput: false,
 };
 
-let poolReader: typeof readPool = readPool;
-
-export function __setPoolReaderForTests(fn: typeof readPool): void {
-  poolReader = fn;
-}
 
 function assertActualContext(context: BetaContext): void {
   assertOnchainContext(context);
@@ -87,7 +84,7 @@ class HydrexActualSpotAdapter implements SpotAdapter {
     assertActualContext(input.context);
     const chainId = input.context.chainId;
     const pool = manifestEntry(chainId, "HydrexPoolAAPL");
-    const state = await poolReader(chainId, pool);
+    const state = await readPoolOn(chainId, pool);
     const tokenIn = parseAssetKey(input.input.asset).address;
     const tokenOut = parseAssetKey(input.outputAsset).address;
     const { amountOut, priceImpactBps } = quoteExactIn(state, tokenIn, input.input.raw);
@@ -233,7 +230,7 @@ class HydrexActualStrategyAdapter implements StrategyAdapter {
     const expiresAt = new Date(await onchainExpiryMs(policy.onchain.quoteTtlSeconds, chainId));
     const slippage = BigInt(policy.trading.maxSlippageBps);
     if (input.action === "enter") {
-      const state = await poolReader(chainId, pool);
+      const state = await readPoolOn(chainId, pool);
       const { tickLower, tickUpper } = fullRangeTicks(state.tickSpacing);
       const sdkPoolInstance = sdkPool(chainId, state);
       const amountFor = (token: Address): bigint =>
@@ -284,7 +281,7 @@ class HydrexActualStrategyAdapter implements StrategyAdapter {
       const tokenId = await positionTokenId(input);
       const positionManager = manifestEntry(chainId, "HydrexPositionManager");
       const liquidity = await positionLiquidity(chainId, positionManager, tokenId);
-      const state = await poolReader(chainId, pool);
+      const state = await readPoolOn(chainId, pool);
       const { tickLower, tickUpper } = fullRangeTicks(state.tickSpacing);
       const sdkPoolInstance = sdkPool(chainId, state);
       const position = new Position({ pool: sdkPoolInstance, liquidity: liquidity.toString(), tickLower, tickUpper });
@@ -328,7 +325,7 @@ class HydrexActualStrategyAdapter implements StrategyAdapter {
     const slippage = BigInt(policy.trading.maxSlippageBps);
     let calls: PreparedCall[];
     if (request.action === "enter") {
-      const state = await poolReader(chainId, pool);
+      const state = await readPoolOn(chainId, pool);
       const { tickLower, tickUpper } = fullRangeTicks(state.tickSpacing);
       const sdkPoolInstance = sdkPool(chainId, state);
       const amountFor = (token: Address): bigint =>
@@ -346,7 +343,9 @@ class HydrexActualStrategyAdapter implements StrategyAdapter {
       const amount0Min = (amount0Desired * (10_000n - slippage)) / 10_000n;
       const amount1Min = (amount1Desired * (10_000n - slippage)) / 10_000n;
       calls = [
-        ...request.inputs.map((a) => ({
+        // Approvals are exact and ordered like the request inputs; the amount is
+        // the desired amount the mint will pull (bounded by maximumInputs).
+        ...quote.maximumInputs.map((a) => ({
           to: parseAssetKey(a.asset).address as Address,
           data: encodeFunctionData({
             abi: settlementTokenAbi,
@@ -396,7 +395,7 @@ class HydrexActualStrategyAdapter implements StrategyAdapter {
       const tokenId = await positionTokenId(request);
       const liquidity = await positionLiquidity(chainId, positionManager, tokenId);
       const minimumOf = (asset: string): bigint => quote.minimumOutputs.find((a) => a.asset === asset)?.raw ?? 0n;
-      const state = await poolReader(chainId, pool);
+      const state = await readPoolOn(chainId, pool);
       const amount0Min = minimumOf(assetKey("basesepolia", chainId, state.token0));
       const amount1Min = minimumOf(assetKey("basesepolia", chainId, state.token1));
       calls = [

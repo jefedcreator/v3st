@@ -4,10 +4,13 @@ import { assertOnchainContext } from "@/backend/integrations/onchain-policy";
 import { hydrexPoolAbi, o1RouterAbi, stockDistributionAbi, hookFeeAbi, hydropumpLockerAbi, settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 import type { AssetAmount, ExecutionPlan, ExecutionQuote, PreparedCall, StrategyPlan, StrategyQuote } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
-import { manifestFor } from "@/backend/services/onchain/manifests";
+import { manifestFor, type NetworkManifest } from "@/backend/services/onchain/manifests";
 import { chainNowMs } from "@/backend/services/onchain/testnet";
 import { db } from "@/server/db";
+import { fromDbRaw } from "@/utils/asset-units";
 import { canonicalJson, sha256Hex } from "@/utils";
+
+import { assertHydrexCall } from "./hydrex-policy";
 
 export class ExecutionPlanRejected extends Error {
   constructor(message: string) {
@@ -35,10 +38,14 @@ export function planFingerprint(plan: ExecutionPlan | StrategyPlan): string {
 
 // Approved call targets: manifest contracts, plan asset addresses, and pool
 // addresses recorded in stock/strategy provenance (pools are deployed per test).
-async function allowedTargets(plan: ExecutionPlan | StrategyPlan): Promise<Set<string>> {
+// Non-local contexts additionally allow the manifest's external provider contracts.
+async function allowedTargets(plan: ExecutionPlan | StrategyPlan, external: NetworkManifest["external"]): Promise<Set<string>> {
   const manifest = manifestFor(plan.context.chainId);
   const targets = new Set<string>();
   for (const entry of Object.values(manifest.contracts)) {
+    targets.add(entry.address.toLowerCase());
+  }
+  for (const entry of Object.values(external)) {
     targets.add(entry.address.toLowerCase());
   }
   const assets: string[] = [];
@@ -68,17 +75,22 @@ async function allowedTargets(plan: ExecutionPlan | StrategyPlan): Promise<Set<s
   return targets;
 }
 
-function assertCall(
+async function assertCall(
   call: PreparedCall,
   plan: ExecutionPlan | StrategyPlan,
   targets: Set<string>,
-): void {
+  external: NetworkManifest["external"],
+  ownedTokenId: bigint | null,
+): Promise<void> {
   if (call.value !== 0n) {
     throw new ExecutionPlanRejected("Native value transfers are not allowed in beta execution plans");
   }
   if (!targets.has(call.to.toLowerCase())) {
     throw new ExecutionPlanRejected(`Call target ${call.to} is not an approved contract or asset`);
   }
+  // Provider-owned contracts get their own call-level rules, checked against the
+  // accepted quote/plan before the replica ABI rules run.
+  if (await assertHydrexCall(call, plan, external, ownedTokenId)) return;
   let decoded: { functionName: string; args?: readonly unknown[] } | null = null;
   const abis = [settlementTokenAbi, stockTokenAbi] as const;
   for (const abi of abis) {
@@ -187,16 +199,28 @@ export async function assertExecutionPlan(plan: ExecutionPlan | StrategyPlan): P
   if (plan.calls.length === 0 || plan.calls.length > 8) {
     throw new ExecutionPlanRejected("Plan must contain between 1 and 8 calls");
   }
-  const targets = await allowedTargets(plan);
-  for (const call of plan.calls) {
-    assertCall(call, plan, targets);
-  }
+  const external =
+    plan.context.integrationKind === "local_testnet_replica" ? {} : manifestFor(plan.context.chainId).external;
+  const targets = await allowedTargets(plan, external);
   const op = await db.onchainOperation.findUnique({ where: { id: plan.operationId } });
+  let ownedTokenId: bigint | null = null;
+  if (op?.kind === "strategy") {
+    const snapshot = op.expected as { quote: { request: { strategyId: string; action: string; positionId?: string | null; inputs: { raw: { __bigint: string } }[] } } };
+    if (snapshot.quote.request.positionId) {
+      const position = await db.strategyPosition.findUnique({ where: { id: snapshot.quote.request.positionId } });
+      if (position?.externalTokenId !== null && position?.externalTokenId !== undefined) {
+        ownedTokenId = fromDbRaw(position.externalTokenId);
+      }
+    }
+  }
+  for (const call of plan.calls) {
+    await assertCall(call, plan, targets, external, ownedTokenId);
+  }
   if (op?.kind === "strategy") {
     const snapshot = op.expected as { quote: { request: { strategyId: string; action: string; inputs: { raw: { __bigint: string } }[] } } };
     const strategy = await db.strategy.findUniqueOrThrow({ where: { id: snapshot.quote.request.strategyId } });
-    const source = strategy.provenance as { pool?: string; distribution?: string; hook?: string; locker?: string; launchId?: string; lockId?: string };
-    const target = source.pool ?? source.distribution ?? source.hook ?? source.locker;
+    const source = strategy.provenance as { kind?: string; pool?: string; positionManager?: string; distribution?: string; hook?: string; locker?: string; launchId?: string; lockId?: string };
+    const target = source.kind === "hydrex_nft" ? source.positionManager : source.pool ?? source.distribution ?? source.hook ?? source.locker;
     for (const call of plan.calls) {
       if (call.data.startsWith("0x095ea7b3")) {
         const approved = decodeFunctionData({ abi: settlementTokenAbi, data: call.data });

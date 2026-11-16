@@ -24,6 +24,17 @@ export type PoolState = {
   tickSpacing: number;
 };
 
+let poolReaderOverride: typeof readPool | null = null;
+
+export function __setPoolReaderForTests(fn: typeof readPool | null): void {
+  poolReaderOverride = fn;
+}
+
+export async function readPoolOn(chainId: number, pool: Address): Promise<PoolState> {
+  if (poolReaderOverride) return poolReaderOverride(chainId, pool);
+  return readPool(chainId, pool);
+}
+
 export async function readPool(chainId: number, pool: Address): Promise<PoolState> {
   const client = publicClientOn(chainId);
   const [globalState, liquidity, tickSpacing, token0, token1] = await Promise.all([
