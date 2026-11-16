@@ -31,7 +31,7 @@ The environment schema enforces `APP_STAGE=beta` and keeps every integration san
 yarn dev
 ```
 
-The web page remains the T3 starter UI; this release is backend/API only. Do not use `db:push` or migration commands against a live or shared database.
+`/` is now the V3ST marketing page: an anonymous, static Server Component landing page with a local illustrative demo (no API, database, wallet, session or RPC access from `/`), the approved forest-green/light identity, locally served provider marks (`public/brands/`, provenance in `public/brands/sources.json`), and Katana-matched motion that can be paused with the **Pause animations** control and always respects `prefers-reduced-motion`. The page is beta and not indexed (`robots: index:false, follow:false`); the demo's **Reset demo** returns to the Add naira chapter and nothing is persisted. The financial APIs are unchanged. Do not use `db:push` or migration commands against a live or shared database.
 
 ## Backend commands
 
@@ -45,7 +45,18 @@ The web page remains the T3 starter UI; this release is backend/API only. Do not
 
 ## Verification and handoff
 
-Follow `CLAUDE.md`: write the relevant tests with each task, review and commit focused changes, then run the complete gate once after the whole implementation: `bash scripts/setup-cloud.sh`, `yarn prisma validate`, `yarn prisma generate`, `yarn test:contracts`, `yarn test`, `yarn lint`, `yarn typecheck`, `yarn build`. The final plan gate lists the complete acceptance commands and beta-containment cases.
+Follow `CLAUDE.md`: write the relevant tests with each task, review and commit focused changes, then run the complete gate once after the whole implementation: `bash scripts/setup-cloud.sh`, `yarn prisma validate`, `yarn prisma generate`, `yarn test:contracts`, `yarn test`, `yarn lint`, `yarn typecheck`, `yarn build`, `yarn test:e2e`. The final plan gate lists the complete acceptance commands and beta-containment cases.
+
+### Landing page preview and E2E
+
+The landing page is this repository's frontend assignment (the earlier onchain release was backend/API only). Preview it with `yarn dev` (or `yarn build && yarn start`) and open `/` — it works without the database. The production-browser suite runs against the built app on loopback only:
+
+```bash
+yarn build
+yarn test:e2e   # playwright test; starts yarn start on 127.0.0.1:3107 itself
+```
+
+`playwright.config.ts` supplies the beta/test-only environment (including a disposable `DATABASE_URL` pointing at an unused loopback port), so the landing E2E needs neither PostgreSQL nor Anvil, and the specs reject any `/api/*`, `/v1/*`, `/webhooks/*`, RPC, WebSocket or external request from the page.
 
 The portable handoff includes source, configuration, Prisma schema, `yarn.lock`, the requirements, repository instructions, and the plan. Prisma output, `node_modules`, build caches, local credentials and `.env` files are excluded. `package-lock.json` is local-only because this project uses Yarn.
 

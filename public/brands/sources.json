@@ -1,0 +1,169 @@
+{
+  "$schemaNote": "Provenance for every locally served mark in public/brands/. Bytes were downloaded from the official locator on 2026-11-15 and inspected (content type, dimensions, SVG script/event/external-reference scan). No runtime hotlinking; sourceUrl is provenance only.",
+  "assets": [
+    {
+      "file": "yellow-card.png",
+      "brand": "Yellow Card",
+      "sourcePage": "https://yellowcard.io/press/",
+      "sourceUrl": "https://framerusercontent.com/images/rGNd8ylttOXM8MzWkNs2c3WiojY.png",
+      "fetched": "2026-11-15",
+      "contentType": "image/png",
+      "dimensions": "64x64",
+      "variant": "official press icon (PNG)",
+      "inspection": "PNG, no embedded scripts; geometry and colors preserved byte-for-byte"
+    },
+    {
+      "file": "paycrest.png",
+      "brand": "Paycrest",
+      "sourcePage": "https://www.paycrest.io/",
+      "sourceUrl": "https://framerusercontent.com/images/dG5eMeoxIGQdgKqlAfRE6IxxDg.png",
+      "fetched": "2026-11-15",
+      "contentType": "image/png",
+      "dimensions": "52x56",
+      "variant": "official site icon (PNG)",
+      "inspection": "PNG, no embedded scripts; geometry and colors preserved byte-for-byte"
+    },
+    {
+      "file": "privy.png",
+      "brand": "Privy",
+      "sourcePage": "https://www.privy.io/brand-guidelines",
+      "sourceUrl": "https://framerusercontent.com/images/oPqxoNxeHrQ9qgbjTUGuANdXdQ.png",
+      "fetched": "2026-11-15",
+      "contentType": "image/png",
+      "dimensions": "64x64",
+      "variant": "official brand icon fallback (PNG)",
+      "inspection": "PNG, no embedded scripts; geometry and colors preserved byte-for-byte"
+    },
+    {
+      "file": "o1-exchange.svg",
+      "brand": "o1 Exchange",
+      "sourcePage": "https://o1.exchange/brand",
+      "sourceUrl": "https://o1.exchange/brand/o1-horizontal-color.svg",
+      "fetched": "2026-11-15",
+      "contentType": "image/svg+xml",
+      "viewBox": "0 0 2400 1000",
+      "variant": "official horizontal color wordmark",
+      "inspection": "SVG scanned: no <script>, no event handlers, no external references (only the SVG namespace); preserved byte-for-byte"
+    },
+    {
+      "file": "bankr.svg",
+      "brand": "Bankr",
+      "sourcePage": "https://bankr.bot/",
+      "sourceUrl": "https://bankr.bot/favicon.svg",
+      "fetched": "2026-11-15",
+      "contentType": "image/svg+xml",
+      "viewBox": "0 0 150 150",
+      "variant": "official site mark (SVG)",
+      "inspection": "SVG scanned: no <script>, no event handlers, no external references; preserved byte-for-byte"
+    },
+    {
+      "file": "bankr-icon.png",
+      "brand": "Bankr",
+      "sourcePage": "https://bankr.bot/",
+      "sourceUrl": "https://bankr.bot/pwa-icon-512.png",
+      "fetched": "2026-11-15",
+      "contentType": "image/png",
+      "dimensions": "512x512",
+      "variant": "official PWA icon (PNG)",
+      "inspection": "PNG, no embedded scripts; preserved byte-for-byte"
+    },
+    {
+      "file": "hydrex.png",
+      "brand": "Hydrex / Hydropump",
+      "sourcePage": "https://www.hydrex.fi/",
+      "sourceUrl": "https://www.hydrex.fi/hydrexIcon.png",
+      "fetched": "2026-11-15",
+      "contentType": "image/png",
+      "dimensions": "200x200",
+      "variant": "official site icon (PNG); one provider group, no separate Hydropump mark",
+      "inspection": "PNG, no embedded scripts; preserved byte-for-byte"
+    },
+    {
+      "file": "stonks-exchange.png",
+      "brand": "Stonks Exchange",
+      "sourcePage": "https://www.thestonks.exchange/",
+      "sourceUrl": "https://www.thestonks.exchange/logo.png",
+      "fetched": "2026-11-15",
+      "contentType": "image/png",
+      "dimensions": "128x128",
+      "variant": "official header logo (PNG)",
+      "inspection": "PNG, no embedded scripts; preserved byte-for-byte"
+    },
+    {
+      "file": "basestonk.png",
+      "brand": "BaseStonk",
+      "sourcePage": "https://basestonk.io/",
+      "sourceUrl": "https://basestonk.io/app-icon.png",
+      "fetched": "2026-11-15",
+      "contentType": "image/png",
+      "dimensions": "256x256",
+      "variant": "official app icon (PNG)",
+      "inspection": "PNG, no embedded scripts; preserved byte-for-byte"
+    },
+    {
+      "file": "feel-cash.webp",
+      "brand": "Feel.cash",
+      "sourcePage": "https://feel.cash/",
+      "sourceUrl": "https://feel.cash/assets/feel-mark-DaFS98sS.webp",
+      "fetched": "2026-11-15",
+      "contentType": "image/webp",
+      "variant": "official site mark resolved from the live homepage asset manifest (planning had no locator)",
+      "inspection": "WebP image data; preserved byte-for-byte"
+    },
+    {
+      "file": "base-square.svg",
+      "brand": "Base",
+      "sourcePage": "https://brand.base.org/",
+      "sourceUrl": "https://brand.base.org/base-brand.zip (1_Base Brand Assets/The Square/Base_square_blue.svg)",
+      "fetched": "2026-11-15",
+      "contentType": "image/svg+xml",
+      "viewBox": "0 0 1280 1280",
+      "variant": "official blue Square mark for light surfaces",
+      "inspection": "SVG scanned: no <script>, no event handlers, no external references; preserved byte-for-byte"
+    },
+    {
+      "file": "base-lockup.svg",
+      "brand": "Base",
+      "sourcePage": "https://brand.base.org/",
+      "sourceUrl": "https://brand.base.org/base-brand.zip (1_Base Brand Assets/Logotype/Base_lockup_black.svg)",
+      "fetched": "2026-11-15",
+      "contentType": "image/svg+xml",
+      "viewBox": "0 0 1280 323.84",
+      "variant": "official black horizontal lockup for light surfaces",
+      "inspection": "SVG scanned: no <script>, no event handlers, no external references; preserved byte-for-byte"
+    },
+    {
+      "file": "solana-mark.svg",
+      "brand": "Solana",
+      "sourcePage": "https://solana.com/branding",
+      "sourceUrl": "https://solana.com/src/img/branding/solanaLogoMark.svg (fetched from the official solana.com source repository solana-foundation/solana-com at the identical path after the live URL rate-limited the sandbox)",
+      "fetched": "2026-11-15",
+      "contentType": "image/svg+xml",
+      "viewBox": "0 0 101 88",
+      "variant": "official brand mark (SVG)",
+      "inspection": "SVG scanned: no <script>, no event handlers, no external references; preserved byte-for-byte"
+    },
+    {
+      "file": "usdc-token.svg",
+      "brand": "USDC (Circle)",
+      "sourcePage": "https://www.circle.com/pressroom#brandkit",
+      "sourceUrl": "https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/Pressroom/brandkit/logo-downloads/usdc.zip (Token Logo/USDC Token.svg)",
+      "fetched": "2026-11-15",
+      "contentType": "image/svg+xml",
+      "viewBox": "0 0 96 96",
+      "variant": "official USDC token logo from the Circle brand kit",
+      "inspection": "SVG scanned: no <script>, no event handlers, no external references; preserved byte-for-byte"
+    },
+    {
+      "file": "usdc-lockup.svg",
+      "brand": "USDC (Circle)",
+      "sourcePage": "https://www.circle.com/pressroom#brandkit",
+      "sourceUrl": "https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/Pressroom/brandkit/logo-downloads/usdc.zip (Lockup/USDC Lockup.svg)",
+      "fetched": "2026-11-15",
+      "contentType": "image/svg+xml",
+      "viewBox": "0 0 1068 309",
+      "variant": "official USDC wordmark lockup from the Circle brand kit",
+      "inspection": "SVG scanned: no <script>, no event handlers, no external references; preserved byte-for-byte"
+    }
+  ]
+}
