@@ -1,32 +1,35 @@
 import { randomUUID } from "node:crypto";
 
 import { hydrexSwapRouterABI } from "@hydrexfi/hydrex-sdk";
-import { encodeFunctionData, zeroAddress, type Abi, type Address, type Hex } from "viem";
+import { zeroAddress, type Abi, type Address, type Hex } from "viem";
 
 import { assertBetaRuntime } from "../src/backend/integrations/beta-policy";
 import { BASE_SEPOLIA_CHAIN_ID, parseRpcEndpoint } from "../src/backend/integrations/onchain-policy";
 import { settlementTokenAbi } from "../src/backend/services/onchain/abis";
 import { chainObject, chainTarget, publicClientOn, relayerOn, walletClientOn } from "../src/backend/services/onchain/chains";
-import { manifestFor, verifyManifest } from "../src/backend/services/onchain/manifests";
-import { HYDREX_ACTUAL_VERSION } from "../src/backend/services/onchain/providers/hydrex/actual";
+import { ledgerChainFor, manifestFor, verifyManifest } from "../src/backend/services/onchain/manifests";
 import { assetKey } from "../src/backend/services/onchain/types";
 import { authorizationService } from "../src/backend/services/authorizations";
 import { earningsService } from "../src/backend/services/earnings";
 import { executionService } from "../src/backend/services/execution";
 import { investmentService } from "../src/backend/services/investments";
 import { reconciliationService, type CheckResult } from "../src/backend/services/reconciliation";
+import { rewardService } from "../src/backend/services/rewards";
 import { stockService } from "../src/backend/services/stocks";
 import { strategyService } from "../src/backend/services/strategies";
 import { executionAccounts } from "../src/backend/services/wallets/execution-accounts";
 import { walletService } from "../src/backend/services/wallets";
-import { db } from "../src/server/db";
+import { acct } from "../src/backend/services/ledger/accounts";
+import { ledgerService } from "../src/backend/services/ledger";
+import { openingBalance } from "../src/backend/services/ledger/postings";
+import { db, withTx } from "../src/server/db";
 
 // Operator-only live journey on Base Sepolia. Never runs in CI: it requires
-// SEPOLLIA_LIVE=1, a configured Base Sepolia RPC and a funded testnet relayer key.
+// SEPOLIA_LIVE=1, a configured Base Sepolia RPC and a funded testnet relayer key.
 async function main(): Promise<void> {
   assertBetaRuntime(process.env);
   if (process.env.SEPOLIA_LIVE !== "1") {
-    throw new Error("Refusing to run the live journey: set SEPOLLIA_LIVE=1 (operator only, funded testnet relayer required)");
+    throw new Error("Refusing to run the live journey: set SEPOLIA_LIVE=1 (operator only, funded testnet relayer required)");
   }
   const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL;
   if (!rpcUrl || !process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY) {
@@ -74,8 +77,14 @@ async function main(): Promise<void> {
     return hash;
   }
 
-  // 1. Mint test USDC to the execution account (relayer is the token owner).
-  await send("mint test USDC", usdc, settlementTokenAbi, "mint", [ref.accountAddress, 100_000_000n]);
+  // 1. Mint test USDC to the execution account (relayer is the token owner) and book
+  // the same amount as the smoke user's Base Sepolia cash, so the ledger and the
+  // chain agree before the first trade (reconciliation checks this at the end).
+  const fundedRaw = 100_000_000n;
+  await send("mint test USDC", usdc, settlementTokenAbi, "mint", [ref.accountAddress, fundedRaw]);
+  await withTx((tx) =>
+    ledgerService.post(tx, openingBalance({ account: acct.userCash(user.id, ledgerChainFor(chainId)), amount: fundedRaw })),
+  );
 
   const settlementAsset = assetKey("basesepolia", chainId, usdc);
   const stockAsset = assetKey("basesepolia", chainId, stockToken);
@@ -120,7 +129,6 @@ async function main(): Promise<void> {
   console.log(`enter tx: ${(await db.onchainOperation.findUniqueOrThrow({ where: { id: enter.operation_id } })).txHash} tokenId=${position.externalTokenId?.toString() ?? "?"}`);
 
   // 4. Three round-trip swaps from the relayer to generate pool fees.
-  const pool = manifest.external.HydrexPoolAAPL!.address;
   for (let i = 0; i < 3; i += 1) {
     await send(`swap ${i} USDC->tAAPL approve`, usdc, settlementTokenAbi, "approve", [router, 1_000_000n]);
     await send(`swap ${i} USDC->tAAPL`, router, hydrexSwapRouterABI, "exactInputSingle", [{
@@ -134,7 +142,6 @@ async function main(): Promise<void> {
       deadline: BigInt(Math.floor(Date.now() / 1000) + 600), amountIn: stockBalance, amountOutMinimum: 0n, limitSqrtPrice: 0n,
     }]);
   }
-  void pool;
 
   // 5. Strategy claim (collects the accrued fees to the execution account).
   const claimQuote = await strategyService.quote(user.id, { positionId: position.id, action: "claim" });
@@ -144,10 +151,38 @@ async function main(): Promise<void> {
   const claimOp = await db.onchainOperation.findUniqueOrThrow({ where: { id: claim.operation_id } });
   console.log(`claim tx: ${claimOp.txHash}`);
 
-  // 6. Reward conversion + earnings DTO.
-  const receipts = await db.rewardReceipt.findMany({ where: { networkId: (await db.onchainNetwork.findUniqueOrThrow({ where: { deploymentId: manifest.deploymentId } })).id } });
+  // 6. Reward conversion + earnings DTO. Stock-asset fee receipts are sold to test
+  // USDC through the normal consent-bound conversion path; settlement receipts are
+  // recognized directly. Both end as recognized earnings.
+  const network = await db.onchainNetwork.findUniqueOrThrow({ where: { deploymentId: manifest.deploymentId } });
+  const receipts = await db.rewardReceipt.findMany({ where: { networkId: network.id, txHash: claimOp.txHash ?? "" } });
   const feeTotal = receipts.reduce((sum, r) => sum + BigInt(r.amountRaw.toString()), 0n);
   console.log(`reward receipts: ${receipts.length} totalRaw=${feeTotal}`);
+  const conversionAuth = await authorizationService.create(
+    user.id,
+    {
+      kind: "standing",
+      stock_ids: [stock.id],
+      strategy_ids: [],
+      actions: ["reward_conversion"],
+      max_action_ngn: 1_000_000_000_000_000_000n,
+      max_total_ngn: 1_000_000_000_000_000_000n,
+      max_fee_bps: 10_000,
+      max_slippage_bps: 100,
+      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      policy_version: "smoke",
+      disclosure_version: "1",
+    },
+    randomUUID(),
+  );
+  for (const receipt of receipts) {
+    if (receipt.asset === stockAsset) {
+      const conversionOpId = await rewardService.convert(receipt.id, conversionAuth.dto.id);
+      await drive(`conversion ${receipt.id}`, () => executionService.progress(conversionOpId));
+      console.log(`conversion tx: ${(await db.onchainOperation.findUniqueOrThrow({ where: { id: conversionOpId } })).txHash}`);
+    }
+    await earningsService.recognize(receipt.id);
+  }
   const earnings = await earningsService.list(user.id, { page: 1, size: 20 });
   console.log(`earnings DTO: ${JSON.stringify(earnings.data.slice(0, 3))}`);
 

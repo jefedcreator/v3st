@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { computePoolAddress, hydrexPositionManagerABI, POOL_DEPLOYER_ADDRESSES, NONFUNGIBLE_POSITION_MANAGER_ADDRESSES, SWAP_ROUTER_ADDRESSES, Token } from "@hydrexfi/hydrex-sdk";
-import { encodeFunctionData, type Abi, type Address, type Hex } from "viem";
+import { zeroAddress, type Abi, type Address, type Hex } from "viem";
 
 import { assertBetaRuntime } from "../src/backend/integrations/beta-policy";
 import { BASE_SEPOLIA_CHAIN_ID, parseRpcEndpoint } from "../src/backend/integrations/onchain-policy";
@@ -68,32 +68,37 @@ async function main(): Promise<void> {
   }
 
   const settlement = await deploy("TestSettlementToken", "TestSettlementToken", ["V3ST Test USDC", "tUSDC", 6]);
-  // Equal-value stock amount for 1,000,000 test USDC at the requested price; the stock
-  // token has 18 decimals, USDC 6.
+  // Equal-value stock amount for 1,000,000 test USDC at the requested price. The
+  // existing TestStockToken fixture has a fixed 18 decimals (USDC has 6), so the stock
+  // amount is usdc * 10^18 / priceMicroUsd. The constructor mints it to the relayer.
+  const STOCK_DECIMALS = 18n;
   const usdcAmount = 1_000_000n * 10n ** 6n;
-  const stockAmount = (usdcAmount * 10n ** 12n) / priceMicroUsd;
+  const stockAmount = (usdcAmount * 10n ** STOCK_DECIMALS) / priceMicroUsd;
   const stock = await deploy("StockTokenAAPL", "TestStockToken", ["Apple Inc. (test token)", "tAAPL", stockAmount]);
 
   async function send(label: string, to: Address, abi: Abi, functionName: string, args: readonly unknown[]): Promise<Hex> {
-    const data = encodeFunctionData({ abi, functionName, args });
     await publicClient.simulateContract({ account: relayer.address, chain: chainObject(CHAIN_ID), address: to, abi, functionName, args });
     const hash = await walletClient.writeContract({ account: relayer, chain: chainObject(CHAIN_ID), address: to, abi, functionName, args });
-    await publicClient.waitForTransactionReceipt({ hash, confirmations: chainTarget(CHAIN_ID).confirmations });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: chainTarget(CHAIN_ID).confirmations });
+    if (receipt.status !== "success") throw new Error(`${label} reverted: ${hash}`);
     console.log(`  ${label}: ${hash}`);
     return hash;
   }
 
   await send("mint test USDC", settlement, settlementTokenAbi, "mint", [relayer.address, usdcAmount]);
-  await send("mint tAAPL", stock, stockTokenAbi, "mint", [relayer.address, stockAmount]);
 
   const usdcToken = new Token(CHAIN_ID, settlement, 6, "tUSDC", "V3ST Test USDC");
-  const stockToken = new Token(CHAIN_ID, stock, 18, "tAAPL", "Apple Inc. (test token)");
+  const stockToken = new Token(CHAIN_ID, stock, Number(STOCK_DECIMALS), "tAAPL", "Apple Inc. (test token)");
   const [token0, token1] = usdcToken.sortsBefore(stockToken) ? [usdcToken, stockToken] : [stockToken, usdcToken];
-  // price-micro-usd is USD per share; the pool price is token0 per token1 in raw units.
-  const priceNum = token0.equals(usdcToken) ? priceMicroUsd * 10n ** 12n : 10n ** 18n;
-  const priceDen = token0.equals(usdcToken) ? 10n ** 18n : priceMicroUsd;
+  // Algebra prices are token1 per token0 in raw units: sqrtPriceX96 = sqrt(token1/token0) * 2^96.
+  // price-micro-usd is raw USDC per one whole share (10^18 raw stock).
+  const usdcIsToken0 = token0.equals(usdcToken);
+  const priceNum = usdcIsToken0 ? 10n ** STOCK_DECIMALS : priceMicroUsd; // raw token1
+  const priceDen = usdcIsToken0 ? priceMicroUsd : 10n ** STOCK_DECIMALS; // per raw token0
   const sqrtPriceX96 = sqrtPriceX96For(priceNum, priceDen);
 
+  // V3ST creates a base (non-custom) Algebra pool: the custom-deployer argument is the
+  // zero address, and its address follows the SDK's computePoolAddress.
   const poolAddress = computePoolAddress({
     tokenA: usdcToken,
     tokenB: stockToken,
@@ -108,19 +113,19 @@ async function main(): Promise<void> {
     pm,
     hydrexPositionManagerABI,
     "createAndInitializePoolIfNecessary",
-    [token0.address, token1.address, hydrex.HydrexPoolDeployer, sqrtPriceX96],
+    [token0.address, token1.address, zeroAddress, sqrtPriceX96],
   );
 
   const code = await rpcRequest<Hex>(endpoint.url, CHAIN_ID, "eth_getCode", [poolAddress, "latest"]);
   if (!code || code === "0x") throw new Error(`Pool ${poolAddress} has no code after initialization`);
   const spacing = await publicClient.readContract({ address: poolAddress, abi: algebraPoolAbi, functionName: "tickSpacing" });
   const { tickLower, tickUpper } = fullRangeTicks(spacing);
-  const amount0Desired = token0.equals(usdcToken) ? usdcAmount : stockAmount;
-  const amount1Desired = token0.equals(usdcToken) ? stockAmount : usdcAmount;
+  const amount0Desired = usdcIsToken0 ? usdcAmount : stockAmount;
+  const amount1Desired = usdcIsToken0 ? stockAmount : usdcAmount;
   await send("seed full-range liquidity", pm, hydrexPositionManagerABI, "mint", [{
     token0: token0.address,
     token1: token1.address,
-    deployer: hydrex.HydrexPoolDeployer,
+    deployer: zeroAddress,
     tickLower,
     tickUpper,
     amount0Desired,
