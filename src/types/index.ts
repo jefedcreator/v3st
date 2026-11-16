@@ -59,7 +59,8 @@ export type ErrorCode =
   | "STRATEGY_UNAVAILABLE"
   | "REWARD_NOT_CONFIRMED"
   | "CONVERSION_PENDING"
-  | "QUOTE_CHANGED";
+  | "QUOTE_CHANGED"
+  | "PRICE_IMPACT_EXCEEDED";
 
 export interface ApiResponse<T> {
   status: number;

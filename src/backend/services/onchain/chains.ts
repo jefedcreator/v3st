@@ -74,7 +74,7 @@ async function ensureChainVerified(url: string, chainId: number): Promise<void> 
   verifiedChains.add(chainId);
 }
 
-function chainObject(chainId: number) {
+export function chainObject(chainId: number) {
   return {
     id: chainId,
     name: chainId === TESTNET_CHAIN_ID ? "v3st-local-anvil" : "base-sepolia",
@@ -86,15 +86,13 @@ function chainObject(chainId: number) {
 const publicClients = new Map<number, PublicClient>();
 
 export function publicClientOn(chainId: number): PublicClient {
-  if (chainId === TESTNET_CHAIN_ID) return publicClientFor() as PublicClient;
+  if (chainId === TESTNET_CHAIN_ID) return publicClientFor();
   const cached = publicClients.get(chainId);
   if (cached) return cached;
   const target = chainTarget(chainId);
   const client = createPublicClient({
     pollingInterval: 250,
     cacheTime: 0,
-    // External targets fail closed: no automatic retries against a non-loopback RPC.
-    retryCount: 0,
     chain: chainObject(chainId),
     transport: custom(
       {
@@ -114,7 +112,7 @@ export function publicClientOn(chainId: number): PublicClient {
 const walletClients = new Map<number, WalletClient>();
 
 export function walletClientOn(chainId: number): WalletClient {
-  if (chainId === TESTNET_CHAIN_ID) return walletClientFor(relayerOn(chainId)) as WalletClient;
+  if (chainId === TESTNET_CHAIN_ID) return walletClientFor(relayerOn(chainId));
   const cached = walletClients.get(chainId);
   if (cached) return cached;
   const target = chainTarget(chainId);
@@ -122,7 +120,6 @@ export function walletClientOn(chainId: number): WalletClient {
     account: relayerOn(chainId),
     pollingInterval: 250,
     cacheTime: 0,
-    retryCount: 0,
     chain: chainObject(chainId),
     transport: custom(
       {

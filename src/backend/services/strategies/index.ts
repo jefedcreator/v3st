@@ -624,7 +624,7 @@ class StrategyService {
 
       let preparatoryOperationId: string | null = null;
       if (preparatory && action === "enter") {
-        const prepChainId = (preparatory as ExecutionQuote).context?.chainId ?? 31337;
+        const prepChainId = preparatory.context?.chainId ?? 31337;
         const settlement =
           prepChainId === 31337
             ? settlementAssetKey(readManifest())
@@ -922,7 +922,7 @@ class StrategyService {
       };
       if (action === "enter") {
         const fill = await hydrexFill("enter");
-        const shares = fill && fill.kind === "enter" ? fill.liquidity : await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Deposited");
+        const shares = fill?.kind === "enter" ? fill.liquidity : await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Deposited");
         const settleSpent = spentOf(settlement);
         const stockSpent = stockAsset ? spentOf(stockAsset) : 0n;
         const entered = strategyEntered({
@@ -963,7 +963,7 @@ class StrategyService {
             principalUsdc: toDbRaw(principal),
             valueUsdc: toDbRaw(principal),
           };
-          if (enterFill && enterFill.kind === "enter") positionData.externalTokenId = toDbRaw(enterFill.tokenId);
+          if (enterFill?.kind === "enter") positionData.externalTokenId = toDbRaw(enterFill.tokenId);
           await tx.strategyPosition.update({
             where: { id: position.id },
             data: positionData,
@@ -972,7 +972,7 @@ class StrategyService {
         }
       } else if (action === "exit") {
         const fill = await hydrexFill("exit");
-        const shares = fill && fill.kind === "exit" ? fill.principal0 + fill.principal1 : await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Withdrawn");
+        const shares = fill?.kind === "exit" ? fill.principal0 + fill.principal1 : await this.poolSharesFromLogs(op.txHash as Hex | null, prov?.pool, account, "Withdrawn");
         const rewards = await rewardService.amountsForOperation(op.id, tx);
         // Exit transfers contain principal plus any separately logged fees. The
         // fee receipts credit the latter once; the principal posting excludes it.
@@ -998,7 +998,7 @@ class StrategyService {
             where: { id: position.id },
             data: {
               state: "exited",
-              receiptRaw: toDbRaw(exitFill && exitFill.kind === "exit" ? 0n : remaining > shares ? remaining - shares : 0n),
+              receiptRaw: toDbRaw(exitFill?.kind === "exit" ? 0n : remaining > shares ? remaining - shares : 0n),
               valueUsdc: value === null ? null : toDbRaw(value),
             },
           });

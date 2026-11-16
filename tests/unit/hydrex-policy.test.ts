@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { hydrexPositionManagerABI, hydrexSwapRouterABI } from "@hydrexfi/hydrex-sdk";
-import { decodeFunctionData, encodeAbiParameters, encodeFunctionData, erc20Abi, zeroAddress, type Address, type Hex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, encodeFunctionData, erc20Abi, zeroAddress, type Abi, type Address, type Hex } from "viem";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { __setRpcTransportForTests } from "@/backend/services/onchain/chains";
@@ -250,10 +250,10 @@ async function swapPlanWith(mutate?: (a: Record<string, unknown>) => Record<stri
   const plan = await hydrexActualSpot.prepare(quote, spotOpId);
   if (mutate) {
     const decoded = decodeFunctionData({ abi: hydrexSwapRouterABI, data: plan.calls[1]!.data });
-    const params = mutate(decoded.args![0] as Record<string, unknown>);
+    const params = mutate(decoded.args[0] as Record<string, unknown>);
     plan.calls[1] = {
       to: plan.calls[1]!.to,
-      data: encodeFunctionData({ abi: hydrexSwapRouterABI, functionName: "exactInputSingle", args: [params] }),
+      data: encodeFunctionData({ abi: hydrexSwapRouterABI, functionName: "exactInputSingle", args: [params as never] }),
       value: 0n,
     };
   }
@@ -266,10 +266,10 @@ async function mintPlanWith(mutate?: (a: Record<string, unknown>) => Record<stri
   if (mutate) {
     const index = plan.calls.findIndex((c) => c.to.toLowerCase() === PM.toLowerCase());
     const decoded = decodeFunctionData({ abi: hydrexPositionManagerABI, data: plan.calls[index]!.data });
-    const params = mutate(decoded.args![0] as Record<string, unknown>);
+    const params = mutate(decoded.args[0] as Record<string, unknown>);
     plan.calls[index] = {
       to: PM,
-      data: encodeFunctionData({ abi: hydrexPositionManagerABI, functionName: "mint", args: [params] }),
+      data: encodeFunctionData({ abi: hydrexPositionManagerABI, functionName: "mint", args: [params as never] }),
       value: 0n,
     };
   }
@@ -280,10 +280,10 @@ async function claimPlan(planTokenId: bigint): Promise<StrategyPlan> {
   const quote = await hydrexActualStrategy.quote(strategyRequest("claim"));
   const plan = await hydrexActualStrategy.prepare(quote, strategyOpId);
   const decoded = decodeFunctionData({ abi: hydrexPositionManagerABI, data: plan.calls[0]!.data });
-  const params = { ...(decoded.args![0] as Record<string, unknown>), tokenId: planTokenId };
+  const params = { ...(decoded.args[0] as Record<string, unknown>), tokenId: planTokenId };
   plan.calls[0] = {
     to: PM,
-    data: encodeFunctionData({ abi: hydrexPositionManagerABI, functionName: "collect", args: [params] }),
+    data: encodeFunctionData({ abi: hydrexPositionManagerABI, functionName: "collect", args: [params as never] }),
     value: 0n,
   };
   return plan;
@@ -303,7 +303,7 @@ async function planWithRawCall(to: Address, fn: string): Promise<StrategyPlan> {
     burn: [42n],
     safeTransferFrom: [ACCOUNT, ATTACKER, 42n],
   };
-  const abi = fn === "multicall" || fn === "selfPermit" ? hydrexSwapRouterABI : hydrexPositionManagerABI;
+  const abi: Abi = fn === "multicall" || fn === "selfPermit" ? hydrexSwapRouterABI : hydrexPositionManagerABI;
   plan.calls[0] = { to, data: encodeFunctionData({ abi, functionName: fn, args: rawArgs[fn]! }), value: 0n };
   return plan;
 }

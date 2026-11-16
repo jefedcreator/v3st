@@ -1,9 +1,9 @@
-import type { Address, Hex } from "viem";
+import type { Abi, Address, Hex } from "viem";
 
 import type { Wallet } from "@/server/prisma";
 import { db } from "@/server/db";
 import { TESTNET_CHAIN_ID } from "@/backend/integrations/onchain-policy";
-import { publicClientOn, relayerOn, walletClientOn } from "@/backend/services/onchain/chains";
+import { chainObject, publicClientOn, relayerOn, walletClientOn } from "@/backend/services/onchain/chains";
 import { manifestFor, verifyManifest } from "@/backend/services/onchain/manifests";
 import { loadArtifact } from "@/backend/services/onchain/testnet";
 import { NotFoundException } from "@/utils/exceptions";
@@ -53,7 +53,9 @@ export const executionAccounts = {
     const publicClient = publicClientOn(chainId);
     const artifact = loadArtifact("TestExecutionAccount");
     const hash = await walletClient.deployContract({
-      abi: artifact.abi as never,
+      account: relayer,
+      chain: chainObject(chainId),
+      abi: artifact.abi as Abi,
       bytecode: artifact.bytecode as Hex,
       args: [wallet.address as Address, relayer.address],
     });

@@ -94,7 +94,7 @@ describe("live tokenized stocks parse", () => {
     expect(decimalToRaw(1, 18)).toBe(1_000_000_000_000_000_000n);
     expect(() => decimalToRaw("abc", 6)).toThrow(ReferenceParseError);
     const { stocks } = stockReference.parseLive({
-      tokens: [{ ...(liveFixture.tokens as unknown[])[0], multiplier: "1.5", nav_price: "250.123456", nav_price_updated_at: "2026-11-16T00:00:00Z" }],
+      tokens: [{ ...(liveFixture.tokens as Record<string, unknown>[])[0], multiplier: "1.5", nav_price: "250.123456", nav_price_updated_at: "2026-11-16T00:00:00Z" }],
     });
     expect(stocks[0]!.multiplierWad).toBe(1_500_000_000_000_000_000n);
     expect(stocks[0]!.referencePriceMicroUsd).toBe(250_123_456n);

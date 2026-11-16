@@ -10,6 +10,7 @@ import { jobService } from "@/backend/services/jobs";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import "@/backend/services/onchain/providers";
 import { readManifest, testnetService } from "@/backend/services/onchain/testnet";
+import { verifyManifest } from "@/backend/services/onchain/manifests";
 import type { ProviderCapabilities } from "@/backend/services/onchain/types";
 import { walletService } from "@/backend/services/wallets";
 import type { IntegrationEvidenceDto, OnchainOpsDto } from "@/types/contract";
@@ -47,11 +48,27 @@ class OperationsService {
         };
       }
       if (!capabilities) continue;
+      // A provider reports a verified actual integration only when its testnet is
+      // configured AND the network manifest verifies on chain right now; otherwise
+      // it reports disabled_unverified regardless of recorded evidence.
+      let actualIntegration: IntegrationEvidenceDto["actual_integration"] = "disabled_unverified";
+      let verifiedChainId: number | null = null;
+      if (evidence.id === "hydrex" && evidence.testnetEvidence.status === "verified") {
+        const chainId = evidence.testnetEvidence.chainId;
+        if (chainId !== null && process.env.BASE_SEPOLIA_RPC_URL) {
+          const verified = await verifyManifest(chainId).catch(() => ({ ok: false as const, reason: "rpc unavailable" }));
+          if (verified.ok) {
+            actualIntegration = "verified_provider_testnet";
+            verifiedChainId = chainId;
+          }
+        }
+      }
       out.push({
         provider_id: evidence.id,
         integration_kind: capabilities.kind,
         beta_adapter: "local_testnet_replica",
-        actual_integration: "disabled_unverified",
+        actual_integration: actualIntegration,
+        verified_chain_id: verifiedChainId,
         capabilities,
         evidence_id: capabilities.evidenceId,
         testnet_evidence: evidence.testnetEvidence.status,
@@ -85,7 +102,8 @@ class OperationsService {
       select: { key: true, status: true, errorReason: true },
     });
     const today = now().toISOString().slice(0, 10);
-    const sponsor = await db.sponsorBudget.findUnique({ where: { scope: `daily:${today}` } });
+    const activeChainId = network?.chainId ?? policy.onchain.chainId;
+    const sponsor = await db.sponsorBudget.findUnique({ where: { scope: `relayer:${activeChainId}:${today}` } });
     const staleCutoff = new Date(now().getTime() - 10 * 60_000);
     const staleObservations = await db.chainObservation.count({
       where: { observedAt: { lt: staleCutoff }, operation: { status: { in: UNRESOLVED } } },
@@ -107,7 +125,7 @@ class OperationsService {
       sponsor_spend_today_wei: sponsor ? fromDbRaw(sponsor.spentWei).toString() : "0",
       sponsor_daily_cap_wei: sponsor
         ? fromDbRaw(sponsor.capWei).toString()
-        : policy.onchain.sponsor.dailyCapWei.toString(),
+        : (policy.onchain.sponsor.byChain[activeChainId]?.dailyCapWei ?? policy.onchain.sponsor.dailyCapWei).toString(),
       stale_observations: staleObservations,
     };
   }

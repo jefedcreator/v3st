@@ -20,11 +20,11 @@ Everything is beta. No real money moves anywhere in the system today.
 | Area | State on Nov 16, 2026 |
 | --- | --- |
 | Fiat rails backend | Built. Yellow Card runs in sandbox or simulated mode; Paycrest is simulated only |
-| Onchain backend | Built against a local test chain. All six stock providers are labelled local replicas; no real provider is called |
+| Onchain backend | Built against a local test chain. Five stock providers are labelled local replicas; Hydrex is verified on Base Sepolia (84532) behind env plus manifest evidence |
 | Ledger, jobs, reconciliation, operator controls | Built |
 | Landing page | Built, with a browser-only demo that calls no API |
 | Customer app (sign-up, fund, buy, portfolio, earnings, withdraw) | Not built. The API exists; no screens use it |
-| Real provider integration | Not built. See [Environments and the path to real providers](#environments-and-the-path-to-real-providers) |
+| Real provider integration | Phase A built: Hydrex runs its real contracts on Base Sepolia (84532) as a verified provider testnet; Base mainnet stays closed. See [Environments and the path to real providers](#environments-and-the-path-to-real-providers) |
 | Privy wallets | Not integrated. A local test signer and test account stand in for it |
 
 Detailed records: the [onchain specification](docs/superpowers/specs/2026-11-14-v3st-onchain-stocks-and-income-design.md), the [provider decision record](docs/decisions/onchain-providers.md), the [API reference](docs/api/onchain-investments.md) and the [implementation review](docs/implementation-review.md). Where this document and the Nov 14 specification disagree on onchain behaviour, the specification's rules hold until this design's open decisions are settled.
@@ -364,7 +364,7 @@ The user always sees one naira figure that already includes the rate and every f
 | Environment | Chain | Stock providers | Money |
 | --- | --- | --- | --- |
 | Beta today | Isolated local test chain (ID 31337), no fork | Six labelled local replicas | None. Test tokens only |
-| Provider testnet (proposed) | Base Sepolia (84532) | Hydrex's real testnet contracts with a test stock token we deploy; others stay replicas; stock list and prices read from Base's live API | None |
+| Provider testnet (built — Phase A) | Base Sepolia (84532) | Hydrex's real testnet contracts with a test stock stand-in we deploy (e.g. tAAPL tracking AAPLc); the other five stay replicas; stock list and prices read from Base's live tokenized stocks API. Active only with `BASE_SEPOLIA_RPC_URL` plus a manifest whose code hashes verify; reported as `verified_provider_testnet` on `/ops/integrations` | None. Test tokens only |
 | Mainnet pilot (proposed, needs sign-off) | Base (8453) | o1 for trades, Hydrex for liquidity, Stonks contracts for rewards, Bankr if a partner account is approved | Real, under small operator-funded caps |
 
 The rule recorded on 14 November stands until changed: `APP_STAGE=beta` is required, mainnet chain IDs are rejected in every environment, and a real provider can be enabled only by recorded evidence plus a reviewed configuration change, never by an operator toggle.

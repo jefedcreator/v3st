@@ -7,7 +7,8 @@ export type IntegrationEvidenceDto = {
   provider_id: StockProviderId;
   integration_kind: IntegrationKind;
   beta_adapter: "local_testnet_replica";
-  actual_integration: "disabled_unverified";
+  actual_integration: "disabled_unverified" | "verified_provider_testnet";
+  verified_chain_id: number | null;
   capabilities: ProviderCapabilities;
   evidence_id: string;
   testnet_evidence: TestnetEvidenceStatus;

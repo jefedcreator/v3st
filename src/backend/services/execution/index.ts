@@ -20,7 +20,7 @@ import type {
   StrategyPlan,
   StrategyQuote,
 } from "@/backend/services/onchain/types";
-import { chainTarget, publicClientOn, relayerOn, walletClientOn } from "@/backend/services/onchain/chains";
+import { chainObject, chainTarget, publicClientOn, relayerOn, walletClientOn } from "@/backend/services/onchain/chains";
 import { manifestFor, verifyManifest } from "@/backend/services/onchain/manifests";
 import { rpcRequest } from "@/backend/services/onchain/testnet";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
@@ -306,6 +306,8 @@ class ExecutionService {
       { from: account.address, to: accountAddress, data: approveCalldata },
     ]);
     const signedApprove = await walletClient.signTransaction({
+      account,
+      chain: chainObject(chainId),
       to: accountAddress,
       data: approveCalldata,
       nonce: signerNonce,
@@ -315,6 +317,8 @@ class ExecutionService {
     // executeBatch is only valid after the approval tx lands, so it cannot be
     // estimated up front; use a fixed generous budget (sponsor-paid test gas).
     const signedExecute = await walletClient.signTransaction({
+      account,
+      chain: chainObject(chainId),
       to: accountAddress,
       data: executeCalldata,
       nonce: signerNonce + 1,

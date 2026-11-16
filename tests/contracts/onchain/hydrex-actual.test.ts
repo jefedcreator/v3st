@@ -237,7 +237,7 @@ describe("hydrex actual spot adapter", () => {
     expect(approve.args).toEqual([ROUTER, 1_000_000n]);
     const swap = decodeFunctionData({ abi: hydrexSwapRouterABI, data: plan.calls[1]!.data });
     expect(swap.functionName).toBe("exactInputSingle");
-    const swapParams = swap.args![0] as Record<string, unknown>;
+    const swapParams = swap.args[0] as Record<string, unknown>;
     expect(String(swapParams.recipient).toLowerCase()).toBe(ACCOUNT);
     expect(swapParams).toMatchObject({
       tokenIn: USDC,
@@ -265,7 +265,7 @@ describe("hydrex actual strategy adapter", () => {
     expect(plan.calls.map((c) => c.to.toLowerCase())).toEqual([USDC, STOCK, PM.toLowerCase()]);
     const mint = decodeFunctionData({ abi: hydrexPositionManagerABI, data: plan.calls[2]!.data });
     expect(mint.functionName).toBe("mint");
-    const mintParams = mint.args![0] as Record<string, unknown>;
+    const mintParams = mint.args[0] as Record<string, unknown>;
     expect(String(mintParams.recipient).toLowerCase()).toBe(ACCOUNT);
     expect(mintParams.tickLower).toBe(-887_220);
     expect(mintParams.tickUpper).toBe(887_220);
@@ -277,7 +277,7 @@ describe("hydrex actual strategy adapter", () => {
     expect(plan.calls).toHaveLength(1);
     const collect = decodeFunctionData({ abi: hydrexPositionManagerABI, data: plan.calls[0]!.data });
     expect(collect.functionName).toBe("collect");
-    const collectParams = collect.args![0] as Record<string, unknown>;
+    const collectParams = collect.args[0] as Record<string, unknown>;
     expect(collectParams.tokenId).toBe(42n);
     expect(String(collectParams.recipient).toLowerCase()).toBe(ACCOUNT);
   });
@@ -290,7 +290,7 @@ describe("hydrex actual strategy adapter", () => {
     );
     expect(names).toEqual(["decreaseLiquidity", "collect"]);
     const decrease = decodeFunctionData({ abi: hydrexPositionManagerABI, data: plan.calls[0]!.data });
-    const decreaseParams = decrease.args![0] as Record<string, unknown>;
+    const decreaseParams = decrease.args[0] as Record<string, unknown>;
     expect(decreaseParams.tokenId).toBe(42n);
     expect(decreaseParams.liquidity).toBe(123_456n);
   });

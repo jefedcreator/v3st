@@ -1,6 +1,6 @@
 # V3ST
 
-V3ST is a beta application for exploring Nigerian bank-transfer deposits, tokenized stock holdings on a local testnet, withdrawals, and Friday earnings payouts. This repository contains the implemented backend (auth, ramps, ledger, trades, earnings, workers, tests) plus the implementation specifications. The onchain stocks and income layer runs against an isolated local Anvil testnet with clearly labelled provider replicas; actual provider adapters stay disabled until verified testnet evidence exists.
+V3ST is a beta application for exploring Nigerian bank-transfer deposits, tokenized stock holdings on a local testnet, withdrawals, and Friday earnings payouts. This repository contains the implemented backend (auth, ramps, ledger, trades, earnings, workers, tests) plus the implementation specifications. The onchain stocks and income layer runs against an isolated local Anvil testnet with clearly labelled provider replicas; Hydrex is additionally wired to its verified contracts on Base Sepolia (chain 84532) behind recorded evidence, and every other actual provider adapter stays disabled.
 
 The entire application must remain in beta. Every provider must use a verified sandbox/test environment or a local simulation. Paycrest is simulated-only during beta. No real bank transfers, mainnet transactions, real KYC submissions, or live-provider fallback are allowed.
 
@@ -35,6 +35,20 @@ The anonymous `/` route contains the V3ST landing page and four independent loca
 
 Brand assets and fonts are locally served. The original WebGL fluid field loads lazily and falls back to original static SVG artwork when unavailable; reduced motion and short viewports use ordinary flow. The first font build needs access to Google Fonts through Next's build-time font loader; no runtime third-party font request occurs. Do not use `db:push` or migration commands against a live or shared database.
 
+## Base Sepolia verified testnet (Phase A)
+
+Phase A of the real-provider work wires Hydrex's real contracts on Base Sepolia (chain 84532) as a verified provider testnet. It stays inert unless configured: `BASE_SEPOLIA_RPC_URL` and `BASE_SEPOLIA_RELAYER_PRIVATE_KEY` in `.env`, a funded Sepolia relayer (test ETH and test USDC from the Base Sepolia faucets), and the deployed manifest. Never put a mainnet key in these variables.
+
+```bash
+export BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+export BASE_SEPOLIA_RELAYER_PRIVATE_KEY=0x... # funded Sepolia relayer key only
+yarn sepolia:deploy                            # deploys the stock stand-in and Hydrex pool; writes .testnet/base-sepolia/manifest.json
+yarn seed:beta                                 # seeds the tAAPL stand-in tracking the live AAPL tokenized stock
+SEPOLIA_LIVE=1 yarn sepolia:smoke              # operator-only end-to-end journey; prints tx hashes and fees
+```
+
+`GET /api/v1/ops/integrations` reports Hydrex as `verified_provider_testnet` with `verified_chain_id: 84532` only while the RPC URL is set and the on-disk manifest still matches the deployed code hashes; otherwise it reports `disabled_unverified`. Mainnet chain IDs stay rejected in every environment. See [docs/runbooks/onchain-beta.md](docs/runbooks/onchain-beta.md).
+
 ## Backend commands
 
 - `yarn dev` / `yarn start` — Next.js app serving `/api/v1/*` (rewrites also expose `/v1/*` and `/webhooks/*`).
@@ -43,6 +57,7 @@ Brand assets and fonts are locally served. The original WebGL fluid field loads 
 - `yarn seed:beta` — idempotent beta seed (treasury wallets, opening balances, TSTA/TSTB catalog); refuses to run outside `APP_STAGE=beta`.
 - `yarn test` / `yarn test:api` / `yarn test:contracts` / `yarn typecheck` / `yarn lint` / `yarn build` — the verification gate.
 - `yarn testnet:start` / `yarn testnet:deploy` — launch the isolated loopback Anvil testnet and deploy the labelled test contracts (manifest written to the gitignored `.testnet/`).
+- `yarn sepolia:deploy` / `yarn sepolia:smoke` — deploy the verified Base Sepolia manifest and run the operator-only smoke journey (see above).
 - Runbooks: [docs/runbooks/backend-beta.md](docs/runbooks/backend-beta.md) (schedules, ops endpoints) and [docs/runbooks/onchain-beta.md](docs/runbooks/onchain-beta.md) (testnet operations).
 
 ## Verification and handoff

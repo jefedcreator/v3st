@@ -4,12 +4,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { computePoolAddress, hydrexPositionManagerABI, POOL_DEPLOYER_ADDRESSES, NONFUNGIBLE_POSITION_MANAGER_ADDRESSES, SWAP_ROUTER_ADDRESSES, Token } from "@hydrexfi/hydrex-sdk";
-import { encodeFunctionData, type Address, type Hex } from "viem";
+import { encodeFunctionData, type Abi, type Address, type Hex } from "viem";
 
 import { assertBetaRuntime } from "../src/backend/integrations/beta-policy";
 import { BASE_SEPOLIA_CHAIN_ID, parseRpcEndpoint } from "../src/backend/integrations/onchain-policy";
 import { settlementTokenAbi, stockTokenAbi } from "../src/backend/services/onchain/abis";
-import { chainTarget, publicClientOn, relayerOn, walletClientOn } from "../src/backend/services/onchain/chains";
+import { chainObject, chainTarget, publicClientOn, relayerOn, walletClientOn } from "../src/backend/services/onchain/chains";
 import { algebraPoolAbi, fullRangeTicks, sqrtPriceX96For } from "../src/backend/services/onchain/providers/hydrex/pool";
 import { loadArtifact, manifestDir, rpcRequest } from "../src/backend/services/onchain/testnet";
 import { sha256Hex } from "../src/utils";
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
     throw new Error(`RPC at ${endpoint.url} reports chain ${reportedChainId}, expected ${CHAIN_ID}`);
   }
 
-  const hydrex: Record<string, Address> = {
+  const hydrex = {
     HydrexPoolDeployer: POOL_DEPLOYER_ADDRESSES[CHAIN_ID] as Address,
     HydrexPositionManager: NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[CHAIN_ID] as Address,
     HydrexSwapRouter: SWAP_ROUTER_ADDRESSES[CHAIN_ID] as Address,
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
 
   async function deploy(name: string, artifact: string, args: unknown[]): Promise<Address> {
     const { abi, bytecode } = loadArtifact(artifact);
-    const hash = await walletClient.deployContract({ abi: abi as never, bytecode: bytecode as Hex, args });
+    const hash = await walletClient.deployContract({ account: relayer, chain: chainObject(CHAIN_ID), abi: abi as Abi, bytecode: bytecode as Hex, args });
     const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: chainTarget(CHAIN_ID).confirmations });
     if (!receipt.contractAddress) throw new Error(`Deployment of ${name} produced no address`);
     console.log(`  deployed ${name} at ${receipt.contractAddress}`);
@@ -74,10 +74,10 @@ async function main(): Promise<void> {
   const stockAmount = (usdcAmount * 10n ** 12n) / priceMicroUsd;
   const stock = await deploy("StockTokenAAPL", "TestStockToken", ["Apple Inc. (test token)", "tAAPL", stockAmount]);
 
-  async function send(label: string, to: Address, abi: unknown, functionName: string, args: unknown[]): Promise<Hex> {
-    const data = encodeFunctionData({ abi: abi as never, functionName, args: args as never });
-    await publicClient.simulateContract({ address: to, abi: abi as never, functionName, args: args as never, account: relayer.address });
-    const hash = await walletClient.writeContract({ address: to, abi: abi as never, functionName, args: args as never });
+  async function send(label: string, to: Address, abi: Abi, functionName: string, args: readonly unknown[]): Promise<Hex> {
+    const data = encodeFunctionData({ abi, functionName, args });
+    await publicClient.simulateContract({ account: relayer.address, chain: chainObject(CHAIN_ID), address: to, abi, functionName, args });
+    const hash = await walletClient.writeContract({ account: relayer, chain: chainObject(CHAIN_ID), address: to, abi, functionName, args });
     await publicClient.waitForTransactionReceipt({ hash, confirmations: chainTarget(CHAIN_ID).confirmations });
     console.log(`  ${label}: ${hash}`);
     return hash;

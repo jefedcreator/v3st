@@ -1,11 +1,11 @@
-import { parseAbi, type Abi, type Address } from "viem";
+import { parseAbi, type Address } from "viem";
 
 import { publicClientOn } from "@/backend/services/onchain/chains";
 
 // Read-only surface of a Hydrex (Algebra-style) pool. The shape is verified live once
 // against the deployed pool (see scripts/sepolia-deploy.ts); do not guess another
 // signature if globalState reverts or returns a different shape.
-export const algebraPoolAbi: Abi = parseAbi([
+export const algebraPoolAbi = parseAbi([
   "function globalState() view returns (uint160 price, int24 tick, uint16 lastFee, uint8 pluginConfig, uint16 communityFee, bool unlocked)",
   "function liquidity() view returns (uint128)",
   "function tickSpacing() view returns (int24)",
@@ -48,9 +48,9 @@ export async function readPool(chainId: number, pool: Address): Promise<PoolStat
     address: pool,
     token0,
     token1,
-    sqrtPriceX96: globalState.price,
-    tick: globalState.tick,
-    feePips: globalState.lastFee,
+    sqrtPriceX96: globalState[0],
+    tick: globalState[1],
+    feePips: globalState[2],
     liquidity,
     tickSpacing,
   };

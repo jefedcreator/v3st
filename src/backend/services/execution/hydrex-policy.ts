@@ -121,7 +121,7 @@ export async function assertHydrexCall(
       throw new ExecutionPlanRejected("Mint recipient differs from the plan recipient");
     }
     const deployer = external.HydrexPoolDeployer?.address;
-    if (!deployer || String(params.deployer).toLowerCase() !== deployer.toLowerCase()) {
+    if (String(params.deployer).toLowerCase() !== deployer?.toLowerCase()) {
       throw new ExecutionPlanRejected("Mint deployer differs from the manifest pool deployer");
     }
     if (params.deadline !== deadlineSeconds) {

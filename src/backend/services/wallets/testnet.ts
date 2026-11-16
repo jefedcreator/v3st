@@ -18,7 +18,7 @@ class TestnetWalletService {
     return executionAccounts.ensure(userId, TESTNET_CHAIN_ID);
   }
 
-  async accountState(accountAddress: Address, chainId: number = 31337): Promise<{ nonce: bigint; epoch: bigint }> {
+  async accountState(accountAddress: Address, chainId = 31337): Promise<{ nonce: bigint; epoch: bigint }> {
     const publicClient = chainId === 31337 ? publicClientFor() : publicClientOn(chainId);
     const [nonce, epoch] = await Promise.all([
       publicClient.readContract({

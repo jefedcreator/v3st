@@ -9,13 +9,15 @@ const ACCOUNT = "0x0000000000000000000000000000000000000c01" as Address;
 const ATTACKER = "0x000000000000000000000000000000000000dEaD" as Address;
 const POOL = "0x0000000000000000000000000000000000000b01" as Address;
 
-function logOf(eventName: string, args: Record<string, unknown>, emitter: Address = PM): Log {
-  const event = hydrexPositionManagerABI.find((e) => e.type === "event" && e.name === eventName)!;
+type PmEvent = Extract<(typeof hydrexPositionManagerABI)[number], { type: "event" }>;
+
+function logOf(eventName: PmEvent["name"], args: Record<string, unknown>, emitter: Address = PM): Log {
+  const event = hydrexPositionManagerABI.find((e): e is PmEvent => e.type === "event" && e.name === eventName)!;
   const topics = encodeEventTopics({ abi: [event], eventName, args });
   const dataInputs = event.inputs.filter((i) => !i.indexed);
   const data = encodeAbiParameters(
     dataInputs,
-    dataInputs.map((i) => args[i.name!]),
+    dataInputs.map((i) => args[i.name ?? ""]) as never,
   );
   return { address: emitter, topics, data, logIndex: 0, blockHash: null, blockNumber: null, transactionHash: null, transactionIndex: null, removed: false } as unknown as Log;
 }

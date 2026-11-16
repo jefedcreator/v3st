@@ -97,7 +97,7 @@ const SOURCE_FOR: Record<string, RewardSource> = {
   basestonk: "basestonk_hook_fees",
 };
 
-async function txLogs(txHash: Hex, chainId: number = 31337): Promise<readonly Log[]> {
+async function txLogs(txHash: Hex, chainId = 31337): Promise<readonly Log[]> {
   const receipt = await publicClientOn(chainId).getTransactionReceipt({ hash: txHash });
   return receipt.logs;
 }

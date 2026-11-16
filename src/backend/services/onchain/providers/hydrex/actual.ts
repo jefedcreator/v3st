@@ -85,8 +85,8 @@ class HydrexActualSpotAdapter implements SpotAdapter {
     const chainId = input.context.chainId;
     const pool = manifestEntry(chainId, "HydrexPoolAAPL");
     const state = await readPoolOn(chainId, pool);
-    const tokenIn = parseAssetKey(input.input.asset).address;
-    const tokenOut = parseAssetKey(input.outputAsset).address;
+    const tokenIn = parseAssetKey(input.input.asset).address as Address;
+    const tokenOut = parseAssetKey(input.outputAsset).address as Address;
     const { amountOut, priceImpactBps } = quoteExactIn(state, tokenIn, input.input.raw);
     if (priceImpactBps > policy.onchain.maxPriceImpactBps) {
       throw new UnprocessableEntityException(
@@ -127,8 +127,8 @@ class HydrexActualSpotAdapter implements SpotAdapter {
       throw new UnprocessableEntityException("Execution account missing for Base Sepolia", "WALLET_NOT_READY");
     }
     const recipient = ref.accountAddress;
-    const tokenIn = parseAssetKey(quote.input.asset).address;
-    const tokenOut = parseAssetKey(quote.minOutput.asset).address;
+    const tokenIn = parseAssetKey(quote.input.asset).address as Address;
+    const tokenOut = parseAssetKey(quote.minOutput.asset).address as Address;
     const deadline = await chainDeadlineBounded(quote.expiresAt.getTime(), undefined, chainId);
     const deadlineSeconds = BigInt(Math.floor(deadline.getTime() / 1000));
     const approveData = encodeFunctionData({
@@ -204,7 +204,7 @@ async function positionLiquidity(chainId: number, positionManager: Address, toke
   return (value as readonly unknown[])[7] as bigint;
 }
 
-function sdkPool(chainId: number, state: Awaited<ReturnType<typeof readPool>>): InstanceType<typeof Pool> {
+function sdkPool(chainId: number, state: Awaited<ReturnType<typeof readPoolOn>>): InstanceType<typeof Pool> {
   const token0 = new Token(chainId, state.token0, 6, "tUSDC", "V3ST Test USDC");
   const token1 = new Token(chainId, state.token1, 18, "tAAPL", "Apple Inc. (test token)");
   return new Pool(
