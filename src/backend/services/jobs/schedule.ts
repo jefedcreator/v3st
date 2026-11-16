@@ -83,6 +83,14 @@ export function dueSchedules(at: Date): DueSchedule[] {
     job: { kind: "poll.open_work", subjectId: "global" },
   });
 
+  if (Math.floor(at.getTime() / 1000) % policy.schedule.referenceSyncSeconds === 0) {
+    out.push({
+      name: "stocks.reference_sync",
+      slot: `${parts.isoDate}T${pad(parts.hour)}:${pad(parts.minute)}:${pad(at.getUTCSeconds())}`,
+      job: { kind: "stocks.reference_sync", subjectId: "global" },
+    });
+  }
+
   if (parts.minute === policy.schedule.rebalanceMinuteOfHour) {
     out.push({
       name: "treasury.rebalance",

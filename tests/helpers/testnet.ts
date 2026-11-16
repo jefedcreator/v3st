@@ -69,7 +69,7 @@ export async function testnet(): Promise<TestnetHandle> {
   if (cached) return cached;
   const url = testnetRpcUrl();
   const manifest = readManifest();
-  const chainId = await rpcRequest<Hex>(url, "eth_chainId");
+  const chainId = await rpcRequest<Hex>(url, 31337, "eth_chainId");
   if (Number(BigInt(chainId)) !== manifest.chainId) {
     throw new Error(`testnet chain id mismatch: rpc=${chainId} manifest=${manifest.chainId}`);
   }
@@ -97,20 +97,20 @@ export async function testnet(): Promise<TestnetHandle> {
     settlement,
     registry,
     async mine(blocks) {
-      await rpcRequest(url, "anvil_mine", [`0x${blocks.toString(16)}`]);
+      await rpcRequest(url, 31337, "anvil_mine", [`0x${blocks.toString(16)}`]);
     },
     async snapshot() {
-      return rpcRequest<string>(url, "evm_snapshot");
+      return rpcRequest<string>(url, 31337, "evm_snapshot");
     },
     async revert(snapshotId) {
-      await rpcRequest(url, "evm_revert", [snapshotId]);
+      await rpcRequest(url, 31337, "evm_revert", [snapshotId]);
     },
     async advanceTime(seconds) {
-      await rpcRequest(url, "evm_increaseTime", [seconds]);
-      await rpcRequest(url, "anvil_mine", ["0x1"]);
+      await rpcRequest(url, 31337, "evm_increaseTime", [seconds]);
+      await rpcRequest(url, 31337, "anvil_mine", ["0x1"]);
     },
     async setBalanceWei(address, wei) {
-      await rpcRequest(url, "anvil_setBalance", [address, `0x${wei.toString(16)}`]);
+      await rpcRequest(url, 31337, "anvil_setBalance", [address, `0x${wei.toString(16)}`]);
     },
     async mintSettlement(to, amount) {
       return sendAndWait(

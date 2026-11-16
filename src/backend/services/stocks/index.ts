@@ -1,7 +1,9 @@
 import type { Prisma, Stock } from "@/server/prisma";
 import { db } from "@/server/db";
 import type { StockDto } from "@/types/dto";
-import { fromDbRaw } from "@/utils/asset-units";
+import { fetchStocksPage } from "@/backend/services/stocks/base-stocks-client";
+import { stockReference, type ReferenceStock } from "@/backend/services/stocks/reference";
+import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 import { BadRequestException, NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 import { formatMinor } from "@/utils/money";
 
@@ -76,6 +78,42 @@ class StockService {
         update: stock,
       });
     }
+  }
+
+  // Pages the live Tokenized Stocks API to the last page, then updates reference
+  // prices in one transaction. Rows are matched by asset key and by
+  // provenance.standInFor (Base Sepolia stand-ins); rows are never created or
+  // enabled here. Any fetch/parse failure aborts before a single row is written, so
+  // a stale, missing or malformed response leaves the catalog unchanged.
+  async syncReference(): Promise<{ updated: number; skipped: number }> {
+    const stocks: ReferenceStock[] = [];
+    let next: string | null = null;
+    do {
+      const page = stockReference.parseLive(await fetchStocksPage(next));
+      stocks.push(...page.stocks);
+      next = page.next;
+    } while (next !== null);
+    let updated = 0;
+    let skipped = 0;
+    await db.$transaction(async (tx) => {
+      for (const reference of stocks) {
+        const data = {
+          referencePriceMicroUsd: reference.referencePriceMicroUsd,
+          referenceBasis: reference.referenceBasis,
+          referenceAsOf: reference.referenceAsOf,
+          multiplierWad: toDbRaw(reference.multiplierWad),
+        };
+        const byAsset = await tx.stock.updateMany({ where: { assetKey: reference.assetKey }, data });
+        const byStandIn = await tx.stock.updateMany({
+          where: { provenance: { path: ["standInFor"], equals: reference.assetKey } },
+          data,
+        });
+        const count = byAsset.count + byStandIn.count;
+        if (count === 0) skipped += 1;
+        else updated += count;
+      }
+    });
+    return { updated, skipped };
   }
 }
 

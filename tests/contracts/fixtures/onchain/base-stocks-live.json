@@ -1,0 +1,68 @@
+{
+  "tokens": [
+    {
+      "contract_address": "0xb20000000000000000000078ee7ce2fE4908108C",
+      "symbol": "NVDAc",
+      "name": "NVIDIA Corporation",
+      "decimals": 8,
+      "icon_url": "https://metadata.coinbase.com/equity_icons/1fee9b7a44e800d438dd9d96c3283e05784c925c2c871a48ff735950740b551a.png",
+      "total_supply": 49255.60410884,
+      "isin": "US67066G1040",
+      "multiplier": 1.0005379395763694,
+      "nav_price": 158.26509128,
+      "nav_price_updated_at": "2026-11-16T11:52:12Z",
+      "description": "About NVIDIA Corporation (Coinbase Tokenized Stock) (NVDAc)\n\nNVIDIA Corporation (Coinbase Tokenized Stock) is an onchain certificate that provides economic exposure to shares of NVIDIA Corporation through a tokenized security issued by Coinbase Onchain SPV Ltd in the Abu Dhabi Global Market (ADGM).\n\nEach token initially represents a 1:1 beneficial interest in shares held in a segregated custody account with a regulated broker-dealer and custodian. The applicable share-to-token ratio may change over time to reflect reinvested distributions, fees, taxes, corporate actions, and other adjustments.\n\nThe token can be held and transferred through supported blockchain networks and used in decentralized finance markets. Dividends and other distributions received on the underlying shares are generally reinvested, after applicable taxes, fees, and expenses, with the resulting economic benefit reflected through an adjustment to the share-to-token ratio.\n\nWhat Is NVIDIA Corporation (Coinbase Tokenized Stock)?\n\nNVIDIA Corporation (Coinbase Tokenized Stock) is part of Coinbase’s onchain capital-markets infrastructure, designed to represent traditional financial instruments as regulated digital securities.\n\nThe token is a certificate over shares rather than a direct investment in NVIDIA Corporation. Each token represents a proportional beneficial interest in the pool of underlying shares and related property held on trust by Coinbase Onchain SPV Ltd. The underlying shares are held in segregated custody, while Onchain Marketplace Ltd operates the tokenization infrastructure and maintains the definitive legal ownership register in its capacity as a Central Securities Depositary.\n\nAuthorized Participants create tokens by delivering the corresponding underlying shares or subscription value. Eligible holders who satisfy applicable vesting, identity-verification, sanctions, and compliance requirements may redeem tokens for the underlying shares or through another supported settlement method.",
+      "first_mint_date": "2026-08-12T12:40:59Z",
+      "adgm_isin": "AE000A4AV8A0"
+    },
+    {
+      "contract_address": "0xB20000000000000000000079DC24fe2FBD09110f",
+      "symbol": "VSTc",
+      "name": "Vistra Corp.",
+      "decimals": 8,
+      "icon_url": "https://metadata.coinbase.com/equity_icons/5149ad156561c56febae1107978defb8782325f42a69ed77bdec6ba2330a5a4f.png",
+      "isin": "US92840M1027",
+      "multiplier": 1,
+      "description": "About Vistra Corp. (Coinbase Tokenized Stock) (VSTc)\n\nVistra Corp. (Coinbase Tokenized Stock) is an onchain certificate that provides economic exposure to shares of Vistra Corp. through a tokenized security issued by Coinbase Onchain SPV Ltd in the Abu Dhabi Global Market (ADGM).\n\nEach token initially represents a 1:1 beneficial interest in shares held in a segregated custody account with a regulated broker-dealer and custodian. The applicable share-to-token ratio may change over time to reflect reinvested distributions, fees, taxes, corporate actions, and other adjustments.\n\nThe token can be held and transferred through supported blockchain networks and used in decentralized finance markets. Dividends and other distributions received on the underlying shares are generally reinvested, after applicable taxes, fees, and expenses, with the resulting economic benefit reflected through an adjustment to the share-to-token ratio.\n\nWhat Is Vistra Corp. (Coinbase Tokenized Stock)?\n\nVistra Corp. (Coinbase Tokenized Stock) is part of Coinbase’s onchain capital-markets infrastructure, designed to represent traditional financial instruments as regulated digital securities.\n\nThe token is a certificate over shares rather than a direct investment in Vistra Corp. Each token represents a proportional beneficial interest in the pool of underlying shares and related property held on trust by Coinbase Onchain SPV Ltd. The underlying shares are held in segregated custody, while Onchain Marketplace Ltd operates the tokenization infrastructure and maintains the definitive legal ownership register in its capacity as a Central Securities Depositary.\n\nAuthorized Participants create tokens by delivering the corresponding underlying shares or subscription value. Eligible holders who satisfy applicable vesting, identity-verification, sanctions, and compliance requirements may redeem tokens for the underlying shares or through another supported settlement method.",
+      "adgm_isin": "AE000A4AX612"
+    },
+    {
+      "contract_address": "0xB2000000000000000000007A8a3Ab2d3b319036D",
+      "symbol": "UPSTc",
+      "name": "Upstart Holdings, Inc.",
+      "decimals": 8,
+      "icon_url": "https://metadata.coinbase.com/equity_icons/71de6c33bd0e63fd6fdafb8fad1d807e8f3c94aaf5e2d0cb48d2dc355376a1cf.png",
+      "isin": "US91680M1071",
+      "multiplier": 1,
+      "description": "About Upstart Holdings, Inc. (Coinbase Tokenized Stock) (UPSTc)\n\nUpstart Holdings, Inc. (Coinbase Tokenized Stock) is an onchain certificate that provides economic exposure to shares of Upstart Holdings, Inc. through a tokenized security issued by Coinbase Onchain SPV Ltd in the Abu Dhabi Global Market (ADGM).\n\nEach token initially represents a 1:1 beneficial interest in shares held in a segregated custody account with a regulated broker-dealer and custodian. The applicable share-to-token ratio may change over time to reflect reinvested distributions, fees, taxes, corporate actions, and other adjustments.\n\nThe token can be held and transferred through supported blockchain networks and used in decentralized finance markets. Dividends and other distributions received on the underlying shares are generally reinvested, after applicable taxes, fees, and expenses, with the resulting economic benefit reflected through an adjustment to the share-to-token ratio.\n\nWhat Is Upstart Holdings, Inc. (Coinbase Tokenized Stock)?\n\nUpstart Holdings, Inc. (Coinbase Tokenized Stock) is part of Coinbase’s onchain capital-markets infrastructure, designed to represent traditional financial instruments as regulated digital securities.\n\nThe token is a certificate over shares rather than a direct investment in Upstart Holdings, Inc. Each token represents a proportional beneficial interest in the pool of underlying shares and related property held on trust by Coinbase Onchain SPV Ltd. The underlying shares are held in segregated custody, while Onchain Marketplace Ltd operates the tokenization infrastructure and maintains the definitive legal ownership register in its capacity as a Central Securities Depositary.\n\nAuthorized Participants create tokens by delivering the corresponding underlying shares or subscription value. Eligible holders who satisfy applicable vesting, identity-verification, sanctions, and compliance requirements may redeem tokens for the underlying shares or through another supported settlement method.",
+      "adgm_isin": "AE000A4AYFU3"
+    },
+    {
+      "contract_address": "0xB2000000000000000000007a90b2D9Ed101035A8",
+      "symbol": "ENPHc",
+      "name": "Enphase Energy, Inc.",
+      "decimals": 8,
+      "icon_url": "https://metadata.coinbase.com/equity_icons/220762aafa4e62d4fc771a4555da809ee2519106a479f56a05f70b7022b95e73.png",
+      "isin": "US29355A1079",
+      "multiplier": 1,
+      "description": "About Enphase Energy, Inc. (Coinbase Tokenized Stock) (ENPHc)\n\nEnphase Energy, Inc. (Coinbase Tokenized Stock) is an onchain certificate that provides economic exposure to shares of Enphase Energy, Inc. through a tokenized security issued by Coinbase Onchain SPV Ltd in the Abu Dhabi Global Market (ADGM).\n\nEach token initially represents a 1:1 beneficial interest in shares held in a segregated custody account with a regulated broker-dealer and custodian. The applicable share-to-token ratio may change over time to reflect reinvested distributions, fees, taxes, corporate actions, and other adjustments.\n\nThe token can be held and transferred through supported blockchain networks and used in decentralized finance markets. Dividends and other distributions received on the underlying shares are generally reinvested, after applicable taxes, fees, and expenses, with the resulting economic benefit reflected through an adjustment to the share-to-token ratio.\n\nWhat Is Enphase Energy, Inc. (Coinbase Tokenized Stock)?\n\nEnphase Energy, Inc. (Coinbase Tokenized Stock) is part of Coinbase’s onchain capital-markets infrastructure, designed to represent traditional financial instruments as regulated digital securities.\n\nThe token is a certificate over shares rather than a direct investment in Enphase Energy, Inc. Each token represents a proportional beneficial interest in the pool of underlying shares and related property held on trust by Coinbase Onchain SPV Ltd. The underlying shares are held in segregated custody, while Onchain Marketplace Ltd operates the tokenization infrastructure and maintains the definitive legal ownership register in its capacity as a Central Securities Depositary.\n\nAuthorized Participants create tokens by delivering the corresponding underlying shares or subscription value. Eligible holders who satisfy applicable vesting, identity-verification, sanctions, and compliance requirements may redeem tokens for the underlying shares or through another supported settlement method.",
+      "adgm_isin": "AE000A4AXXE2"
+    },
+    {
+      "contract_address": "0xb2000000000000000000007b9fcbd005511aCBd5",
+      "symbol": "SPCXc",
+      "name": "Space Exploration Technologies Corp.",
+      "decimals": 8,
+      "icon_url": "https://metadata.coinbase.com/equity_icons/79fa65beabbe27c7b84a38b8f67a492793a0c203a5312c8feddc23e4b7c66b79.png",
+      "total_supply": 26377.9022166,
+      "isin": "US84615Q1031",
+      "multiplier": 1,
+      "nav_price": 140.675,
+      "nav_price_updated_at": "2026-11-16T11:34:49Z",
+      "description": "About Space Exploration Technologies Corp. (Coinbase Tokenized Stock) (SPCXc)\n\nSpace Exploration Technologies Corp. (Coinbase Tokenized Stock) is an onchain certificate that provides economic exposure to shares of Space Exploration Technologies Corp. through a tokenized security issued by Coinbase Onchain SPV Ltd in the Abu Dhabi Global Market (ADGM).\n\nEach token initially represents a 1:1 beneficial interest in shares held in a segregated custody account with a regulated broker-dealer and custodian. The applicable share-to-token ratio may change over time to reflect reinvested distributions, fees, taxes, corporate actions, and other adjustments.\n\nThe token can be held and transferred through supported blockchain networks and used in decentralized finance markets. Dividends and other distributions received on the underlying shares are generally reinvested, after applicable taxes, fees, and expenses, with the resulting economic benefit reflected through an adjustment to the share-to-token ratio.\n\nWhat Is Space Exploration Technologies Corp. (Coinbase Tokenized Stock)?\n\nSpace Exploration Technologies Corp. (Coinbase Tokenized Stock) is part of Coinbase’s onchain capital-markets infrastructure, designed to represent traditional financial instruments as regulated digital securities.\n\nThe token is a certificate over shares rather than a direct investment in Space Exploration Technologies Corp. Each token represents a proportional beneficial interest in the pool of underlying shares and related property held on trust by Coinbase Onchain SPV Ltd. The underlying shares are held in segregated custody, while Onchain Marketplace Ltd operates the tokenization infrastructure and maintains the definitive legal ownership register in its capacity as a Central Securities Depositary.\n\nAuthorized Participants create tokens by delivering the corresponding underlying shares or subscription value. Eligible holders who satisfy applicable vesting, identity-verification, sanctions, and compliance requirements may redeem tokens for the underlying shares or through another supported settlement method.",
+      "first_mint_date": "2026-09-03T18:15:37Z",
+      "adgm_isin": "AE000A4AWGW1"
+    }
+  ],
+  "next_page_token": "MHhiMjAwMDAwMDAwMDAwMDAwMDAwMDAwN2I5ZmNiZDAwNTUxMWFjYmQ1"
+}

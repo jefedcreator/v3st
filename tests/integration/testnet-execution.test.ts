@@ -295,13 +295,13 @@ describe("testnet execution", () => {
     });
     const { rpcRequest, testnetRpcUrl } = await import("@/backend/services/onchain/testnet");
     const before = BigInt(
-      await rpcRequest<Hex>(testnetRpcUrl(), "eth_getBalance", [ctx.ref.accountAddress, "latest"]),
+      await rpcRequest<Hex>(testnetRpcUrl(), 31337, "eth_getBalance", [ctx.ref.accountAddress, "latest"]),
     );
     await expect(executionService.submit(op.id)).rejects.toMatchObject({
       code: "SPONSOR_UNAVAILABLE",
     });
     const after = BigInt(
-      await rpcRequest<Hex>(testnetRpcUrl(), "eth_getBalance", [ctx.ref.accountAddress, "latest"]),
+      await rpcRequest<Hex>(testnetRpcUrl(), 31337, "eth_getBalance", [ctx.ref.accountAddress, "latest"]),
     );
     expect(before).toBe(after);
     const reloaded = await db.onchainOperation.findUniqueOrThrow({ where: { id: op.id } });

@@ -15,7 +15,8 @@ export type JobKind =
   | "poll.open_work"
   | "operation.progress"
   | "investment.progress"
-  | "strategy.progress";
+  | "strategy.progress"
+  | "stocks.reference_sync";
 
 export type JobInput = {
   kind: JobKind;

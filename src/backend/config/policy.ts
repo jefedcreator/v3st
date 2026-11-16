@@ -65,6 +65,7 @@ export const policy = {
   },
   schedule: {
     pollEveryMinutes: 1,
+    referenceSyncSeconds: 30,
     rebalanceMinuteOfHour: 30,
     reconcileHour: 2,
     harvest: { weekday: 4, hour: 22, minute: 0 },
