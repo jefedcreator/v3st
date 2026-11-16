@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { TESTNET_CHAIN_ID } from "@/backend/integrations/onchain-policy";
 import { __setRpcTransportForTests, chainTarget, relayerOn } from "@/backend/services/onchain/chains";
 import { currentBlockNumber } from "@/backend/services/execution/nonce";
+import { txExists } from "@/backend/services/execution/receipts";
 
 describe("multi-network chain access", () => {
   it("resolves each network to its own RPC, relayer and confirmations", () => {
@@ -38,6 +39,39 @@ describe("multi-network chain access", () => {
     } finally {
       __setRpcTransportForTests(null);
       delete process.env.BASE_SEPOLIA_RPC_URL;
+    }
+  });
+
+  it("routes raw receipt lookups for Base Sepolia to the Sepolia endpoint only", async () => {
+    process.env.BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org";
+    const seen: string[] = [];
+    __setRpcTransportForTests((url) => {
+      seen.push(url);
+      throw new Error("offline");
+    });
+    try {
+      await expect(txExists(`0x${"ab".repeat(32)}`, 84532)).rejects.toThrow("offline");
+      expect(seen.every((url) => url === "https://sepolia.base.org")).toBe(true);
+      expect(seen.length).toBeGreaterThan(0);
+    } finally {
+      __setRpcTransportForTests(null);
+      delete process.env.BASE_SEPOLIA_RPC_URL;
+    }
+  });
+
+  it("refuses the local test key or a public Anvil key as the Base Sepolia relayer", () => {
+    const local = `0x${"22".repeat(32)}`;
+    const previousLocal = process.env.TESTNET_SIGNER_PRIVATE_KEY;
+    process.env.TESTNET_SIGNER_PRIVATE_KEY = local;
+    try {
+      process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY = local;
+      expect(() => relayerOn(84532)).toThrow(/fresh testnet-only key/i);
+      process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+      expect(() => relayerOn(84532)).toThrow(/fresh testnet-only key/i);
+    } finally {
+      if (previousLocal === undefined) delete process.env.TESTNET_SIGNER_PRIVATE_KEY;
+      else process.env.TESTNET_SIGNER_PRIVATE_KEY = previousLocal;
+      delete process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY;
     }
   });
 });

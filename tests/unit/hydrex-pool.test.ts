@@ -36,4 +36,14 @@ describe("hydrex pool math", () => {
     expect(sqrtPriceX96For(1n, 1n)).toBe(2n ** 96n);
     expect(sqrtPriceX96For(4n, 1n)).toBe(2n ** 97n);
   });
+
+  it("uses Algebra's token1-per-token0 price, so virtual reserves round-trip the deploy price", () => {
+    // 1 stock (18 decimals) = 250 USDC (6 decimals); USDC is token0, so token1/token0 = 1e18 / 250e6.
+    const sqrtPriceX96 = sqrtPriceX96For(10n ** 18n, 250_000_000n);
+    const priced: PoolState = { ...state, sqrtPriceX96, liquidity: 10n ** 18n, feePips: 0 };
+    // Selling 1 USDC (1e6 raw) on deep liquidity returns ~1/250 of a share.
+    const { amountOut } = quoteExactIn(priced, priced.token0, 1_000_000n);
+    const expected = 10n ** 18n / 250n;
+    expect(amountOut > (expected * 999n) / 1000n && amountOut <= expected).toBe(true);
+  });
 });

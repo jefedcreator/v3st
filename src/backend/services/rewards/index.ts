@@ -9,10 +9,9 @@ import { jobService } from "@/backend/services/jobs";
 import { lagosWeek } from "@/backend/services/jobs/schedule";
 import { now } from "@/backend/clock";
 import { hookFeeAbi, hydrexPoolAbi, hydropumpLockerAbi, stockDistributionAbi } from "@/backend/services/onchain/abis";
-import { publicClientFor, readManifest, settlementAssetKey } from "@/backend/services/onchain/testnet";
 import { publicClientOn } from "@/backend/services/onchain/chains";
-import { manifestFor } from "@/backend/services/onchain/manifests";
-import { assetKey, type StrategyAction } from "@/backend/services/onchain/types";
+import { ledgerChainFor, settlementAssetKeyOn } from "@/backend/services/onchain/manifests";
+import { parseAssetKey, type StrategyAction } from "@/backend/services/onchain/types";
 import { parseHydrexFill } from "@/backend/services/onchain/providers/hydrex/events";
 import { readPoolOn } from "@/backend/services/onchain/providers/hydrex/pool";
 import type { StrategyQuote } from "@/backend/services/onchain/types";
@@ -103,10 +102,7 @@ async function txLogs(txHash: Hex, chainId = 31337): Promise<readonly Log[]> {
 }
 
 function settlementAssetKeyFor(chainId: number): string {
-  if (chainId === 31337) return settlementAssetKey(readManifest());
-  const entry = manifestFor(chainId).contracts.TestSettlementToken;
-  if (!entry) throw new Error(`Manifest for chain ${chainId} has no TestSettlementToken`);
-  return assetKey("basesepolia", chainId, entry.address);
+  return settlementAssetKeyOn(chainId);
 }
 
 // Recognize only actual fee/distribution realization proved by logs of the source
@@ -133,8 +129,12 @@ async function decodeRewardEvents(input: {
     const state = await readPoolOn(input.chainId, prov.pool as Address);
     const settlement = settlementAssetKeyFor(input.chainId);
     const stock = prov.stockId ? await db.stock.findUnique({ where: { id: prov.stockId } }) : null;
+    // Pool token order is by address, so map each pool token to its asset by
+    // identity, never by position: token0 may be the stock.
+    const settlementAddress = parseAssetKey(settlement).address.toLowerCase();
+    const stockAddress = stock?.assetKey ? parseAssetKey(stock.assetKey).address.toLowerCase() : null;
     const assetOf = (token: Address): string | null =>
-      token.toLowerCase() === state.token0.toLowerCase() ? settlement : token.toLowerCase() === state.token1.toLowerCase() ? (stock?.assetKey ?? null) : null;
+      token.toLowerCase() === settlementAddress ? settlement : token.toLowerCase() === stockAddress ? (stock?.assetKey ?? null) : null;
     const asset0 = assetOf(state.token0);
     const asset1 = assetOf(state.token1);
     if (fill.kind !== "enter") {
@@ -146,7 +146,7 @@ async function decodeRewardEvents(input: {
   if (typeof prov.pool === "string") {
     const pool = prov.pool;
     const stock = prov.stockId ? await db.stock.findUnique({ where: { id: prov.stockId } }) : null;
-    const settlement = settlementAssetKey(readManifest());
+    const settlement = settlementAssetKeyFor(input.chainId);
     const poolLogs = input.logs.filter((l) => l.address.toLowerCase() === pool.toLowerCase());
     if (poolLogs.length === 0) return out;
     const parsed = parseEventLogs({
@@ -255,7 +255,7 @@ async function decodeRewardEvents(input: {
 // Maps a receipt beneficiary address back to its owning user through the user's
 // execution/managed accounts.
 export async function userIdForBeneficiary(
-  client: Pick<Tx, "wallet" | "custodyProfile" | "user">,
+  client: Pick<Tx, "wallet" | "custodyProfile" | "user" | "executionAccount">,
   beneficiary: string,
 ): Promise<string | null> {
   const normalized = beneficiary.toLowerCase();
@@ -265,6 +265,13 @@ export async function userIdForBeneficiary(
   for (const w of wallets) {
     if (w.executionAddress?.toLowerCase() === normalized && w.userId) return w.userId;
   }
+  // Execution accounts on other networks (e.g. Base Sepolia) are not mirrored on the
+  // wallet row.
+  const account = await client.executionAccount.findFirst({
+    where: { address: { equals: normalized, mode: "insensitive" } },
+    include: { wallet: true },
+  });
+  if (account?.wallet.userId) return account.wallet.userId;
   const profiles = await client.custodyProfile.findMany({ where: { kind: "provider_managed" } });
   for (const p of profiles) {
     if (p.managedAddress?.toLowerCase() === normalized && p.walletId) {
@@ -273,6 +280,24 @@ export async function userIdForBeneficiary(
     }
   }
   return null;
+}
+
+// Every account address a user's receipts may be paid to: the local execution
+// account, execution accounts on other networks, and provider-managed accounts.
+async function ownedAccountAddresses(wallets: { id: string; executionAddress: string | null }[]): Promise<Set<string>> {
+  const addresses = new Set<string>();
+  for (const w of wallets) {
+    if (w.executionAddress) addresses.add(w.executionAddress.toLowerCase());
+  }
+  const accounts = await db.executionAccount.findMany({ where: { walletId: { in: wallets.map((w) => w.id) } } });
+  for (const a of accounts) addresses.add(a.address.toLowerCase());
+  const profiles = await db.custodyProfile.findMany({
+    where: { walletId: { in: wallets.map((w) => w.id) }, kind: "provider_managed" },
+  });
+  for (const p of profiles) {
+    if (p.managedAddress) addresses.add(p.managedAddress.toLowerCase());
+  }
+  return addresses;
 }
 
 class RewardService {
@@ -360,7 +385,7 @@ class RewardService {
         });
         // One credit per receipt; the journal key is idempotent on replay.
         const stock = await client.stock.findFirst({ where: { assetKey: event.asset } });
-        const chain = stock?.chain ?? "testnet";
+        const chain = stock?.chain ?? ledgerChainFor(chainId);
         await ledgerService.post(
           client,
           rewardReceived({
@@ -436,16 +461,7 @@ class RewardService {
       );
     }
     const wallets = await db.wallet.findMany({ where: { userId: auth.userId } });
-    const addresses = new Set<string>();
-    for (const w of wallets) {
-      if (w.executionAddress) addresses.add(w.executionAddress.toLowerCase());
-    }
-    const profiles = await db.custodyProfile.findMany({
-      where: { walletId: { in: wallets.map((w) => w.id) }, kind: "provider_managed" },
-    });
-    for (const p of profiles) {
-      if (p.managedAddress) addresses.add(p.managedAddress.toLowerCase());
-    }
+    const addresses = await ownedAccountAddresses(wallets);
     if (!addresses.has(receipt.beneficiary)) {
       throw new NotFoundException("Receipt not found", "NOT_FOUND");
     }
@@ -487,16 +503,7 @@ class RewardService {
   // Owner-scoped receipt lookup; cross-user receipt IDs are a 404.
   async getOwned(userId: string, receiptId: string): Promise<RewardReceiptDto> {
     const wallets = await db.wallet.findMany({ where: { userId } });
-    const addresses = new Set<string>();
-    for (const w of wallets) {
-      if (w.executionAddress) addresses.add(w.executionAddress.toLowerCase());
-    }
-    const profiles = await db.custodyProfile.findMany({
-      where: { walletId: { in: wallets.map((w) => w.id) }, kind: "provider_managed" },
-    });
-    for (const p of profiles) {
-      if (p.managedAddress) addresses.add(p.managedAddress.toLowerCase());
-    }
+    const addresses = await ownedAccountAddresses(wallets);
     const row = await db.rewardReceipt.findUnique({ where: { id: receiptId } });
     if (!row || !addresses.has(row.beneficiary)) {
       throw new NotFoundException("Receipt not found", "NOT_FOUND");
@@ -508,16 +515,7 @@ class RewardService {
   // execution/managed account addresses, never through a raw beneficiary input.
   async listForUser(userId: string): Promise<RewardReceiptDto[]> {
     const wallets = await db.wallet.findMany({ where: { userId } });
-    const addresses = new Set<string>();
-    for (const w of wallets) {
-      if (w.executionAddress) addresses.add(w.executionAddress.toLowerCase());
-    }
-    const profiles = await db.custodyProfile.findMany({
-      where: { walletId: { in: wallets.map((w) => w.id) }, kind: "provider_managed" },
-    });
-    for (const p of profiles) {
-      if (p.managedAddress) addresses.add(p.managedAddress.toLowerCase());
-    }
+    const addresses = await ownedAccountAddresses(wallets);
     if (addresses.size === 0) return [];
     const rows = await db.rewardReceipt.findMany({
       where: { beneficiary: { in: [...addresses] } },

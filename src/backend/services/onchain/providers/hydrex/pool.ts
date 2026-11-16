@@ -98,8 +98,10 @@ function isqrt(n: bigint): bigint {
   return x;
 }
 
-// floor(sqrt(token0PerToken1Num / token0PerToken1Den) * 2^96)
-export function sqrtPriceX96For(token0PerToken1Num: bigint, token0PerToken1Den: bigint): bigint {
-  if (token0PerToken1Num < 0n || token0PerToken1Den <= 0n) throw new Error("Invalid price ratio");
-  return isqrt((token0PerToken1Num << 192n) / token0PerToken1Den);
+// floor(sqrt(num / den) * 2^96), where num/den is the Algebra pool price: raw token1
+// per raw token0 (the same convention readPool's virtual reserves assume). The plan
+// named these parameters token0PerToken1; that was the inverse of Algebra's price.
+export function sqrtPriceX96For(token1PerToken0Num: bigint, token1PerToken0Den: bigint): bigint {
+  if (token1PerToken0Num < 0n || token1PerToken0Den <= 0n) throw new Error("Invalid price ratio");
+  return isqrt((token1PerToken0Num << 192n) / token1PerToken0Den);
 }

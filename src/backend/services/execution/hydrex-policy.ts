@@ -1,6 +1,7 @@
 import { hydrexPositionManagerABI, hydrexSwapRouterABI } from "@hydrexfi/hydrex-sdk";
 import { decodeFunctionData, zeroAddress, type Address } from "viem";
 
+import { policy } from "@/backend/config/policy";
 import type { NetworkManifest } from "@/backend/services/onchain/manifests";
 import { readPoolOn, fullRangeTicks } from "@/backend/services/onchain/providers/hydrex/pool";
 import type { ExecutionPlan, PreparedCall, StrategyPlan } from "@/backend/services/onchain/types";
@@ -120,9 +121,17 @@ export async function assertHydrexCall(
     if (String(params.recipient).toLowerCase() !== plan.recipient.toLowerCase()) {
       throw new ExecutionPlanRejected("Mint recipient differs from the plan recipient");
     }
-    const deployer = external.HydrexPoolDeployer?.address;
-    if (String(params.deployer).toLowerCase() !== deployer?.toLowerCase()) {
-      throw new ExecutionPlanRejected("Mint deployer differs from the manifest pool deployer");
+    // V3ST pools are base Algebra pools: the custom-deployer slot must be zero.
+    if (String(params.deployer).toLowerCase() !== zeroAddress) {
+      throw new ExecutionPlanRejected("Mint deployer must be the zero address (base pool)");
+    }
+    // Minimums may not be loosened below the policy slippage of the desired amounts.
+    const floorOf = (desired: bigint): bigint => (desired * (10_000n - BigInt(policy.trading.maxSlippageBps))) / 10_000n;
+    if (
+      (params.amount0Min as bigint) < floorOf(params.amount0Desired as bigint) ||
+      (params.amount1Min as bigint) < floorOf(params.amount1Desired as bigint)
+    ) {
+      throw new ExecutionPlanRejected("Mint minimums are below the policy slippage floor");
     }
     if (params.deadline !== deadlineSeconds) {
       throw new ExecutionPlanRejected("Mint deadline differs from the plan deadline");
@@ -147,6 +156,9 @@ export async function assertHydrexCall(
     params.amount1Min !== minimumOf(state.token1.toLowerCase())
   ) {
     throw new ExecutionPlanRejected("DecreaseLiquidity minimums differ from the accepted quote");
+  }
+  if (params.deadline !== deadlineSeconds) {
+    throw new ExecutionPlanRejected("DecreaseLiquidity deadline differs from the plan deadline");
   }
   return true;
 }

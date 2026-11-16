@@ -35,14 +35,13 @@ import {
 } from "@/backend/services/ledger/postings";
 import { hydrexPoolAbi } from "@/backend/services/onchain/abis";
 import { contextOn, publicClientOn } from "@/backend/services/onchain/chains";
-import { manifestFor } from "@/backend/services/onchain/manifests";
-import { assetKey } from "@/backend/services/onchain/types";
+import { ledgerChainFor, settlementAssetKeyOn } from "@/backend/services/onchain/manifests";
 import { parseHydrexFill } from "@/backend/services/onchain/providers/hydrex/events";
 import { HYDREX_ACTUAL_VERSION } from "@/backend/services/onchain/providers/hydrex/actual";
 import { executionAccounts } from "@/backend/services/wallets/execution-accounts";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import "@/backend/services/onchain/providers";
-import { onchainExpiryMs, publicClientFor, readManifest, settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
+import { onchainExpiryMs, publicClientFor, testnetService } from "@/backend/services/onchain/testnet";
 import type {
   AssetAmount,
   AssetDelta,
@@ -179,9 +178,12 @@ function positionToDto(p: StrategyPosition): StrategyPositionDto {
   };
 }
 
+// Settlement is per network: compare against the settlement token of the asset's
+// own chain, so a Base Sepolia test USDC is never valued as a stock (or the reverse).
 function isSettlementAsset(asset: string): boolean {
   try {
-    return parseAssetKey(asset).address === parseAssetKey(settlementAssetKey(readManifest())).address;
+    const parsed = parseAssetKey(asset);
+    return parsed.address === parseAssetKey(settlementAssetKeyOn(parsed.chainId)).address;
   } catch {
     return false;
   }
@@ -315,7 +317,8 @@ class StrategyService {
   // Available investment value backing the exposure cap: cash plus owned stock
   // value. Strategy principal is not added again (it was paid out of these).
   private async investmentValueUsdc(tx: Tx, userId: string): Promise<bigint> {
-    let total = await ledgerService.balance(acct.userCash(userId, CHAIN), tx);
+    let total = 0n;
+    for (const chain of [CHAIN, ledgerChainFor(84532)]) total += await ledgerService.balance(acct.userCash(userId, chain), tx);
     const stocks = await tx.stock.findMany();
     for (const stock of stocks) {
       const owned = await ledgerService.balance(acct.userStock(userId, stock.id), tx) + await ledgerService.balance(acct.userStockReserved(userId, stock.id), tx);
@@ -391,10 +394,7 @@ class StrategyService {
       } else if ("budgetInputRaw" in input) {
         const budget = input.budgetInputRaw;
         if (budget <= 0n) throw new UnprocessableEntityException("Enter budget must be positive", "VALIDATION_FAILED");
-        const settlement =
-          provChain === 31337
-            ? settlementAssetKey(readManifest())
-            : assetKey("basesepolia", provChain, manifestFor(provChain).contracts.TestSettlementToken!.address);
+        const settlement = settlementAssetKeyOn(provChain);
         const allowedAssets = new Set((strategy.inputAssets as string[]) ?? []);
         const stockAsset = [...allowedAssets].find((a) => a !== settlement);
         const settlementLeg = budget / 2n;
@@ -535,9 +535,14 @@ class StrategyService {
       }
       const wallet = await tx.wallet.findUniqueOrThrow({ where: { userId_family: { userId, family: "evm" } } });
       await lockRows(tx, "wallets", [wallet.id]);
-      const ref = await testnetWalletService.ensureExecutionAccount(userId);
+      // The executing account belongs to the quote's own network; a Base Sepolia
+      // operation must never be bound to the local execution account.
+      const ref =
+        stored.betaContext.chainId === 31337
+          ? await testnetWalletService.ensureExecutionAccount(userId)
+          : await executionAccounts.ensure(userId, stored.betaContext.chainId);
       const accountAddress = ref.accountAddress;
-      const network = await tx.onchainNetwork.findFirst({ where: { chainId: stored.betaContext.chainId } });
+      const network = await tx.onchainNetwork.findFirst({ where: { deploymentId: stored.betaContext.deploymentId } });
       if (!network) throw new NotFoundException("Onchain network not registered", "NETWORK_UNHEALTHY");
 
       const valuationBasis = await this.valuationBasis(tx, [...quote.maximumInputs, ...quote.minimumOutputs].map((a) => a.asset).concat(strategy.inputAssets as string[]));
@@ -580,7 +585,7 @@ class StrategyService {
           if (isSettlementAsset(a.asset)) {
             await ledgerService.post(
               tx,
-              cashReserved({ key: `${opKey}:reserve:cash`, userId, chain: CHAIN, amount: a.raw, from: "cash" }),
+              cashReserved({ key: `${opKey}:reserve:cash`, userId, chain: ledgerChainFor(stored.betaContext.chainId), amount: a.raw, from: "cash" }),
             );
             reserved[a.asset] = a.raw.toString();
           } else if (!preparatory) {
@@ -625,10 +630,7 @@ class StrategyService {
       let preparatoryOperationId: string | null = null;
       if (preparatory && action === "enter") {
         const prepChainId = preparatory.context?.chainId ?? 31337;
-        const settlement =
-          prepChainId === 31337
-            ? settlementAssetKey(readManifest())
-            : assetKey("basesepolia", prepChainId, manifestFor(prepChainId).contracts.TestSettlementToken!.address);
+        const settlement = settlementAssetKeyOn(prepChainId);
         const prepKey = `strat-prep:${key}`;
         const swapBudget = preparatory.input.raw;
         const prep = await tx.onchainOperation.create({
@@ -660,7 +662,7 @@ class StrategyService {
         if (swapBudget > 0n) {
           await ledgerService.post(
             tx,
-            cashReserved({ key: `${prepKey}:reserve:cash`, userId, chain: CHAIN, amount: swapBudget, from: "cash" }),
+            cashReserved({ key: `${prepKey}:reserve:cash`, userId, chain: ledgerChainFor(prepChainId), amount: swapBudget, from: "cash" }),
           );
         }
       }
@@ -851,13 +853,15 @@ class StrategyService {
     op: OnchainOperation,
     reserved: Record<string, string>,
   ): Promise<void> {
+    const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
+    const chain = ledgerChainFor(network.chainId);
     for (const [asset, raw] of Object.entries(reserved)) {
       const amount = BigInt(raw);
       if (amount <= 0n) continue;
       if (isSettlementAsset(asset)) {
         await ledgerService.post(
           tx,
-          cashReleased({ key: `${op.key}:reserve:cash`, userId: op.userId, chain: CHAIN, amount, to: "cash" }),
+          cashReleased({ key: `${op.key}:reserve:cash`, userId: op.userId, chain, amount, to: "cash" }),
         );
       } else {
         const stock = await tx.stock.findFirst({ where: { assetKey: asset } });
@@ -891,7 +895,9 @@ class StrategyService {
       : await tx.strategyPosition.findFirst({ where: { operationId: op.id } });
     const account = await accountAddressFor(tx, op);
     const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
-    const settlement = settlementAssetKey(readManifest());
+    // The settlement asset of this operation's own network (test USDC differs per chain).
+    const settlement = settlementAssetKeyOn(network.chainId);
+    const ledgerChain = ledgerChainFor(network.chainId);
     const prov = strategy.provenance as { pool?: string; stockId?: string } | null;
     const stock = prov?.stockId ? await tx.stock.findUnique({ where: { id: prov.stockId } }) : null;
     const stockAsset = stock?.assetKey ?? null;
@@ -906,7 +912,6 @@ class StrategyService {
       if (deltas.length === 0) {
         const assets = plan ? [...plan.maximumInputs, ...plan.minimumOutputs].map((a) => a.asset) : [];
         const uniqueAssets = [...new Set(assets)];
-        const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
         const chainId = plan?.context.chainId ?? network.chainId;
         deltas = op.txHash ? await transactionDeltas(op.txHash as Hex, uniqueAssets, account, chainId) : [];
       }
@@ -928,7 +933,7 @@ class StrategyService {
         const entered = strategyEntered({
           key: op.key,
           userId: op.userId,
-          chain: CHAIN,
+          chain: ledgerChain,
           venueId: op.providerId,
           stockId: stock?.id ?? null,
           settlementIn: settleSpent,
@@ -940,7 +945,7 @@ class StrategyService {
         if (settleReserved > settleSpent) {
           await ledgerService.post(
             tx,
-            cashReleased({ key: `${op.key}:reserve:cash`, userId: op.userId, chain: CHAIN, amount: settleReserved - settleSpent, to: "cash" }),
+            cashReleased({ key: `${op.key}:reserve:cash`, userId: op.userId, chain: ledgerChain, amount: settleReserved - settleSpent, to: "cash" }),
           );
         }
         if (stockAsset) {
@@ -982,7 +987,7 @@ class StrategyService {
         const exited = strategyExited({
           key: op.key,
           userId: op.userId,
-          chain: CHAIN,
+          chain: ledgerChain,
           venueId: op.providerId,
           stockId: stock?.id ?? null,
           settlementOut: settleOut,

@@ -20,9 +20,8 @@ import type {
   StrategyPlan,
   StrategyQuote,
 } from "@/backend/services/onchain/types";
-import { chainObject, chainTarget, publicClientOn, relayerOn, walletClientOn } from "@/backend/services/onchain/chains";
+import { chainObject, chainTarget, publicClientOn, relayerOn, rpcOn, walletClientOn } from "@/backend/services/onchain/chains";
 import { manifestFor, verifyManifest } from "@/backend/services/onchain/manifests";
-import { rpcRequest } from "@/backend/services/onchain/testnet";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { canonicalJson, sha256Hex } from "@/utils";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
@@ -107,13 +106,26 @@ export type CreateOperationInput = {
 // provider_managed profile (e.g. Bankr) uses its own managed account, anything
 // else uses the wallet's application execution account.
 export async function accountAddressFor(
-  prisma: Pick<Tx, "custodyProfile" | "wallet">,
+  prisma: Pick<Tx, "custodyProfile" | "wallet" | "onchainNetwork" | "executionAccount">,
   op: OnchainOperation,
 ): Promise<Address> {
   const profile = await prisma.custodyProfile.findUnique({ where: { id: op.custodyProfileId } });
   if (profile?.kind === "provider_managed") {
     if (!profile.managedAddress) throw new NotFoundException("Managed account missing", "WALLET_NOT_READY");
     return profile.managedAddress as Address;
+  }
+  // Every network has its own execution account. Only the local network mirrors it
+  // on Wallet.executionAddress; any other network must resolve the account of the
+  // operation's own deployment, never the local one.
+  const network = await prisma.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
+  if (network.chainId !== 31337) {
+    const account = await prisma.executionAccount.findUnique({
+      where: { walletId_deploymentId: { walletId: op.walletId, deploymentId: network.deploymentId } },
+    });
+    if (account?.chainId !== network.chainId) {
+      throw new NotFoundException("Execution account missing for this network", "WALLET_NOT_READY");
+    }
+    return account.address as Address;
   }
   const wallet = await prisma.wallet.findUniqueOrThrow({ where: { id: op.walletId } });
   if (!wallet.executionAddress) throw new NotFoundException("Execution account missing", "WALLET_NOT_READY");
@@ -268,7 +280,6 @@ class ExecutionService {
     const chainId = plan.context.chainId;
     const account = relayerOn(chainId);
     const walletClient = walletClientOn(chainId);
-    const rpcUrl = chainTarget(chainId).rpcUrl;
     const opKey = operationKeyBytes32(op.id);
     const epoch = (await testnetWalletService.accountState(accountAddress, chainId)).epoch;
     const deadlineSeconds = BigInt(Math.floor(plan.deadline.getTime() / 1000));
@@ -301,8 +312,8 @@ class ExecutionService {
       functionName: "executeBatch",
       args: [opKey, opNonce, deadlineSeconds, epoch, calls],
     });
-    const gasPrice = BigInt(await rpcRequest<Hex>(rpcUrl, chainId, "eth_gasPrice"));
-    const approveGas = await rpcRequest<Hex>(rpcUrl, chainId, "eth_estimateGas", [
+    const gasPrice = BigInt(await rpcOn<Hex>(chainId, "eth_gasPrice"));
+    const approveGas = await rpcOn<Hex>(chainId, "eth_estimateGas", [
       { from: account.address, to: accountAddress, data: approveCalldata },
     ]);
     const signedApprove = await walletClient.signTransaction({
@@ -362,7 +373,7 @@ class ExecutionService {
           // Revalidate consent before signing; the epoch check rejects revoked work.
           await authorizationService.assertActive(tx, current.userId, current.authorizationId);
         }
-        const gasPrice = BigInt(await rpcRequest<Hex>(chainTarget(chainId).rpcUrl, chainId, "eth_gasPrice"));
+        const gasPrice = BigInt(await rpcOn<Hex>(chainId, "eth_gasPrice"));
         const estWei = gasPrice * 4_000_000n + 1n;
         await this.reserveSponsorBudget(tx, op.id, estWei, chainId);
         const accountAddress = await accountAddressFor(tx, current);

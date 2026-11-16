@@ -6,7 +6,7 @@ import type { Address, Hex } from "viem";
 import { BASE_SEPOLIA_CHAIN_ID, TESTNET_CHAIN_ID, parseRpcEndpoint } from "@/backend/integrations/onchain-policy";
 import { sha256Hex } from "@/utils";
 
-import { manifestDir, readManifest, rpcRequest, testnetService, TestnetError, type TestnetManifest } from "./testnet";
+import { manifestDir, readManifest, rpcRequest, settlementAssetKey, testnetService, TestnetError, type TestnetManifest } from "./testnet";
 import type { IntegrationKind } from "./types";
 
 // A network manifest records every contract of one deployment. External (provider-owned)
@@ -37,6 +37,25 @@ export function manifestFor(chainId: number): NetworkManifest {
     throw new TestnetError(`Manifest at ${file} declares chain ${manifest.chainId}, expected ${chainId}`);
   }
   return manifest;
+}
+
+// The settlement (test USDC) asset key of a network's deployment. Base Sepolia keys
+// use the "basesepolia" namespace: basesepolia:84532:<lowercase address>.
+export function settlementAssetKeyOn(chainId: number): string {
+  if (chainId === TESTNET_CHAIN_ID) return settlementAssetKey(readManifest());
+  const entry = manifestFor(chainId).contracts.TestSettlementToken;
+  if (!entry) throw new TestnetError(`Manifest for chain ${chainId} has no TestSettlementToken`);
+  return `basesepolia:${chainId}:${entry.address.toLowerCase()}`;
+}
+
+// The ledger "chain" namespace of a network: the local replica posts under
+// policy.onchain.networkNamespace ("testnet"), Base Sepolia under "basesepolia"
+// (the same namespace as its asset keys and Stock.chain), so per-network cash and
+// reconciliation never mix balances of two chains.
+export function ledgerChainFor(chainId: number): string {
+  if (chainId === TESTNET_CHAIN_ID) return "testnet";
+  if (chainId === BASE_SEPOLIA_CHAIN_ID) return "basesepolia";
+  throw new TestnetError(`No ledger namespace for chain ${chainId}`);
 }
 
 function rpcUrlFor(chainId: number): string {

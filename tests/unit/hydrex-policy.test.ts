@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { hydrexPositionManagerABI, hydrexSwapRouterABI } from "@hydrexfi/hydrex-sdk";
-import { decodeFunctionData, encodeAbiParameters, encodeFunctionData, erc20Abi, zeroAddress, type Abi, type Address, type Hex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, encodeFunctionData, type Abi, type Address } from "viem";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { __setRpcTransportForTests } from "@/backend/services/onchain/chains";
@@ -332,6 +332,11 @@ describe("hydrex execution policy", () => {
   it("rejects mint ticks that are not full range and recipients other than the account", async () => {
     await expect(assertExecutionPlan(await mintPlanWith((a) => ({ ...a, tickLower: -60 })))).rejects.toThrow();
     await expect(assertExecutionPlan(await mintPlanWith((a) => ({ ...a, recipient: ATTACKER })))).rejects.toThrow();
+  });
+
+  it("rejects a mint into a custom pool deployer or with loosened minimums", async () => {
+    await expect(assertExecutionPlan(await mintPlanWith((a) => ({ ...a, deployer: DEPLOYER })))).rejects.toThrow(/deployer/i);
+    await expect(assertExecutionPlan(await mintPlanWith((a) => ({ ...a, amount0Min: 0n })))).rejects.toThrow(/minimum/i);
   });
 
   it("accepts the unmodified swap, mint, collect and exit plans", async () => {

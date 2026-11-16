@@ -2,13 +2,10 @@ import { decodeAbiParameters, parseEventLogs, type Address, type Hex } from "vie
 
 import { policy } from "@/backend/config/policy";
 import { settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
-import { chainTarget, publicClientOn } from "@/backend/services/onchain/chains";
+import { publicClientOn, rpcOn } from "@/backend/services/onchain/chains";
 import type { AssetAmount, AssetDelta, ExecutionObservation } from "@/backend/services/onchain/types";
 import { parseAssetKey } from "@/backend/services/onchain/types";
-import {
-  rpcRequest,
-  type TestnetError,
-} from "@/backend/services/onchain/testnet";
+import type { TestnetError } from "@/backend/services/onchain/testnet";
 
 export class ReceiptValidationError extends Error {
   constructor(message: string) {
@@ -87,8 +84,7 @@ export async function transactionDeltas(txHash: Hex, assets: string[], account: 
 }
 
 export async function txExists(txHash: Hex, chainId: number): Promise<boolean> {
-  const url = chainTarget(chainId).rpcUrl;
-  const tx = await rpcRequest<{ hash: Hex } | null>(url, chainId, "eth_getTransactionByHash", [txHash]);
+  const tx = await rpcOn<{ hash: Hex } | null>(chainId, "eth_getTransactionByHash", [txHash]);
   return tx !== null;
 }
 
@@ -96,15 +92,14 @@ export async function txExists(txHash: Hex, chainId: number): Promise<boolean> {
 // tx leaves state untouched, so the replay reverts identically) and decodes the
 // Error(string) reason when the fixture produced one.
 export async function revertReasonOf(txHash: Hex, chainId: number): Promise<string | null> {
-  const url = chainTarget(chainId).rpcUrl;
-  const tx = await rpcRequest<{
+  const tx = await rpcOn<{
     from: Hex;
     to: Hex | null;
     input: Hex;
     value: Hex;
     gas: Hex;
     blockNumber: Hex | null;
-  } | null>(url, chainId, "eth_getTransactionByHash", [txHash]);
+  } | null>(chainId, "eth_getTransactionByHash", [txHash]);
   if (!tx?.to || !tx?.blockNumber) return null;
   try {
     // Replay against the state before the inclusion block: at the post-state the
@@ -112,7 +107,7 @@ export async function revertReasonOf(txHash: Hex, chainId: number): Promise<stri
     // reason. A reverted tx leaves no state changes, so the pre-state reproduces
     // the original revert data.
     const preBlock = `0x${(BigInt(tx.blockNumber) - 1n).toString(16)}`;
-    await rpcRequest<Hex>(url, chainId, "eth_call", [
+    await rpcOn<Hex>(chainId, "eth_call", [
       { from: tx.from, to: tx.to, data: tx.input, value: tx.value, gas: tx.gas },
       preBlock,
     ]);
@@ -134,8 +129,7 @@ export async function revertReasonOf(txHash: Hex, chainId: number): Promise<stri
 }
 
 export async function isReorged(receipt: ReceiptView, chainId: number): Promise<boolean> {
-  const url = chainTarget(chainId).rpcUrl;
-  const block = await rpcRequest<{ hash: Hex; number: Hex } | null>(url, chainId, "eth_getBlockByNumber", [
+  const block = await rpcOn<{ hash: Hex; number: Hex } | null>(chainId, "eth_getBlockByNumber", [
     `0x${receipt.blockNumber.toString(16)}`,
     false,
   ]);

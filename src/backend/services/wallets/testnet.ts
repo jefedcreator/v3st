@@ -1,4 +1,4 @@
-import type { Address, Hex } from "viem";
+import type { Address } from "viem";
 
 import { db } from "@/server/db";
 import { TESTNET_CHAIN_ID } from "@/backend/integrations/onchain-policy";

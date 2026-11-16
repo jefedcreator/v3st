@@ -87,6 +87,12 @@ class HydrexActualSpotAdapter implements SpotAdapter {
     const state = await readPoolOn(chainId, pool);
     const tokenIn = parseAssetKey(input.input.asset).address as Address;
     const tokenOut = parseAssetKey(input.outputAsset).address as Address;
+    // The pool must hold exactly this pair: quoteExactIn checks the input token, and
+    // the output must be the pool's other token, or the swap would revert on chain.
+    const other = tokenIn.toLowerCase() === state.token0.toLowerCase() ? state.token1 : state.token0;
+    if (tokenOut.toLowerCase() !== other.toLowerCase() || tokenOut.toLowerCase() === tokenIn.toLowerCase()) {
+      throw new UnprocessableEntityException("The Hydrex pool does not trade this asset pair", "STOCK_UNAVAILABLE");
+    }
     const { amountOut, priceImpactBps } = quoteExactIn(state, tokenIn, input.input.raw);
     if (priceImpactBps > policy.onchain.maxPriceImpactBps) {
       throw new UnprocessableEntityException(
@@ -204,9 +210,11 @@ async function positionLiquidity(chainId: number, positionManager: Address, toke
   return (value as readonly unknown[])[7] as bigint;
 }
 
+// Token decimals and symbols do not enter the SDK's raw-amount liquidity math, so the
+// pool tokens are described by address only (token0 may be either asset).
 function sdkPool(chainId: number, state: Awaited<ReturnType<typeof readPoolOn>>): InstanceType<typeof Pool> {
-  const token0 = new Token(chainId, state.token0, 6, "tUSDC", "V3ST Test USDC");
-  const token1 = new Token(chainId, state.token1, 18, "tAAPL", "Apple Inc. (test token)");
+  const token0 = new Token(chainId, state.token0, 18, "TOKEN0", "Hydrex pool token0");
+  const token1 = new Token(chainId, state.token1, 18, "TOKEN1", "Hydrex pool token1");
   return new Pool(
     token0,
     token1,
@@ -313,7 +321,6 @@ class HydrexActualStrategyAdapter implements StrategyAdapter {
     const chainId = quote.request.context.chainId;
     const pool = manifestEntry(chainId, "HydrexPoolAAPL");
     const positionManager = manifestEntry(chainId, "HydrexPositionManager");
-    const poolDeployer = manifestEntry(chainId, "HydrexPoolDeployer");
     const ref = await executionAccounts.find(quote.request.userId, chainId);
     if (!ref) {
       throw new UnprocessableEntityException("Execution account missing for Base Sepolia", "WALLET_NOT_READY");
@@ -363,7 +370,9 @@ class HydrexActualStrategyAdapter implements StrategyAdapter {
               {
                 token0: state.token0,
                 token1: state.token1,
-                deployer: poolDeployer,
+                // Base (non-custom) Algebra pool: the custom-deployer slot is zero, as
+                // in the swap and in the SDK's computePoolAddress.
+                deployer: zeroAddress,
                 tickLower,
                 tickUpper,
                 amount0Desired,

@@ -13,7 +13,7 @@ import { ledgerService } from "@/backend/services/ledger";
 import { cashReleased, cashReserved, stockReleased, stockReserved, tradeFilled } from "@/backend/services/ledger/postings";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import { positionService } from "@/backend/services/positions";
-import { settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
+import { testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
 import { referenceUsable } from "@/backend/services/stocks/reference";
 import { stockService } from "@/backend/services/stocks";
@@ -178,16 +178,11 @@ class InvestmentService {
     }
     const network = await db.onchainNetwork.findUniqueOrThrow({ where: { id: stock.networkId } });
     const chainId = network.chainId;
-    const { readManifest, settlementAssetKey } = await import("@/backend/services/onchain/testnet");
-    const { manifestFor } = await import("@/backend/services/onchain/manifests");
+    const { settlementAssetKeyOn } = await import("@/backend/services/onchain/manifests");
     const { contextOn } = await import("@/backend/services/onchain/chains");
     const { executionAccounts } = await import("@/backend/services/wallets/execution-accounts");
     const { HYDREX_ACTUAL_VERSION } = await import("@/backend/services/onchain/providers/hydrex/actual");
-    const { assetKey } = await import("@/backend/services/onchain/types");
-    const settlement =
-      chainId === 31337
-        ? settlementAssetKey(readManifest())
-        : assetKey("basesepolia", chainId, manifestFor(chainId).contracts.TestSettlementToken!.address);
+    const settlement = settlementAssetKeyOn(chainId);
     const slippageBps = input.slippageBps ?? policy.trading.maxSlippageBps;
 
     // Chain 31337 keeps the local candidate loop; on Base Sepolia the only route is
@@ -417,7 +412,20 @@ class InvestmentService {
         );
       }
       const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: stock.networkId! } });
-      const profile = await custodyProfileFor(tx, userId, quote.providerId as StockProviderId);
+      // The recipient is the execution account of the quote's own network: a Base
+      // Sepolia buy must never be paid to the local execution account.
+      let profile: { id: string; address: Address };
+      if (network.chainId === 31337) {
+        profile = await custodyProfileFor(tx, userId, quote.providerId as StockProviderId);
+      } else {
+        const { executionAccounts } = await import("@/backend/services/wallets/execution-accounts");
+        const ref = await executionAccounts.find(userId, network.chainId);
+        if (!ref) throw new UnprocessableEntityException("Execution account missing for this network", "WALLET_NOT_READY");
+        profile = { id: ref.custodyProfileId, address: ref.accountAddress };
+      }
+      if (executionQuote.context.chainId !== network.chainId) {
+        throw new ConflictException("Quote network differs from the stock's network", "QUOTE_CHANGED");
+      }
       const inv = await tx.investment.create({
         data: {
           key,

@@ -83,10 +83,15 @@ export function dueSchedules(at: Date): DueSchedule[] {
     job: { kind: "poll.open_work", subjectId: "global" },
   });
 
-  if (Math.floor(at.getTime() / 1000) % policy.schedule.referenceSyncSeconds === 0) {
+  // Live reference sync every referenceSyncSeconds, only when Base Sepolia is
+  // configured. The worker ticks at irregular instants, so the slot is the
+  // 30-second bucket containing `at` (deduplicated by schedule_runs), not an exact
+  // second that a tick could skip.
+  if (process.env.BASE_SEPOLIA_RPC_URL) {
+    const bucket = Math.floor(at.getTime() / 1000 / policy.schedule.referenceSyncSeconds);
     out.push({
       name: "stocks.reference_sync",
-      slot: `${parts.isoDate}T${pad(parts.hour)}:${pad(parts.minute)}:${pad(at.getUTCSeconds())}`,
+      slot: `bucket-${bucket}`,
       job: { kind: "stocks.reference_sync", subjectId: "global" },
     });
   }

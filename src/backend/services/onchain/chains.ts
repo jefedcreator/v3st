@@ -36,12 +36,30 @@ export function chainTarget(chainId: number): ChainTarget {
   throw new OnchainPolicyError(`Chain ${chainId} has no RPC target policy`);
 }
 
+// The first Anvil/Hardhat development keys (public, derived from the "test test …
+// junk" mnemonic).
+const ANVIL_DEV_KEYS = new Set([
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+]);
+
 export function relayerOn(chainId: number): PrivateKeyAccount {
   if (chainId === TESTNET_CHAIN_ID) return relayerAccount();
   if (chainId === BASE_SEPOLIA_CHAIN_ID) {
     const key = process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY;
     if (!key) {
       throw new OnchainPolicyError("BASE_SEPOLIA_RELAYER_PRIVATE_KEY is not configured");
+    }
+    if (!/^0x[0-9a-fA-F]{64}$/.test(key)) {
+      throw new OnchainPolicyError("BASE_SEPOLIA_RELAYER_PRIVATE_KEY must be 0x followed by 64 hex characters");
+    }
+    // The public-testnet relayer is never the local test key (and never a well-known
+    // Anvil development key, which anyone can drain on a public network).
+    const normalized = key.toLowerCase();
+    const localKey = process.env.TESTNET_SIGNER_PRIVATE_KEY?.toLowerCase();
+    if ((localKey && normalized === localKey) || ANVIL_DEV_KEYS.has(normalized)) {
+      throw new OnchainPolicyError("BASE_SEPOLIA_RELAYER_PRIVATE_KEY must be a fresh testnet-only key, not the local test key");
     }
     return privateKeyToAccount(key as Hex);
   }
@@ -72,6 +90,16 @@ async function ensureChainVerified(url: string, chainId: number): Promise<void> 
     throw new OnchainPolicyError(`RPC at ${url} reports chain ${reported}, expected ${chainId}`);
   }
   verifiedChains.add(chainId);
+}
+
+// Raw JSON-RPC on a network's own endpoint, with the node's chain ID verified first
+// (non-local targets). Every chain-aware caller goes through this or the *On clients,
+// so a Base Sepolia operation can never read a nonce, receipt or gas price from the
+// local node, or the reverse.
+export async function rpcOn<T = unknown>(chainId: number, method: string, params: unknown[] = []): Promise<T> {
+  const target = chainTarget(chainId);
+  await ensureChainVerified(target.rpcUrl, chainId);
+  return (await rpcVia(target.rpcUrl, chainId, method, params)) as T;
 }
 
 export function chainObject(chainId: number) {

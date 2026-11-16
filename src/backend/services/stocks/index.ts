@@ -2,7 +2,7 @@ import type { Prisma, Stock } from "@/server/prisma";
 import { db } from "@/server/db";
 import type { StockDto } from "@/types/dto";
 import { fetchStocksPage } from "@/backend/services/stocks/base-stocks-client";
-import { stockReference, type ReferenceStock } from "@/backend/services/stocks/reference";
+import { standInFor, stockReference, type ReferenceStock } from "@/backend/services/stocks/reference";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 import { BadRequestException, NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 import { formatMinor } from "@/utils/money";
@@ -31,6 +31,7 @@ function toDto(stock: Stock): StockDto {
     reference_basis: stock.referenceBasis,
     reference_as_of: stock.referenceAsOf?.toISOString() ?? null,
     provenance: stock.provenance,
+    stand_in_for: standInFor(stock),
     tradable: stock.enabled && !stock.paused && !stock.delisted && stock.assetKey !== null,
   };
 }

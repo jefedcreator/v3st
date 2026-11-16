@@ -1,5 +1,5 @@
 import { hydrexPositionManagerABI } from "@hydrexfi/hydrex-sdk";
-import { encodeAbiParameters, encodeEventTopics, type Address, type Hex, type Log } from "viem";
+import { encodeAbiParameters, encodeEventTopics, type Address, type Log } from "viem";
 import { describe, expect, it } from "vitest";
 
 import { parseHydrexFill } from "@/backend/services/onchain/providers/hydrex/events";

@@ -253,6 +253,13 @@ describe("hydrex actual spot adapter", () => {
     await expect(hydrexActualSpot.quote(buyRequest({ chainId: 31337 }))).rejects.toThrow();
   });
 
+  it("refuses an output asset that is not the pool's other token", async () => {
+    const request = buyRequest();
+    request.outputAsset = `basesepolia:84532:${"0x00000000000000000000000000000000000000ee"}`;
+    await expect(hydrexActualSpot.quote(request)).rejects.toThrow(/asset pair/i);
+    await expect(hydrexActualSpot.quote({ ...buyRequest(), outputAsset: buyRequest().input.asset })).rejects.toThrow(/asset pair/i);
+  });
+
   it("refuses when price impact exceeds policy", async () => {
     await expect(hydrexActualSpot.quote(buyRequest({ inputRaw: 10n ** 12n }))).rejects.toThrow(/price impact/i);
   });
