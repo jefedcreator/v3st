@@ -6,6 +6,7 @@ import { type z } from "zod";
 import { logRequest, reportError } from "@/backend/observability";
 import { env } from "@/env";
 import { authService } from "@/backend/services/auth";
+import { customerErrorFor, customerFieldMessage, type CustomerErrorCode } from "@/backend/services/app/copy";
 import { SESSION_COOKIE_NAME } from "@/server/auth/constants";
 import type { ApiErrorResponse, ErrorCode } from "@/types";
 import { redact } from "@/utils";
@@ -24,6 +25,7 @@ import type {
   MiddlewareResponse,
   PathParameters,
   QueryParameters,
+  WithMiddlewareOptions,
 } from "./types";
 
 const DEFAULT_MAX_BODY_BYTES = 65_536;
@@ -33,10 +35,7 @@ type Handler<B, P, Q> = (
   context: { params: P | undefined },
 ) => Promise<Response>;
 
-type WithMiddlewareOptions = {
-  bodyMode?: "json" | "raw" | "none";
-  maxBodyBytes?: number;
-};
+type Audience = "internal" | "customer";
 
 function statusToCode(status: number): ErrorCode {
   if (status === 400) return "BAD_REQUEST";
@@ -54,7 +53,20 @@ function errorJson(
   message: string,
   code: ErrorCode,
   requestId: string,
+  audience: Audience = "internal",
+  field?: string,
 ): NextResponse {
+  if (audience === "customer") {
+    const copy: { code: CustomerErrorCode; message: string } =
+      field !== undefined
+        ? { code: "CHECK_DETAILS", message: customerFieldMessage(field) }
+        : customerErrorFor(code);
+    const body = { status, message: copy.message, code: copy.code, data: null };
+    return NextResponse.json(body, {
+      status,
+      headers: { "X-Request-Id": requestId },
+    });
+  }
   const body: ApiErrorResponse = { status, message, code, data: null };
   return NextResponse.json(body, {
     status,
@@ -69,6 +81,7 @@ export const withMiddleware = <B = null, P = null, Q = null>(
 ) => {
   const bodyMode = options?.bodyMode ?? "json";
   const maxBodyBytes = options?.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+  const audience: Audience = options?.audience ?? "internal";
 
   const executeRequest = async (
     req: unknown,
@@ -91,7 +104,7 @@ export const withMiddleware = <B = null, P = null, Q = null>(
       const authenticateFirst = middlewares[0] === authMiddleware;
       if (authenticateFirst) {
         const result = await authMiddleware(request);
-        if (!result.next) return errorJson(result.statusCode, result.message, result.code ?? statusToCode(result.statusCode), request.requestId);
+        if (!result.next) return errorJson(result.statusCode, result.message, result.code ?? statusToCode(result.statusCode), request.requestId, audience, result.field);
       }
 
       if (
@@ -133,6 +146,8 @@ export const withMiddleware = <B = null, P = null, Q = null>(
             result.message,
             result.code ?? statusToCode(result.statusCode),
             request.requestId,
+            audience,
+            result.field,
           );
         }
       }
@@ -149,7 +164,7 @@ export const withMiddleware = <B = null, P = null, Q = null>(
             url: request.url,
           });
         }
-        return errorJson(error.statusCode, error.message, error.code, request.requestId);
+        return errorJson(error.statusCode, error.message, error.code, request.requestId, audience);
       }
       reportError(error, {
         requestId: request.requestId,
@@ -159,7 +174,7 @@ export const withMiddleware = <B = null, P = null, Q = null>(
       const internal = new InternalServerErrorException(
         error instanceof Error ? error.message : String(error),
       );
-      return errorJson(internal.statusCode, internal.message, internal.code, request.requestId);
+      return errorJson(internal.statusCode, internal.message, internal.code, request.requestId, audience);
     }
   };
 
@@ -193,6 +208,7 @@ export const bodyValidatorMiddleware =
         statusCode: 422,
         next: false,
         code: "VALIDATION_FAILED",
+        field: path || undefined,
       };
     }
     request.validatedData = result.data;
@@ -213,6 +229,7 @@ export const queryValidatorMiddleware =
         statusCode: 422,
         next: false,
         code: "VALIDATION_FAILED",
+        field: path || undefined,
       };
     }
     request.query = result.data;
@@ -233,6 +250,7 @@ export const pathParamValidatorMiddleware =
         statusCode: 422,
         next: false,
         code: "VALIDATION_FAILED",
+        field: path || undefined,
       };
     }
     request.params = result.data;
@@ -355,4 +373,5 @@ export type {
   MiddlewareResponse,
   PathParameters,
   QueryParameters,
+  WithMiddlewareOptions,
 };

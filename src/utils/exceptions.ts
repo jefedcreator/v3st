@@ -61,6 +61,12 @@ export class ServiceUnavailableException extends HttpException {
   }
 }
 
+export class LockedException extends HttpException {
+  constructor(message = "Locked", code: ErrorCode = "PIN_LOCKED") {
+    super(message, 423, code);
+  }
+}
+
 export class InternalServerErrorException extends HttpException {
   constructor(detail?: string) {
     super("Internal server error", 500, "INTERNAL");

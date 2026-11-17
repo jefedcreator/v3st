@@ -33,6 +33,13 @@ export type MiddlewareResponse = {
   statusCode: number;
   next: boolean;
   code?: ErrorCode;
+  field?: string;
+};
+
+export type WithMiddlewareOptions = {
+  bodyMode?: "json" | "raw" | "none";
+  maxBodyBytes?: number;
+  audience?: "internal" | "customer";
 };
 
 export type MiddlewareFunction<B = null, P = null, Q = null> = (
