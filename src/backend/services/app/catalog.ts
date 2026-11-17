@@ -61,7 +61,7 @@ function profileOf(stock: Stock) {
 }
 
 // Share price (micro-USD per share) recorded in a snapshot row.
-function sharePriceFromSnapshot(
+export function sharePriceFromSnapshot(
   priceMicroUsd: bigint,
   basis: string,
   multiplierWad: bigint,
