@@ -11,7 +11,6 @@ import { CUSTOMER_DOCUMENTS, INVEST_DOCUMENTS, type DocumentSlug } from "@/backe
 import { appOnboardingService } from "@/backend/services/app/onboarding";
 import { withMiddleware } from "@/backend/middleware";
 import { db } from "@/server/db";
-import { ConflictException } from "@/utils/exceptions";
 
 import { callAppRoute, ORIGIN, signInCustomer } from "../helpers/app";
 import { useTestDatabase } from "../helpers/db";
@@ -212,7 +211,7 @@ describe("customer onboarding, test identities and agreements", () => {
     expect(res.status).toBe(200);
     const items = (res.json as { data: { id: string; name: string; description: string }[] }).data;
     expect(items.map((i) => i.id)).toEqual(["ada_tier2", "tunde_tier1", "rejected"]);
-    expect(items[0]!.name).toBe("ADAEZE OBI");
+    expect(items.map((item) => item.name)).toEqual(["Adaeze Obi", "Babatunde Adeyemi", "Not verified"]);
     expect(items[2]!.name).toBe("Not verified");
   });
 });

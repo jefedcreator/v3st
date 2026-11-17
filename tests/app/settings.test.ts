@@ -11,9 +11,9 @@ import { GET as profileGET, PATCH as profilePATCH } from "@/app/api/v1/app/profi
 import { GET as sessionGET } from "@/app/api/v1/app/session/route";
 import { POST as earnPreviewPOST } from "@/app/api/v1/app/earn/[id]/preview/route";
 import { POST as earnJoinPOST } from "@/app/api/v1/app/earn/[id]/join/route";
-import type { AppAutomationDto } from "@/backend/services/app/automations";
-import type { AppHomeDto } from "@/backend/services/app/home";
-import type { AppProfileDto } from "@/backend/services/app/profile";
+import type { AppAutomationDto } from "@/types/app";
+import type { AppHomeDto } from "@/types/app";
+import type { AppProfileDto } from "@/types/app";
 import { CUSTOMER_DOCUMENTS } from "@/backend/content/documents";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";

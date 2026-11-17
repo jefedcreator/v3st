@@ -2,14 +2,12 @@ import { db } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { sharePriceFromSnapshot } from "@/backend/services/app/catalog";
-import type { AppCashDto } from "@/backend/services/app/cash";
 import { appAutomationsService } from "@/backend/services/app/automations";
 import { appCashService } from "@/backend/services/app/cash";
 import { firstNameOf, formatNaira, toKobo } from "@/backend/services/app/format";
-import type { AppHoldingDto } from "@/backend/services/app/holdings";
 import { appHoldingsService } from "@/backend/services/app/holdings";
 import { appOnboardingService } from "@/backend/services/app/onboarding";
-import { appOrdersService, type AppOrderDto } from "@/backend/services/app/orders";
+import { appOrdersService } from "@/backend/services/app/orders";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { earningsService } from "@/backend/services/earnings";
 import { lagosDayStart, lagosParts, lagosWeek } from "@/backend/services/jobs/schedule";
@@ -18,31 +16,11 @@ import { acct } from "@/backend/services/ledger/accounts";
 import { ratesService } from "@/backend/services/rates";
 import { strategyService } from "@/backend/services/strategies";
 import { stockHistory } from "@/backend/services/stocks/history";
-import { APP_BETA_NOTICE, type AppBetaDto } from "@/types/app";
+import { APP_BETA_NOTICE } from "@/types/app";
 import type { Rate } from "@/utils/money";
+import type { AppActionItemDto, AppHomeDto } from "@/types/app";
 
-export type AppActionItemDto = {
-  kind: "finish_setup" | "finish_transfer" | "choose_earnings" | "add_bank_account" | "renew_automation";
-  title: string;
-  detail: string;
-  link: string;
-};
-
-export type AppHomeDto = {
-  greeting_name: string | null;
-  total_kobo: string | null;
-  total_status: "ok" | "partial" | "unavailable";
-  as_of: string;
-  change_24h_kobo: string | null;
-  cash: AppCashDto;
-  invested_kobo: string | null;
-  earn_kobo: string | null;
-  earnings: { this_week_kobo: string | null; next_payout_on: string; choice: "payout" | "reinvest" | "unset" };
-  holdings: AppHoldingDto[];
-  open_orders: AppOrderDto[];
-  action_items: AppActionItemDto[];
-  beta: AppBetaDto;
-};
+export type { AppActionItemDto, AppHomeDto } from "@/types/app";
 
 // The next Friday in Lagos (the weekly payout day), as YYYY-MM-DD.
 export function nextPayoutDate(at: Date): string {
@@ -145,8 +123,10 @@ class AppHomeService {
 
     const weeks = await earningsService.list(userId, { page: 1, size: 100 });
     const thisWeek = weeks.data.find((w) => w.week === lagosWeek(at));
+    // No week row means nothing was earned yet this week (a known zero); only a
+    // missing rate makes the amount unknown.
     const thisWeekKobo =
-      thisWeek && rate !== null ? toKobo(BigInt(thisWeek.earned_usdc), rate).toString() : null;
+      rate === null ? null : toKobo(BigInt(thisWeek?.earned_usdc ?? "0"), rate).toString();
 
     const openOrderRows = await db.customerOrder.findMany({
       where: {
@@ -221,7 +201,12 @@ class AppHomeService {
       as_of: at.toISOString(),
       change_24h_kobo: change24h === null ? null : change24h.toString(),
       cash,
-      invested_kobo: investedKobo.toString(),
+      // Unknown when no holding could be valued (e.g. rates are down); a partial
+      // sum of the valued holdings otherwise, flagged by total_status.
+      invested_kobo:
+        rate === null || (holdings.length > 0 && holdings.every((h) => h.value_kobo === null))
+          ? null
+          : investedKobo.toString(),
       earn_kobo: earnKobo,
       earnings: {
         this_week_kobo: thisWeekKobo,

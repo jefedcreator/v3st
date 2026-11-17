@@ -12,6 +12,7 @@ import { STOCK_PROFILES } from "@/backend/content/stock-profiles";
 import { eventService } from "@/backend/services/events";
 import { ratesService } from "@/backend/services/rates";
 import { formatNaira, formatShares, sharesMicroOf, toKobo } from "@/backend/services/app/format";
+import { orderSharesRaw } from "@/backend/services/app/orders";
 import { fromDbRaw } from "@/utils/asset-units";
 import type { Rate } from "@/utils/money";
 
@@ -71,8 +72,11 @@ async function loadSubject(tx: Tx, event: UserEvent): Promise<NotificationSubjec
       const order = await tx.customerOrder.findUnique({ where: { id: event.subjectId } });
       if (order?.userId !== event.userId) return null;
       const stock = await tx.stock.findUnique({ where: { id: order.stockId } });
-      const sharesMicro =
-        order.quantityRaw === null ? null : sharesMicroOf(fromDbRaw(order.quantityRaw), stock?.decimals ?? 18);
+      const investment = order.investmentId
+        ? await tx.investment.findUnique({ where: { id: order.investmentId } })
+        : null;
+      const sharesRaw = orderSharesRaw(order, investment);
+      const sharesMicro = sharesRaw === null ? null : sharesMicroOf(sharesRaw, stock?.decimals ?? 18);
       const buy = order.side === "buy";
       return {
         kind: "customer_order",
@@ -270,8 +274,11 @@ class NotificationProjector {
   async run(): Promise<{ processed: number; created: number }> {
     return withTx(
       async (tx) => {
+        // Transaction-scoped: released with this transaction on its own
+        // connection. A session lock taken through the pool would stay held by
+        // whichever pooled connection ran it and silently stop later runs.
         const lockRows = await tx.$queryRaw<Array<{ locked: boolean }>>`
-          SELECT pg_try_advisory_lock(${PROJECTOR_LOCK}) AS locked
+          SELECT pg_try_advisory_xact_lock(${PROJECTOR_LOCK}) AS locked
         `;
         if (!lockRows[0]?.locked) return { processed: 0, created: 0 };
         const cursorRow = await tx.projectionCursor.findUnique({ where: { name: CURSOR_NAME } });
@@ -282,17 +289,18 @@ class NotificationProjector {
           take: BATCH,
         });
         const pending: { event: UserEvent; content: NotificationContent; dedupeKey: string }[] = [];
+        const batchKeys = new Set<string>();
         for (const event of events) {
           if (event.type === "notification.created") continue;
           const subject = await loadSubject(tx, event);
           if (!subject) continue;
           const content = notificationFor(event, subject);
           if (!content) continue;
-          pending.push({
-            event,
-            content,
-            dedupeKey: `${event.type}:${event.subjectId}:${event.status ?? ""}`,
-          });
+          const dedupeKey = `${event.type}:${event.subjectId}:${event.status ?? ""}`;
+          // The same status can be emitted twice in one batch; notify once.
+          if (batchKeys.has(dedupeKey)) continue;
+          batchKeys.add(dedupeKey);
+          pending.push({ event, content, dedupeKey });
         }
         const existing = await tx.notification.findMany({
           where: { dedupeKey: { in: pending.map((p) => p.dedupeKey) } },

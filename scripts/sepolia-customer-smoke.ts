@@ -16,10 +16,15 @@ import { walletService } from "../src/backend/services/wallets";
 // Privy, funds cash, places one stock buy and prints the final order DTO after
 // a customer-vocabulary leak check. Usage:
 //   SEPOLIA_LIVE=1 APP_CUSTOMER_CHAIN=basesepolia yarn sepolia:customer-smoke
+// with the worker (`yarn worker`) running against the same database, since the
+// transfer and the order are progressed by background jobs.
 const EMAIL = "smoke@v3st.test";
 const PIN = "1357";
 const DEPOSIT_KOBO = 2_000_000n; // ₦20,000
 const BUY_KOBO = 1_000_000n; // ₦10,000
+// The simulated/sandbox resolver returns the test identity's verified name for
+// this account number.
+const SMOKE_ACCOUNT_NUMBER = "0123456789";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -49,6 +54,18 @@ async function main(): Promise<void> {
     INVEST_DOCUMENTS.map((slug) => ({ slug, version: CUSTOMER_DOCUMENTS[slug].version })),
   );
   console.log("identity verified, PIN set, documents accepted");
+
+  // A bank transfer comes from the customer's own account, so a name-matched
+  // bank account is needed before adding money.
+  const banks = await appCashService.banks();
+  const bank = banks[0];
+  if (!bank) throw new Error("no banks available from the ramp provider");
+  const account = await appCashService.setBankAccount(user.id, {
+    bankCode: bank.code,
+    accountNumber: SMOKE_ACCOUNT_NUMBER,
+    pin: PIN,
+  });
+  console.log(`bank account added: ${account.bank_name} ••${account.account_ending}`);
 
   const { dto: deposit } = await appCashService.addMoney(
     user.id,

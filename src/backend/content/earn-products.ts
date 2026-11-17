@@ -1,7 +1,4 @@
-import { db } from "@/server/db";
-import { chainIdForLedgerChain, customerChainId } from "@/backend/services/app/network";
-import { STOCK_PROFILES } from "@/backend/content/stock-profiles";
-import { parseAssetKey } from "@/backend/services/onchain/types";
+import { policy } from "@/backend/config/policy";
 
 // Plain-language copy for an Earn product; {s} is the stock's profile name.
 export function earnProductCopy(stockName: string): {
@@ -35,35 +32,4 @@ export const EARN_LIMIT_LINES = [
   "Payouts of ₦2,000 or more go out every Friday. Smaller amounts roll over.",
 ];
 
-export const EARN_MINIMUM_KOBO = 500_000n;
-
-// The customer-network Earn product for a catalog stock, if one exists.
-export async function productIdForStock(stockId: string): Promise<string | null> {
-  const stock = await db.stock.findUnique({ where: { id: stockId } });
-  if (
-    !stock ||
-    !stock.enabled ||
-    stock.delisted ||
-    !stock.displayTicker ||
-    !(stock.displayTicker in STOCK_PROFILES) ||
-    chainIdForLedgerChain(stock.chain) !== customerChainId()
-  ) {
-    return null;
-  }
-  const strategies = await db.strategy.findMany({
-    where: { enabled: true, experimental: false, permanentLock: false },
-  });
-  for (const strategy of strategies) {
-    const provenance = strategy.provenance as { stockId?: string; chainId?: number } | null;
-    if (provenance?.stockId !== stockId) continue;
-    let chainId = provenance.chainId;
-    if (chainId === undefined) {
-      const firstAsset = (strategy.inputAssets as string[])[0];
-      if (!firstAsset) continue;
-      chainId = parseAssetKey(firstAsset).chainId;
-    }
-    if (chainId !== customerChainId()) continue;
-    return strategy.id;
-  }
-  return null;
-}
+export const EARN_MINIMUM_KOBO = policy.app.earn.minKobo;

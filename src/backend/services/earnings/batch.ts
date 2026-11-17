@@ -170,6 +170,22 @@ class EarningsBatchService {
             ) {
               continue;
             }
+            // One customer's reinvest that can't run this week (stale price,
+            // paused stock, a consent cap) leaves their earnings for the next
+            // batch; it never stops everyone else's payouts.
+            if (error instanceof HttpException) {
+              if (
+                error.code === "TRADING_PAUSED" ||
+                error.code === "REFERENCE_STALE" ||
+                error.code === "PRICE_OUT_OF_RANGE" ||
+                error.code === "STOCK_UNAVAILABLE"
+              ) {
+                result.skipped.paused += 1;
+              } else {
+                result.skipped.limit += 1;
+              }
+              continue;
+            }
             throw error;
           }
           continue;

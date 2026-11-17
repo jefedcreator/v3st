@@ -9,6 +9,7 @@ import { stockReference } from "../src/backend/services/stocks/reference";
 import { stockService } from "../src/backend/services/stocks";
 import { treasuryService } from "../src/backend/services/treasury";
 import { walletService } from "../src/backend/services/wallets";
+import type { Chain } from "../src/backend/services/wallets/chains";
 import { db } from "../src/server/db";
 import { sha256Hex } from "../src/utils";
 
@@ -21,7 +22,7 @@ async function main(): Promise<void> {
   await walletService.ensureTreasuryWallets();
   const sepoliaManifestFile = path.join(process.cwd(), ".testnet", "base-sepolia", "manifest.json");
   const opening: {
-    treasuryMicroUsdc: Partial<Record<import("../src/backend/services/wallets/chains").Chain, bigint>>;
+    treasuryMicroUsdc: Partial<Record<Chain, bigint>>;
     floatMicroUsd: bigint;
   } = {
     treasuryMicroUsdc: { base: 100_000_000_000n, solana: 0n },
@@ -74,6 +75,8 @@ async function main(): Promise<void> {
         await stockService.upsertCatalog([
           {
             symbol,
+            // The customer catalog lists only rows whose displayTicker has a profile.
+            displayTicker: symbol,
             assetKey: assetKeyValue,
             name,
             chain: "testnet",
@@ -177,10 +180,10 @@ async function main(): Promise<void> {
         },
       });
       await db.strategy.upsert({
-        where: { key: `hydrex-t${ticker.toLowerCase()}-usdc-basesepolia-v2` },
+        where: { key: `hydrex-${ticker.toLowerCase()}-usdc-basesepolia-v2` },
         create: {
           providerId: "hydrex",
-          key: `hydrex-t${ticker.toLowerCase()}-usdc-basesepolia-v2`,
+          key: `hydrex-${ticker.toLowerCase()}-usdc-basesepolia-v2`,
           name: `Hydrex t${ticker}/USDC liquidity (Base Sepolia)`,
           version: "2.0.0",
           disclosureVersion: "1.0.0",

@@ -2,16 +2,9 @@ import type { Prisma } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
 import { UnprocessableEntityException } from "@/utils/exceptions";
+import type { AppNotificationDto } from "@/types/app";
 
-export type AppNotificationDto = {
-  id: string;
-  kind: string;
-  title: string;
-  body: string;
-  link: string;
-  read: boolean;
-  created_at: string;
-};
+export type { AppNotificationDto } from "@/types/app";
 
 type Cursor = { at: Date; id: string };
 

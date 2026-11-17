@@ -1,5 +1,5 @@
 import type { ChainTransfer, RampOrder, TradeOrder } from "@/server/prisma";
-import { db, withTx, type Tx } from "@/server/db";
+import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { alertService } from "@/backend/services/alerts";
@@ -490,20 +490,34 @@ class DepositService {
         );
         // A waiting bank-transfer order holds the landed cash immediately in the
         // same funding transaction, then wakes its own progress job.
-        const linkedOrder = await tx.customerOrder.findUnique({
+        // The order row is locked so a concurrent cancel either runs first (the
+        // hold is then marked released and the cash stays spendable) or sees the
+        // hold and its budget and releases exactly that amount.
+        const link = await tx.customerOrder.findUnique({
           where: { depositOrderId: order.id },
+          select: { id: true },
         });
+        if (link) await lockRows(tx, "customer_orders", [link.id]);
+        const linkedOrder = link
+          ? await tx.customerOrder.findUnique({ where: { id: link.id } })
+          : null;
         if (linkedOrder?.holdKey && !linkedOrder.holdReleasedAt) {
+          const credited = fromDbRaw(t.amount);
           await ledgerService.post(
             tx,
             cashReserved({
               key: linkedOrder.holdKey,
               userId: order.userId,
               chain: t.chain,
-              amount: fromDbRaw(t.amount),
+              amount: credited,
               from: "cash",
             }),
           );
+          // The hold and the budget it covers are recorded together.
+          await tx.customerOrder.update({
+            where: { id: linkedOrder.id },
+            data: { budgetMicroUsd: credited },
+          });
           await jobService.enqueue(tx, { kind: "orders.progress", subjectId: linkedOrder.id });
         }
         if (order.stockId) {

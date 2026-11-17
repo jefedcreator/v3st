@@ -1,11 +1,6 @@
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
-import {
-  appCatalogService,
-  type AppPriceStatus,
-  type AppStockRefDto,
-  type AppTrading,
-} from "@/backend/services/app/catalog";
+import { appCatalogService } from "@/backend/services/app/catalog";
 import { displayValue } from "@/backend/services/app/valuation";
 import { customerChain } from "@/backend/services/app/network";
 import { sharesMicroOf } from "@/backend/services/app/format";
@@ -15,18 +10,9 @@ import { positionService } from "@/backend/services/positions";
 import { ratesService } from "@/backend/services/rates";
 import { referenceUsable } from "@/backend/services/stocks/reference";
 import type { Rate } from "@/utils/money";
+import type { AppHoldingDto } from "@/types/app";
 
-export type AppHoldingDto = AppStockRefDto & {
-  shares_micro: string;
-  on_hold_shares_micro: string;
-  value_kobo: string | null;
-  price_status: AppPriceStatus;
-  price_as_of: string | null;
-  cost_kobo: string | null;
-  return_kobo: string | null;
-  return_bps: number | null;
-  trading: AppTrading;
-};
+export type { AppHoldingDto } from "@/types/app";
 
 class AppHoldingsService {
   async list(userId: string): Promise<AppHoldingDto[]> {

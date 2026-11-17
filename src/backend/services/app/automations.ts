@@ -10,18 +10,13 @@ import { authorizationService } from "@/backend/services/authorizations";
 import { securityService } from "@/backend/services/security";
 import { fromDbRaw } from "@/utils/asset-units";
 import { NotFoundException } from "@/utils/exceptions";
+import type { AppAutomationDto } from "@/types/app";
 
-export type AppAutomationDto = {
-  id: string;
-  title: string;
-  detail: string;
-  active: boolean;
-  expires_at: string;
-  needs_renewal: boolean;
-};
+export type { AppAutomationDto } from "@/types/app";
 
-const RENEWAL_WINDOW_MS = 5 * 86_400_000;
-const RENEW_TTL_MS = 30 * 86_400_000;
+const DAY_MS = 86_400_000;
+const RENEWAL_WINDOW_MS = policy.app.earn.automation.renewReminderDays * DAY_MS;
+const RENEW_TTL_MS = policy.app.earn.automation.expiryDays * DAY_MS;
 
 function isOrderConsent(row: InvestmentAuthorization): boolean {
   return (
@@ -103,8 +98,8 @@ class AppAutomationsService {
         actions: row.actions as ("claim" | "reward_conversion" | "reinvest" | "withdrawal_sale")[],
         max_action_ngn: fromDbRaw(row.maxActionNgn ?? "0"),
         max_total_ngn: fromDbRaw(row.maxTotalNgn ?? "0"),
-        max_fee_bps: row.maxFeeBps ?? 100,
-        max_slippage_bps: row.maxSlippageBps ?? 100,
+        max_fee_bps: row.maxFeeBps ?? policy.app.orders.consent.maxFeeBps,
+        max_slippage_bps: row.maxSlippageBps ?? policy.app.orders.consent.maxSlippageBps,
         expires_at: new Date(now().getTime() + RENEW_TTL_MS).toISOString(),
         policy_version: policy.app.policyVersion,
         disclosure_version: row.disclosureVersion ?? CUSTOMER_DOCUMENTS.risks.version,

@@ -7,7 +7,7 @@ import { POST as betaCompletePOST } from "@/app/api/v1/app/beta/deposits/[id]/co
 import { POST as depositsPOST } from "@/app/api/v1/app/cash/deposits/route";
 import { GET as cashGET } from "@/app/api/v1/app/cash/route";
 import { POST as onchainScenariosPOST } from "@/app/api/v1/beta/onchain-scenarios/route";
-import type { AppOrderDto, AppOrderPreviewDto } from "@/backend/services/app/orders";
+import type { AppOrderDto, AppOrderPreviewDto } from "@/types/app";
 import { customerOrderService } from "@/backend/services/customer-orders";
 import { now } from "@/backend/clock";
 import { ledgerService } from "@/backend/services/ledger";
@@ -281,6 +281,35 @@ describe("customer orders: preview and immediate buy or sell", () => {
     expect(await db.investment.count({ where: { key: `${orderKey}:investment` } })).toBe(1);
     const reloaded = await db.customerOrder.findUniqueOrThrow({ where: { id: order.id } });
     expect(reloaded.investmentId).not.toBeNull();
+  });
+
+  it("ends an order whose confirm is refused instead of leaving it processing", async () => {
+    const { cookie, userId, stock } = await setupWorld("refused@v3st.test");
+    await addMoneyAndComplete(cookie, "3000000", "ord-dep-refused-1");
+    // Two previews for most of the cash; the second one can't be paid for once
+    // the first is placed.
+    const first = dataOf<AppOrderPreviewDto>(
+      (await previewOrder(cookie, stock.id, { side: "buy", amount_kobo: "2000000" })).json,
+    );
+    const second = dataOf<AppOrderPreviewDto>(
+      (await previewOrder(cookie, stock.id, { side: "buy", amount_kobo: "2000000" })).json,
+    );
+    expect((await placeWith(cookie, first.preview_id, "ord-key-refused-1", "1357")).status).toBe(201);
+    const refused = await placeWith(cookie, second.preview_id, "ord-key-refused-2", "1357");
+    expect(refused.status).toBe(409);
+    expect((refused.json as { code: string }).code).toBe("NOT_ENOUGH_CASH");
+
+    const row = await db.customerOrder.findUniqueOrThrow({
+      where: { key: `app-order:${userId}:ord-key-refused-2` },
+    });
+    expect(row.status).toBe("failed");
+    expect(row.investmentId).toBeNull();
+    // A retry with the same key shows the ended order, not a phantom "processing" one.
+    const replay = await placeWith(cookie, second.preview_id, "ord-key-refused-2", "1357");
+    expect(replay.status).toBe(200);
+    const view = dataOf<AppOrderDto>(replay.json);
+    expect(view.status).toBe("failed");
+    expect(view.title).toBe("Order didn't go through");
   });
 
   it("explains a failed buy without internal words", async () => {

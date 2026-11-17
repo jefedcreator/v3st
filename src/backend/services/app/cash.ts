@@ -17,64 +17,9 @@ import type { AppProgress } from "@/types/app";
 import { sha256Hex } from "@/utils";
 import { ConflictException, InternalServerErrorException } from "@/utils/exceptions";
 import type { Rate } from "@/utils/money";
+import type { AppCashDto, AppPayToDto, AppDepositDto, AppBankDto, AppBankAccountDto, AppWithdrawalPreviewDto, AppWithdrawalDto } from "@/types/app";
 
-export type AppCashDto = {
-  available_kobo: string | null;
-  on_hold_kobo: string | null;
-  incoming_kobo: string | null;
-  as_of: string;
-};
-
-export type AppPayToDto = {
-  bank_name: string;
-  account_number: string;
-  account_name: string;
-  reference: string | null;
-  amount_kobo: string;
-  expires_at: string | null;
-};
-
-export type AppDepositDto = {
-  id: string;
-  reference: string;
-  status: AppProgress;
-  title: string;
-  amount_kobo: string;
-  fee_kobo: string | null;
-  you_get_kobo: string | null;
-  pay_to: AppPayToDto | null;
-  created_at: string;
-};
-
-export type AppBankDto = { code: string; name: string };
-
-export type AppBankAccountDto = {
-  bank_name: string;
-  account_ending: string;
-  account_name: string;
-};
-
-export type AppWithdrawalPreviewDto = {
-  preview_id: string;
-  amount_kobo: string;
-  fee_kobo: string;
-  you_receive_kobo: string;
-  to: AppBankAccountDto;
-  expires_at: string;
-};
-
-export type AppWithdrawalDto = {
-  id: string;
-  reference: string;
-  status: AppProgress;
-  title: string;
-  amount_kobo: string;
-  fee_kobo: string;
-  you_receive_kobo: string;
-  to: AppBankAccountDto;
-  bank_reference: string | null;
-  created_at: string;
-};
+export type { AppCashDto, AppPayToDto, AppDepositDto, AppBankDto, AppBankAccountDto, AppWithdrawalPreviewDto, AppWithdrawalDto } from "@/types/app";
 
 export function depositProgress(order: RampOrder): { status: AppProgress; title: string } {
   if (order.holdReason) {

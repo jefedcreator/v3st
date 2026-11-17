@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { POST as previewPOST } from "@/app/api/v1/app/orders/preview/route";
 import { POST as ordersPOST } from "@/app/api/v1/app/orders/route";
@@ -7,9 +7,11 @@ import { POST as betaCompletePOST } from "@/app/api/v1/app/beta/deposits/[id]/co
 import { POST as depositsPOST } from "@/app/api/v1/app/cash/deposits/route";
 import { GET as cashGET } from "@/app/api/v1/app/cash/route";
 import { POST as withdrawalPreviewPOST } from "@/app/api/v1/app/withdrawals/preview/route";
-import type { AppOrderDto, AppOrderPreviewDto } from "@/backend/services/app/orders";
+import type { AppOrderDto, AppOrderPreviewDto } from "@/types/app";
 import { authorizationService } from "@/backend/services/authorizations";
+import { policy } from "@/backend/config/policy";
 import { now } from "@/backend/clock";
+import { customerOrderService } from "@/backend/services/customer-orders";
 import { customerOrderExecutor, withinLimit } from "@/backend/services/customer-orders/executor";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
@@ -304,6 +306,77 @@ describe("customer waiting orders", () => {
     expect(await ledgerService.balance(acct.userStock(userId, stock.id))).toBeGreaterThan(0n);
   });
 
+  it("releases cash that landed for an order cancelled before the executor ran", async () => {
+    const { cookie, userId, handle, stock } = await setupWorld("wait-bank-cancel@v3st.test");
+    await addMoneyAndComplete(cookie, "10000000", "w-dep-bank-cancel-1");
+    const cashBefore = await cashOf(cookie);
+    await touchReference(stock.id);
+    const preview = await previewRaw(cookie, stock.id, {
+      side: "buy",
+      amount_kobo: "2000000",
+      pay_with: "bank_transfer",
+    });
+    const p = dataOf<AppOrderPreviewDto>(preview.json);
+    const order = dataOf<AppOrderDto>((await placeWith(cookie, p.preview_id, "w-key-bank-cancel-1")).json);
+    expect(order.status).toBe("waiting_for_payment");
+    const before = await db.customerOrder.findUniqueOrThrow({ where: { id: order.id } });
+    expect(before.budgetMicroUsd).toBeNull();
+
+    // The transfer lands while the executor is held back: the funding
+    // transaction alone must leave the hold and its budget on the order.
+    const progress = vi.spyOn(customerOrderExecutor, "progress").mockResolvedValue();
+    try {
+      const complete = await callAppRoute(betaCompletePOST, {
+        method: "POST",
+        url: `${ORIGIN}/api/v1/app/beta/deposits/${before.depositOrderId!}/complete`,
+        cookie,
+        params: { id: before.depositOrderId! },
+      });
+      expect(complete.status).toBe(200);
+      for (let i = 0; i < 12; i += 1) {
+        await drainJobs();
+        await handle.mine(3);
+      }
+    } finally {
+      progress.mockRestore();
+    }
+    const landed = await db.customerOrder.findUniqueOrThrow({ where: { id: order.id } });
+    expect(landed.status).toBe("waiting_for_payment");
+    const hold = await db.ledgerJournal.findUniqueOrThrow({ where: { key: `${landed.holdKey}:reserve` } });
+    expect(hold).toBeTruthy();
+    expect(landed.budgetMicroUsd).not.toBeNull();
+    expect(BigInt((await cashOf(cookie)).on_hold_kobo!)).toBeGreaterThan(0n);
+
+    const cancelled = await callAppRoute(orderDELETE, {
+      method: "DELETE",
+      url: `${ORIGIN}/api/v1/app/orders/${order.id}`,
+      cookie,
+      params: { id: order.id },
+    });
+    expect(dataOf<AppOrderDto>(cancelled.json).status).toBe("cancelled");
+    const after = await cashOf(cookie);
+    expect(BigInt(after.on_hold_kobo!)).toBe(0n);
+    expect(BigInt(after.available_kobo!)).toBeGreaterThan(BigInt(cashBefore.available_kobo!));
+    expect(await db.ledgerJournal.count({ where: { key: `${landed.holdKey}:release` } })).toBe(1);
+    await customerOrderExecutor.sweep();
+    await drainJobs();
+    expect(await db.ledgerJournal.count({ where: { key: `${landed.holdKey}:release` } })).toBe(1);
+    expect(await ledgerService.balance(acct.userReserved(userId, "testnet"))).toBe(0n);
+  });
+
+  it("refuses a bank-transfer buy the transfer could never cover", async () => {
+    const { cookie, stock } = await setupWorld("wait-bank-limit@v3st.test");
+    await touchReference(stock.id);
+    const tooBig = await previewRaw(cookie, stock.id, {
+      side: "buy",
+      amount_kobo: (policy.deposits.maxKobo + 100n).toString(),
+      pay_with: "bank_transfer",
+    });
+    expect(tooBig.status).toBe(422);
+    expect((tooBig.json as { code: string }).code).toBe("LIMIT_REACHED");
+    expect(await db.customerOrderPreview.count({ where: { stockId: stock.id } })).toBe(0);
+  });
+
   it("cancels a waiting order and releases its cash exactly once", async () => {
     const { cookie, userId, stock } = await setupWorld("wait-cancel@v3st.test");
     await addMoneyAndComplete(cookie, "10000000", "w-dep-cancel-1");
@@ -348,6 +421,36 @@ describe("customer waiting orders", () => {
     expect(
       await db.ledgerJournal.count({ where: { key: `${orderRow.holdKey}:release` } }),
     ).toBe(1);
+  });
+
+  it("puts an interrupted waiting order back to wait with its hold intact", async () => {
+    const { cookie, stock } = await setupWorld("wait-resume@v3st.test");
+    await addMoneyAndComplete(cookie, "10000000", "w-dep-resume-1");
+    await staleReference(stock.id);
+    const p = dataOf<AppOrderPreviewDto>(
+      (await previewRaw(cookie, stock.id, { side: "buy", amount_kobo: "2000000", pay_with: "cash" })).json,
+    );
+    const order = dataOf<AppOrderDto>((await placeWith(cookie, p.preview_id, "w-key-resume-1")).json);
+    expect(order.status).toBe("waiting_for_price");
+    const heldBefore = BigInt((await cashOf(cookie)).on_hold_kobo!);
+    expect(heldBefore).toBeGreaterThan(0n);
+
+    // The process stopped right after moving the order to executing, before any
+    // investment was created. A fresh attempt might still be running: leave it.
+    await db.customerOrder.update({ where: { id: order.id }, data: { status: "executing", updatedAt: now() } });
+    await customerOrderService.resumeNow(order.id);
+    expect((await db.customerOrder.findUniqueOrThrow({ where: { id: order.id } })).status).toBe("executing");
+
+    // Long after: nothing was bought, so the order waits again with its hold.
+    await db.customerOrder.update({
+      where: { id: order.id },
+      data: { updatedAt: new Date(now().getTime() - 600_000) },
+    });
+    await customerOrderService.resumeNow(order.id);
+    const resumed = await db.customerOrder.findUniqueOrThrow({ where: { id: order.id } });
+    expect(resumed.status).toBe("waiting_for_price");
+    expect(resumed.investmentId).toBeNull();
+    expect(BigInt((await cashOf(cookie)).on_hold_kobo!)).toBe(heldBefore);
   });
 
   it("refuses to cancel an order that has started", async () => {

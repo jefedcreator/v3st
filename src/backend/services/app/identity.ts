@@ -1,29 +1,23 @@
-import { db, withTx } from "@/server/db";
-import { BETA_PERSONAS } from "@/backend/services/kyc/personas";
+import { withTx } from "@/server/db";
 import { kycService, type PersonaId } from "@/backend/services/kyc";
 import { jobService } from "@/backend/services/jobs";
 import { appOnboardingService, type AppOnboardingDto } from "./onboarding";
+import type { AppTestIdentityDto } from "@/types/app";
 
-export type AppTestIdentityDto = {
-  id: PersonaId;
-  name: string;
-  description: string;
-};
+export type { AppTestIdentityDto } from "@/types/app";
 
-const TEST_IDENTITY_DESCRIPTIONS: Record<PersonaId, string> = {
-  ada_tier2: "Verified, higher limits",
-  tunde_tier1: "Verified, standard limits",
-  rejected: "Try a failed check",
-};
+// The customer-facing menu (names in display case; the verified names the
+// personas resolve to stay upper-case, as a bank would return them).
+const TEST_IDENTITIES: readonly AppTestIdentityDto[] = [
+  { id: "ada_tier2", name: "Adaeze Obi", description: "Verified, higher limits" },
+  { id: "tunde_tier1", name: "Babatunde Adeyemi", description: "Verified, standard limits" },
+  { id: "rejected", name: "Not verified", description: "Try a failed check" },
+];
 
 class AppIdentityService {
   // The beta's stand-in for BVN verification: a fixed menu of test identities.
   testIdentities(): AppTestIdentityDto[] {
-    return BETA_PERSONAS.map((persona) => ({
-      id: persona.id,
-      name: persona.name ?? "Not verified",
-      description: TEST_IDENTITY_DESCRIPTIONS[persona.id],
-    }));
+    return TEST_IDENTITIES.map((identity) => ({ ...identity }));
   }
 
   async verify(

@@ -78,8 +78,19 @@ describe("customer catalog", () => {
       referenceAsOf: new Date(Date.now() - 3 * 86_400_000),
     });
     const unpriced = await makeCatalogStock({ displayTicker: "TSTB" });
+    // Older than the 7-day display window: unknown, so no number at all.
+    await makeCatalogStock({
+      displayTicker: "AAPL",
+      referencePriceMicroUsd: 2_000_000n,
+      referenceBasis: "token_nav",
+      referenceAsOf: new Date(Date.now() - 8 * 86_400_000),
+    });
     const items = await listStocks(cookie);
     const byTicker = new Map(items.map((i) => [i.ticker, i]));
+    const tooOld = byTicker.get("AAPL")!;
+    expect(tooOld.price_status).toBe("unavailable");
+    expect(tooOld.price_kobo).toBeNull();
+    expect(tooOld.price_usd_micro).toBeNull();
     const delayedItem = byTicker.get("TSTA")!;
     expect(delayedItem.price_status).toBe("delayed");
     expect(delayedItem.price_as_of).toBe(delayed.referenceAsOf!.toISOString());

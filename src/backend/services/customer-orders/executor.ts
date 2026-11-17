@@ -2,9 +2,7 @@ import type { CustomerOrder } from "@/server/prisma";
 import { db, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { toKobo } from "@/backend/services/app/format";
-import { customerChain } from "@/backend/services/app/network";
 import { customerOrderService } from "@/backend/services/customer-orders";
-import { depositService } from "@/backend/services/deposits";
 import { eventService } from "@/backend/services/events";
 import { investmentService } from "@/backend/services/investments";
 import { jobService } from "@/backend/services/jobs";
@@ -29,17 +27,19 @@ const FINAL_STATUSES = ["completed", "failed", "cancelled", "expired"] as const;
 class CustomerOrderExecutor {
   async progress(orderId: string): Promise<void> {
     const initial = await db.customerOrder.findUniqueOrThrow({ where: { id: orderId } });
-    if (initial.status === "waiting_for_payment" && !initial.depositOrderId) {
-      // Recreate the funding deposit with the same key if it is missing.
-      await depositService.create(
-        initial.userId,
-        { ngn_amount: initial.amountKobo },
-        initial.key + ":deposit",
-        {
-          chain: customerChain(),
-          holdFor: { key: initial.holdKey ?? `order-hold:${initial.id}`, orderId: initial.id },
-        },
-      );
+    if (
+      initial.status === "waiting_for_payment" &&
+      !initial.depositOrderId &&
+      initial.expiresAt > now()
+    ) {
+      // Recreate the funding deposit with the same key if it is missing. A final
+      // refusal fails the order inside createFundingDeposit; only a retryable
+      // error is left for the job runner.
+      try {
+        await customerOrderService.createFundingDeposit(initial);
+      } catch (error) {
+        if (!(error instanceof HttpException && error.statusCode < 500)) throw error;
+      }
     }
     const current = await db.customerOrder.findUniqueOrThrow({ where: { id: orderId } });
     if (current.status === "waiting_for_price") {
@@ -66,15 +66,29 @@ class CustomerOrderExecutor {
     };
     switch (order.status) {
       case "waiting_for_payment": {
-        if (!order.depositOrderId) return false;
+        if (!order.depositOrderId) {
+          // No transfer could be opened before the order's lifetime ran out.
+          if (order.expiresAt <= now()) {
+            await revoke();
+            await tx.customerOrder.update({ where: { id: order.id }, data: { status: "expired" } });
+            await emit("expired");
+          }
+          return false;
+        }
         const deposit = await tx.rampOrder.findUnique({ where: { id: order.depositOrderId } });
         if (!deposit) return false;
         if (deposit.status === "settled") {
+          // Move on only once the landed cash is actually held for the order: the
+          // funding transaction posts the hold and records its budget together.
+          const hold = order.holdKey
+            ? await tx.ledgerJournal.findUnique({ where: { key: `${order.holdKey}:reserve` } })
+            : null;
+          if (!hold) return false;
           await tx.customerOrder.update({
             where: { id: order.id },
             data: {
               status: "waiting_for_price",
-              budgetMicroUsd: deposit.usdAmount ?? order.budgetMicroUsd,
+              budgetMicroUsd: order.budgetMicroUsd ?? deposit.usdAmount,
             },
           });
           await emit("waiting_for_price");
@@ -213,15 +227,17 @@ class CustomerOrderExecutor {
           },
         },
       );
-      await withTx(async (tx) => {
-        await tx.customerOrder.update({
-          where: { id: orderId },
-          data: { investmentId: investment.id },
-        });
-      });
+      // The hold was released inside confirm's transaction; linking records it.
+      await customerOrderService.linkInvestment(orderId, investment.id);
     } catch {
-      // The fill could not be confirmed (e.g. the quote expired in between):
-      // the order goes back to waiting and the next sweep re-quotes.
+      // The investment may have committed before the error surfaced: link it.
+      const committed = await db.investment.findUnique({ where: { key: order.key + ":investment" } });
+      if (committed) {
+        await customerOrderService.linkInvestment(orderId, committed.id);
+        return;
+      }
+      // Otherwise the fill could not be confirmed (e.g. the quote expired in
+      // between): the order goes back to waiting and the next sweep re-quotes.
       await withTx(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"customer-order:" + orderId}))`;
         const current = await tx.customerOrder.findUniqueOrThrow({ where: { id: orderId } });

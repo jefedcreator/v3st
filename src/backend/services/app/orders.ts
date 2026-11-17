@@ -3,13 +3,16 @@ import { db } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { CUSTOMER_DOCUMENTS } from "@/backend/content/documents";
-import { appCatalogService, type AppStockRefDto } from "@/backend/services/app/catalog";
+import { appCatalogService } from "@/backend/services/app/catalog";
 import type { AppPayToDto } from "@/backend/services/app/cash";
 import { customerChain } from "@/backend/services/app/network";
 import { customerReference, formatNaira, formatShares, sharesMicroOf, toKobo } from "@/backend/services/app/format";
 import { appOnboardingService } from "@/backend/services/app/onboarding";
 import { customerOrderService, ORDER_TTL_MS, PREVIEW_TTL_MS } from "@/backend/services/customer-orders";
+import { bankAccountService } from "@/backend/services/bank-accounts";
+import { controlsService } from "@/backend/services/controls";
 import { rampRegistry } from "@/backend/services/ramp";
+import { ProviderError } from "@/backend/services/ramp/errors";
 import type { InvestmentQuoteDto } from "@/backend/services/investments";
 import { investmentService } from "@/backend/services/investments";
 import { ledgerService } from "@/backend/services/ledger";
@@ -23,60 +26,30 @@ import {
   tokenPriceMicroUsd,
 } from "@/backend/services/stocks/reference";
 import type { OrderPreviewBody } from "@/backend/validators/app/orders.validator";
-import { fromDbRaw } from "@/utils/asset-units";
+import { fromDbRaw, fromDbRawNullable } from "@/utils/asset-units";
 import { sha256Hex } from "@/utils";
 import {
   ConflictException,
   HttpException,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@/utils/exceptions";
 import { ngnToUsd, type Rate } from "@/utils/money";
+import type { AppOrderPreviewDto, AppOrderStatus, AppOrderDto } from "@/types/app";
 
-export type AppOrderPreviewDto = {
-  preview_id: string;
-  stock: AppStockRefDto;
-  side: "buy" | "sell";
-  pay_with: "cash" | "bank_transfer" | null;
-  executes: "now" | "when_prices_update" | "after_your_transfer";
-  amount_kobo: string;
-  shares_micro: string;
-  price_kobo: string;
-  price_limit_kobo: string | null;
-  fees: { label: string; kobo: string | null; note: string | null }[];
-  you_receive_kobo: string | null;
-  expires_at: string;
-  order_valid_until: string | null;
-  notes: string[];
-};
+export type { AppOrderPreviewDto, AppOrderStatus, AppOrderDto } from "@/types/app";
 
-export type AppOrderStatus =
-  | "waiting_for_payment"
-  | "waiting_for_price"
-  | "processing"
-  | "completed"
-  | "failed"
-  | "cancelled"
-  | "expired";
-
-export type AppOrderDto = {
-  id: string;
-  reference: string;
-  stock: AppStockRefDto;
-  side: "buy" | "sell";
-  status: AppOrderStatus;
-  title: string;
-  detail: string;
-  amount_kobo: string | null;
-  shares_micro: string | null;
-  price_kobo: string | null;
-  pay_to: AppPayToDto | null;
-  can_cancel: boolean;
-  valid_until: string | null;
-  timeline: { label: string; done: boolean; at: string | null }[];
-  created_at: string;
-  completed_at: string | null;
-};
+// The shares an order is about: what actually changed hands once the
+// investment filled (bought shares come out, sold shares go in), otherwise the
+// previewed estimate.
+export function orderSharesRaw(order: CustomerOrder, investment: Investment | null): bigint | null {
+  if (investment && (investment.status === "filled" || investment.status === "partial")) {
+    const filled = order.side === "buy" ? fromDbRawNullable(investment.amountOut) : fromDbRaw(investment.amountIn);
+    if (filled !== null) return filled;
+  }
+  return order.quantityRaw === null ? null : fromDbRaw(order.quantityRaw);
+}
 
 // The customer-facing view of an order's state, shared with the activity feed.
 export function orderView(
@@ -88,8 +61,8 @@ export function orderView(
   const name = appCatalogService.stockRef(stock).name;
   const buy = order.side === "buy";
   const rate: Rate = { kobo: order.rateKobo, microUsd: order.rateMicroUsd };
-  const sharesMicro =
-    order.quantityRaw === null ? null : sharesMicroOf(fromDbRaw(order.quantityRaw), stock.decimals);
+  const sharesRaw = orderSharesRaw(order, investment);
+  const sharesMicro = sharesRaw === null ? null : sharesMicroOf(sharesRaw, stock.decimals);
   const amountText = formatNaira(buy ? order.amountKobo : (order.settledKobo ?? order.amountKobo));
   const sharesText = sharesMicro === null ? "0 shares" : formatShares(sharesMicro);
   const limitText = formatNaira(toKobo(order.limitPriceMicroUsd, rate));
@@ -206,6 +179,18 @@ class AppOrdersService {
       if (payWith === "cash" && cash < needed) {
         throw new ConflictException("Insufficient funds", "INSUFFICIENT_FUNDS");
       }
+      if (payWith === "bank_transfer") {
+        // Placing a bank-transfer buy opens a deposit. Refuse here what that
+        // deposit would refuse, so an order never waits for a transfer that
+        // can't be opened.
+        await controlsService.assertOpen("deposits", "DEPOSITS_PAUSED");
+        if (amountKobo > policy.deposits.maxKobo) {
+          throw new UnprocessableEntityException("Above the bank transfer limit", "LIMIT_EXCEEDED");
+        }
+        if (!(await bankAccountService.getActiveRow(userId))) {
+          throw new ConflictException("Add your bank account first", "ONBOARDING_INCOMPLETE");
+        }
+      }
     } else {
       amountKobo = sellAll ? 0n : input.amount_kobo;
     }
@@ -317,8 +302,16 @@ class AppOrdersService {
       fees = [{ label: "Trading fee", kobo: null, note: "Up to 1%" }];
       if (payWith === "bank_transfer") {
         const provider = await rampRegistry.selectForNewOrder("in");
-        const rampQuote = await provider.quote("in", amountKobo);
-        fees.push({ label: "Bank transfer fee", kobo: rampQuote.feeNgn.toString(), note: null });
+        let feeNgn: bigint;
+        try {
+          feeNgn = (await provider.quote("in", amountKobo)).feeNgn;
+        } catch (error) {
+          if (error instanceof ProviderError) {
+            throw new ServiceUnavailableException("Bank transfer quote unavailable", "RAIL_UNAVAILABLE");
+          }
+          throw error;
+        }
+        fees.push({ label: "Bank transfer fee", kobo: feeNgn.toString(), note: null });
       }
       notes = [
         "If the price moves more than 3% against you before your order goes through, it won't go through and your money stays safe.",
@@ -455,10 +448,10 @@ class AppOrdersService {
       side: order.side,
       ...orderView(order, investment, deposit, stock),
       amount_kobo: order.amountKobo.toString(),
-      shares_micro:
-        order.quantityRaw === null
-          ? null
-          : sharesMicroOf(fromDbRaw(order.quantityRaw), stock.decimals).toString(),
+      shares_micro: (() => {
+        const raw = orderSharesRaw(order, investment);
+        return raw === null ? null : sharesMicroOf(raw, stock.decimals).toString();
+      })(),
       price_kobo: sharePrice !== null && rate !== null ? toKobo(sharePrice, rate).toString() : null,
       pay_to: payTo,
       valid_until: order.expiresAt.toISOString(),

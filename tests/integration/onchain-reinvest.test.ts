@@ -151,6 +151,23 @@ describe("onchain earnings reinvest", () => {
     expect(week?.status).toBe("reinvested");
   });
 
+  it("leaves a reinvest that can't run for next week without stopping the batch", async () => {
+    const { stock, u } = await setupOnchainReinvest();
+    await reinvestConsent(u.id, stock.id);
+    // A stale reference makes the reinvest quote refuse; the batch carries on.
+    await db.stock.update({
+      where: { id: stock.id },
+      data: { referenceAsOf: new Date(now().getTime() - 3_600_000) },
+    });
+
+    const r = await earningsBatchService.runBatch(WEEK, now());
+    expect(r.reinvested).toBe(0);
+    expect(r.skipped.paused).toBe(1);
+    expect(await db.investment.count({ where: { userId: u.id } })).toBe(0);
+    const earning = await db.earning.findFirstOrThrow({ where: { userId: u.id } });
+    expect(earning.reinvestInvestmentId).toBeNull();
+  });
+
   it("skips onchain reinvest without consent", async () => {
     const { u } = await setupOnchainReinvest();
 

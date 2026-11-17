@@ -1,4 +1,4 @@
-import type { OnchainOperation, StrategyPosition } from "@/server/prisma";
+import type { OnchainOperation, Stock, Strategy, StrategyPosition } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
@@ -6,12 +6,11 @@ import {
   EARN_AUTOMATION_COPY,
   EARN_MINIMUM_KOBO,
   earnProductCopy,
-  productIdForStock,
 } from "@/backend/content/earn-products";
 import { CUSTOMER_DOCUMENTS } from "@/backend/content/documents";
-import { appCatalogService, type AppStockRefDto } from "@/backend/services/app/catalog";
+import { appCatalogService } from "@/backend/services/app/catalog";
 import { toKobo, sharesMicroOf } from "@/backend/services/app/format";
-import { customerChainId } from "@/backend/services/app/network";
+import { customerChain, customerChainId } from "@/backend/services/app/network";
 import { appOnboardingService } from "@/backend/services/app/onboarding";
 import { agreementService } from "@/backend/services/agreements";
 import { authorizationService } from "@/backend/services/authorizations";
@@ -27,52 +26,12 @@ import {
   UnprocessableEntityException,
 } from "@/utils/exceptions";
 import { ngnToUsd, type Rate } from "@/utils/money";
+import type { AppEarnPositionDto, AppEarnProductDto, AppEarnPreviewDto, AppEarnWithdrawPreviewDto } from "@/types/app";
 
-export type AppEarnPositionDto = {
-  id: string;
-  status: "processing" | "active" | "withdrawing" | "withdrawn" | "action_needed";
-  added_kobo: string | null;
-  value_kobo: string | null;
-  earned_kobo: string;
-  joined_at: string;
-};
-
-export type AppEarnProductDto = {
-  id: string;
-  stock: AppStockRefDto;
-  title: string;
-  summary: string;
-  how_it_works: string[];
-  risks: string[];
-  minimum_kobo: string;
-  available: boolean;
-  position: AppEarnPositionDto | null;
-  documents: ["earn-risks"];
-};
-
-export type AppEarnPreviewDto = {
-  preview_id: string;
-  product_id: string;
-  you_add_kobo: string;
-  split: { shares_micro: string; cash_kobo: string };
-  fees: { label: string; kobo: string | null; note: string | null }[];
-  expires_at: string;
-  automation: string;
-  risk_document: { slug: "earn-risks"; version: string };
-};
-
-export type AppEarnWithdrawPreviewDto = {
-  preview_id: string;
-  position_id: string;
-  you_get: { shares_micro: string; cash_kobo: string };
-  value_kobo: string | null;
-  expires_at: string;
-};
+export type { AppEarnPositionDto, AppEarnProductDto, AppEarnPreviewDto, AppEarnWithdrawPreviewDto } from "@/types/app";
 
 const AUTOMATION_ACTIONS = ["claim", "reward_conversion"] as const;
-const AUTOMATION_MAX_ACTION_KOBO = 50_000_000n;
-const AUTOMATION_MAX_TOTAL_KOBO = 2_000_000_000n;
-const AUTOMATION_TTL_MS = 30 * 86_400_000;
+const DAY_MS = 86_400_000;
 
 async function payoutRateOrNull(): Promise<Rate | null> {
   try {
@@ -91,30 +50,57 @@ function positionStatus(position: StrategyPosition, op: OnchainOperation | null)
   return "processing";
 }
 
+// The network an Earn strategy runs on: its provenance chain, else the chain of
+// its first input asset.
+function strategyChainId(strategy: Strategy): number | null {
+  const provenance = strategy.provenance as { chainId?: number } | null;
+  if (provenance?.chainId !== undefined) return provenance.chainId;
+  const firstAsset = (strategy.inputAssets as string[])[0];
+  return firstAsset ? parseAssetKey(firstAsset).chainId : null;
+}
+
+function strategyStockId(strategy: Strategy): string | null {
+  const provenance = strategy.provenance as { stockId?: string } | null;
+  return provenance?.stockId ?? null;
+}
+
+// Offered to customers: enabled, never experimental or permanently locked.
+function offerable(strategy: Strategy): boolean {
+  return strategy.enabled && !strategy.experimental && !strategy.permanentLock;
+}
+
 class AppEarnService {
+  // The customer-network Earn product for a catalog stock, if one exists.
   async productIdForStock(stockId: string): Promise<string | null> {
-    return productIdForStock(stockId);
+    const stock = await db.stock.findUnique({ where: { id: stockId } });
+    if (stock?.chain !== customerChain() || !appCatalogService.inCatalog(stock)) {
+      return null;
+    }
+    const strategies = await db.strategy.findMany({
+      where: { enabled: true, experimental: false, permanentLock: false },
+      orderBy: { createdAt: "asc" },
+    });
+    const match = strategies.find(
+      (strategy) =>
+        strategyStockId(strategy) === stockId && strategyChainId(strategy) === customerChainId(),
+    );
+    return match?.id ?? null;
   }
 
-  private async strategyForProduct(id: string) {
+  private async strategyForProduct(id: string): Promise<{ strategy: Strategy; stock: Stock }> {
     const strategy = await db.strategy.findUnique({ where: { id } });
-    if (!strategy || !strategy.enabled || strategy.experimental || strategy.permanentLock) {
+    if (!strategy || !offerable(strategy)) {
       throw new NotFoundException("Earn product not found");
     }
-    const provenance = strategy.provenance as { stockId?: string; chainId?: number } | null;
-    const stockId = provenance?.stockId ?? null;
+    const stockId = strategyStockId(strategy);
     if (!stockId) throw new NotFoundException("Earn product not found");
     const stock = await db.stock.findUnique({ where: { id: stockId } });
     if (!stock || !appCatalogService.inCatalog(stock)) {
       throw new NotFoundException("Earn product not found");
     }
-    let chainId = provenance?.chainId;
-    if (chainId === undefined) {
-      const firstAsset = (strategy.inputAssets as string[])[0];
-      if (!firstAsset) throw new NotFoundException("Earn product not found");
-      chainId = parseAssetKey(firstAsset).chainId;
+    if (strategyChainId(strategy) !== customerChainId()) {
+      throw new NotFoundException("Earn product not found");
     }
-    if (chainId !== customerChainId()) throw new NotFoundException("Earn product not found");
     return { strategy, stock };
   }
 
@@ -134,8 +120,11 @@ class AppEarnService {
     const rate = await payoutRateOrNull();
     const strategy = await db.strategy.findUniqueOrThrow({ where: { id: strategyId } });
     const prov = strategy.provenance as { stockId?: string } | null;
+    // Recognized receipts only: onchain fee earnings for this product's stock.
     const earnings = prov?.stockId
-      ? await db.earning.findMany({ where: { userId, stockId: prov.stockId } })
+      ? await db.earning.findMany({
+          where: { userId, stockId: prov.stockId, receiptId: { not: null } },
+        })
       : [];
     const earnedMicro = earnings.reduce((sum, e) => sum + BigInt(e.amountUsdc), 0n);
     return {
@@ -232,18 +221,21 @@ class AppEarnService {
     input: { previewId: string; pin: string; acceptedRiskVersion: string },
     clientKey: string,
   ): Promise<{ dto: AppEarnPositionDto; created: boolean }> {
-    const opKey = `strat-op:earn:${userId}:${clientKey}`;
-    const existing = await db.onchainOperation.findUnique({ where: { key: opKey } });
+    // Replay first, like orders: the same Idempotency-Key with the same preview
+    // returns the stored position without a PIN check; another preview is refused.
+    const key = `app-earn:${userId}:${clientKey}`;
+    const existing = await db.onchainOperation.findUnique({ where: { key: `strat-op:${key}` } });
     if (existing) {
-      const position = await db.strategyPosition.findFirst({
-        where: { operationId: existing.id },
-        orderBy: { createdAt: "desc" },
-      });
-      if (position) {
-        return { dto: (await this.positionDto(userId, id))!, created: false };
+      if (existing.userId !== userId || existing.quoteId !== input.previewId) {
+        throw new ConflictException(
+          "Idempotency key reused with a different preview",
+          "IDEMPOTENCY_KEY_REUSED",
+        );
       }
+      const replayed = await this.positionDto(userId, id);
+      if (replayed) return { dto: replayed, created: false };
     }
-    const { strategy } = await this.strategyForProduct(id);
+    const { strategy, stock } = await this.strategyForProduct(id);
     if (input.acceptedRiskVersion !== CUSTOMER_DOCUMENTS["earn-risks"].version) {
       throw new ConflictException(
         "The Earn risks document was updated; accept the latest version",
@@ -266,50 +258,55 @@ class AppEarnService {
         quote_kind: "strategy",
         quote_id: quote.id,
         policy_version: policy.app.policyVersion,
-        disclosure_version: CUSTOMER_DOCUMENTS.risks.version,
+        disclosure_version: CUSTOMER_DOCUMENTS["earn-risks"].version,
       },
-      `earn:${userId}:${clientKey}:consent`,
+      `${key}:consent`,
     );
-    const op = await strategyService.confirm(
-      userId,
-      quote.id,
-      consent.dto.id,
-      `earn:${userId}:${clientKey}`,
-    );
-    // Weekly collection automation, unless an active one already exists.
-    const existingAutomation = await db.investmentAuthorization.findFirst({
+    await strategyService.confirm(userId, quote.id, consent.dto.id, key);
+    await this.ensureAutomation(userId, strategy, stock, key);
+    const dto = await this.positionDto(userId, strategy.id);
+    if (!dto) throw new NotFoundException("Position not found");
+    return { dto, created: true };
+  }
+
+  // Weekly fee collection for the product, unless an active automation already
+  // covers it. Keyed by the join that created it, so turning it off and joining
+  // again sets up a fresh one.
+  private async ensureAutomation(
+    userId: string,
+    strategy: Strategy,
+    stock: Stock,
+    joinKey: string,
+  ): Promise<void> {
+    const automation = policy.app.earn.automation;
+    const active = await db.investmentAuthorization.findFirst({
       where: {
         userId,
         kind: "standing",
         revokedAt: null,
         expiresAt: { gt: now() },
         strategyIds: { has: strategy.id },
+        actions: { hasEvery: [...AUTOMATION_ACTIONS] },
       },
     });
-    if (!existingAutomation) {
-      const prov = strategy.provenance as { stockId?: string } | null;
-      await authorizationService.create(
-        userId,
-        {
-          kind: "standing",
-          stock_ids: prov?.stockId ? [prov.stockId] : [],
-          strategy_ids: [strategy.id],
-          actions: [...AUTOMATION_ACTIONS],
-          max_action_ngn: AUTOMATION_MAX_ACTION_KOBO,
-          max_total_ngn: AUTOMATION_MAX_TOTAL_KOBO,
-          max_fee_bps: 100,
-          max_slippage_bps: 100,
-          expires_at: new Date(now().getTime() + AUTOMATION_TTL_MS).toISOString(),
-          policy_version: policy.app.policyVersion,
-          disclosure_version: CUSTOMER_DOCUMENTS["earn-risks"].version,
-        },
-        `earn-automation:${userId}:${strategy.id}`,
-      );
-    }
-    void op;
-    const dto = await this.positionDto(userId, strategy.id);
-    if (!dto) throw new NotFoundException("Position not found");
-    return { dto, created: true };
+    if (active) return;
+    await authorizationService.create(
+      userId,
+      {
+        kind: "standing",
+        stock_ids: [stock.id],
+        strategy_ids: [strategy.id],
+        actions: [...AUTOMATION_ACTIONS],
+        max_action_ngn: automation.perActionCapKobo,
+        max_total_ngn: automation.totalCapKobo,
+        max_fee_bps: policy.app.orders.consent.maxFeeBps,
+        max_slippage_bps: policy.app.orders.consent.maxSlippageBps,
+        expires_at: new Date(now().getTime() + automation.expiryDays * DAY_MS).toISOString(),
+        policy_version: policy.app.policyVersion,
+        disclosure_version: CUSTOMER_DOCUMENTS["earn-risks"].version,
+      },
+      `${joinKey}:automation`,
+    );
   }
 
   async withdrawPreview(userId: string, positionId: string): Promise<AppEarnWithdrawPreviewDto> {
@@ -320,8 +317,8 @@ class AppEarnService {
     const strategy = await db.strategy.findUniqueOrThrow({ where: { id: position.strategyId } });
     const prov = strategy.provenance as { stockId?: string } | null;
     const stock = prov?.stockId ? await db.stock.findUnique({ where: { id: prov.stockId } }) : null;
-    const rate = await payoutRateOrNull();
-    const display = await ratesService.display();
+    // What comes back is valued like any other holding: at the payout rate.
+    const payoutRate = (await ratesService.display()).payoutRate;
     const quote = await strategyService.quote(userId, { positionId, action: "exit" });
     const sharesOut = stock?.assetKey
       ? quote.minimum_outputs.find((o) => o.asset === stock.assetKey)
@@ -333,12 +330,12 @@ class AppEarnService {
       you_get: {
         shares_micro:
           stock && sharesOut ? sharesMicroOf(BigInt(sharesOut.raw), stock.decimals).toString() : "0",
-        cash_kobo: cashOut ? toKobo(BigInt(cashOut.raw), display.depositRate).toString() : "0",
+        cash_kobo: cashOut ? toKobo(BigInt(cashOut.raw), payoutRate).toString() : "0",
       },
       value_kobo:
-        position.valueUsdc === null || rate === null
+        position.valueUsdc === null
           ? null
-          : toKobo(fromDbRaw(position.valueUsdc), rate).toString(),
+          : toKobo(fromDbRaw(position.valueUsdc), payoutRate).toString(),
       expires_at: quote.expires_at,
     };
   }
@@ -349,14 +346,21 @@ class AppEarnService {
     input: { previewId: string; pin: string },
     clientKey: string,
   ): Promise<{ dto: AppEarnPositionDto; created: boolean }> {
-    const opKey = `strat-op:earn-withdraw:${userId}:${clientKey}`;
-    const existing = await db.onchainOperation.findUnique({ where: { key: opKey } });
     const position = await db.strategyPosition.findUnique({ where: { id: positionId } });
     if (position?.userId !== userId) {
       throw new NotFoundException("Position not found");
     }
+    const key = `app-earn-withdraw:${userId}:${clientKey}`;
+    const existing = await db.onchainOperation.findUnique({ where: { key: `strat-op:${key}` } });
     if (existing) {
-      return { dto: (await this.positionDto(userId, position.strategyId))!, created: false };
+      if (existing.userId !== userId || existing.quoteId !== input.previewId) {
+        throw new ConflictException(
+          "Idempotency key reused with a different preview",
+          "IDEMPOTENCY_KEY_REUSED",
+        );
+      }
+      const replayed = await this.positionDto(userId, position.strategyId);
+      if (replayed) return { dto: replayed, created: false };
     }
     await appOnboardingService.assertReady(userId, "earn");
     await securityService.verifyPin(userId, input.pin);
@@ -371,16 +375,11 @@ class AppEarnService {
         quote_kind: "strategy",
         quote_id: quote.id,
         policy_version: policy.app.policyVersion,
-        disclosure_version: CUSTOMER_DOCUMENTS.risks.version,
+        disclosure_version: CUSTOMER_DOCUMENTS["earn-risks"].version,
       },
-      `earn-withdraw:${userId}:${clientKey}:consent`,
+      `${key}:consent`,
     );
-    await strategyService.confirm(
-      userId,
-      quote.id,
-      consent.dto.id,
-      `earn-withdraw:${userId}:${clientKey}`,
-    );
+    await strategyService.confirm(userId, quote.id, consent.dto.id, key);
     const dto = await this.positionDto(userId, position.strategyId);
     if (!dto) throw new NotFoundException("Position not found");
     return { dto, created: true };

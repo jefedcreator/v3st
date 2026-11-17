@@ -18,9 +18,10 @@ import type {
   AppEarnProductDto,
   AppEarnWithdrawPreviewDto,
 } from "@/backend/services/app/earn";
-import type { AppEarningsDto } from "@/backend/services/app/earnings";
+import type { AppEarningsDto } from "@/types/app";
 import { CUSTOMER_DOCUMENTS } from "@/backend/content/documents";
 import { now } from "@/backend/clock";
+import { authorizationService } from "@/backend/services/authorizations";
 import { earningsService } from "@/backend/services/earnings";
 import { lagosWeek } from "@/backend/services/jobs/schedule";
 import { hydrexPoolAbi, settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
@@ -308,7 +309,7 @@ describe("customer Earn products and earnings", () => {
     await settle(handle, stock.id, userId);
 
     const ops = await db.onchainOperation.findMany({
-      where: { key: { startsWith: `strat-op:earn:${userId}:` } },
+      where: { key: { startsWith: `strat-op:app-earn:${userId}:` } },
     });
     expect(ops).toHaveLength(1);
     const standings = await db.investmentAuthorization.findMany({
@@ -337,7 +338,7 @@ describe("customer Earn products and earnings", () => {
     );
     expect(join2.status).toBe(201);
     const opsAfter = await db.onchainOperation.findMany({
-      where: { key: { startsWith: `strat-op:earn:${userId}:` } },
+      where: { key: { startsWith: `strat-op:app-earn:${userId}:` } },
     });
     expect(opsAfter).toHaveLength(2);
     const standingsAfter = await db.investmentAuthorization.findMany({
@@ -425,5 +426,78 @@ describe("customer Earn products and earnings", () => {
     });
     expect(summaryRes.status).toBe(200);
     expect(dataOf<AppEarningsDto>(summaryRes.json).choice).toBe("reinvest");
+  });
+
+  it("re-chooses reinvest and switches to payout without stale consents", async () => {
+    const { cookie, userId, stock } = await setupWorld("earn-pref-again@v3st.test");
+    const choose = (body: Record<string, unknown>) =>
+      callAppRoute(preferencePUT, {
+        method: "PUT",
+        url: `${ORIGIN}/api/v1/app/earnings/preference`,
+        cookie,
+        body: { ...body, pin: "1357" },
+      });
+    const activeReinvest = async () =>
+      (
+        await db.investmentAuthorization.findMany({
+          where: { userId, kind: "standing", revokedAt: null },
+        })
+      ).filter((s) => s.actions.includes("reinvest"));
+
+    expect((await choose({ choice: "reinvest", stock_id: stock.id })).status).toBe(200);
+    // Choosing the same stock again replaces the consent instead of colliding.
+    expect((await choose({ choice: "reinvest", stock_id: stock.id })).status).toBe(200);
+    expect(await activeReinvest()).toHaveLength(1);
+    // Payout ends the reinvest consent.
+    expect((await choose({ choice: "payout" })).status).toBe(200);
+    expect(await activeReinvest()).toHaveLength(0);
+  });
+
+  it("sets weekly collection up again after it was turned off", async () => {
+    const { handle, cookie, userId, stock, strategy } = await setupWorld("earn-rejoin@v3st.test");
+    const first = dataOf<AppEarnPreviewDto>((await preview(cookie, strategy.id, "500000")).json);
+    const joinRes = await join(
+      cookie,
+      strategy.id,
+      { preview_id: first.preview_id, pin: "1357", accepted_risk_version: CURRENT_RISK_VERSION },
+      "earn-rejoin-1",
+    );
+    expect(joinRes.status).toBe(201);
+    await settle(handle, stock.id, userId);
+    const automation = await db.investmentAuthorization.findFirstOrThrow({
+      where: { userId, kind: "standing", revokedAt: null, actions: { has: "claim" } },
+    });
+    await authorizationService.revoke(userId, automation.id);
+
+    const second = dataOf<AppEarnPreviewDto>((await preview(cookie, strategy.id, "500000")).json);
+    const rejoin = await join(
+      cookie,
+      strategy.id,
+      { preview_id: second.preview_id, pin: "1357", accepted_risk_version: CURRENT_RISK_VERSION },
+      "earn-rejoin-2",
+    );
+    expect(rejoin.status).toBe(201);
+    const active = await db.investmentAuthorization.findMany({
+      where: { userId, kind: "standing", revokedAt: null, actions: { has: "claim" } },
+    });
+    expect(active).toHaveLength(1);
+    expect(active[0]!.id).not.toBe(automation.id);
+
+    // A replay of the second join returns the stored position; another preview
+    // under the same key is refused.
+    const replay = await join(
+      cookie,
+      strategy.id,
+      { preview_id: second.preview_id, pin: "9999", accepted_risk_version: CURRENT_RISK_VERSION },
+      "earn-rejoin-2",
+    );
+    expect(replay.status).toBe(200);
+    const reused = await join(
+      cookie,
+      strategy.id,
+      { preview_id: first.preview_id, pin: "1357", accepted_risk_version: CURRENT_RISK_VERSION },
+      "earn-rejoin-2",
+    );
+    expect((reused.json as { code: string }).code).toBe("TRY_AGAIN");
   });
 });

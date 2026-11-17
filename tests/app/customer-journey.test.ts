@@ -17,10 +17,10 @@ import { GET as earningsGET } from "@/app/api/v1/app/earnings/route";
 import { PUT as preferencePUT } from "@/app/api/v1/app/earnings/preference/route";
 import { GET as activityGET } from "@/app/api/v1/app/activity/route";
 import { GET as notificationsGET } from "@/app/api/v1/app/notifications/route";
-import type { AppActivityPageDto } from "@/backend/services/app/activity";
+import type { AppActivityPageDto } from "@/types/app";
 import { CUSTOMER_DOCUMENTS } from "@/backend/content/documents";
 import { now } from "@/backend/clock";
-import type { AppEarningsDto } from "@/backend/services/app/earnings";
+import type { AppEarningsDto } from "@/types/app";
 import { lagosDayStart, lagosParts, lagosWeek } from "@/backend/services/jobs/schedule";
 import { hydrexPoolAbi, settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 import "@/backend/services/onchain/providers";
@@ -28,9 +28,9 @@ import { publicClientFor, settlementAssetKey } from "@/backend/services/onchain/
 import { ratesService } from "@/backend/services/rates";
 import { strategyService } from "@/backend/services/strategies";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
-import type { AppNotificationDto } from "@/backend/services/app/inbox";
-import type { AppOrderDto, AppOrderPreviewDto } from "@/backend/services/app/orders";
-import type { AppWithdrawalDto } from "@/backend/services/app/cash";
+import type { AppNotificationDto } from "@/types/app";
+import type { AppOrderDto, AppOrderPreviewDto } from "@/types/app";
+import type { AppWithdrawalDto } from "@/types/app";
 import { db } from "@/server/db";
 import { toDbRaw } from "@/utils/asset-units";
 

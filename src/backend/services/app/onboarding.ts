@@ -3,21 +3,9 @@ import { INVEST_DOCUMENTS } from "@/backend/content/documents";
 import { agreementService } from "@/backend/services/agreements";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { ConflictException } from "@/utils/exceptions";
+import type { AppOnboardingStepKey, AppOnboardingStepDto, AppOnboardingDto } from "@/types/app";
 
-export type AppOnboardingStepKey = "identity" | "pin" | "agreements" | "bank_account";
-
-export type AppOnboardingStepDto = {
-  key: AppOnboardingStepKey;
-  title: string;
-  done: boolean;
-  required: boolean;
-};
-
-export type AppOnboardingDto = {
-  complete: boolean;
-  next_step: AppOnboardingStepKey | null;
-  steps: AppOnboardingStepDto[];
-};
+export type { AppOnboardingStepKey, AppOnboardingStepDto, AppOnboardingDto } from "@/types/app";
 
 export type AppReadiness = "add_money" | "invest" | "withdraw" | "earn";
 
@@ -65,7 +53,8 @@ class AppOnboardingService {
     if (!identityOk || !documentsOk) {
       throw new ConflictException("Finish setting up your account first", "ONBOARDING_INCOMPLETE");
     }
-    if (need === "invest" || need === "withdraw") {
+    // invest, withdraw and earn each build on add_money and need the PIN.
+    if (need !== "add_money") {
       if (user.pinHash === null) {
         throw new ConflictException("Create your PIN first", "ONBOARDING_INCOMPLETE");
       }

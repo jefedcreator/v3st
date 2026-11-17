@@ -12,32 +12,14 @@ import { lagosWeek } from "@/backend/services/jobs/schedule";
 import { ratesService } from "@/backend/services/rates";
 import { securityService } from "@/backend/services/security";
 import { stockService } from "@/backend/services/stocks";
-import { UnprocessableEntityException } from "@/utils/exceptions";
+import { newCuid } from "@/utils";
+import { NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 import type { Rate } from "@/utils/money";
+import type { AppEarningsDto } from "@/types/app";
 
-export type AppEarningsDto = {
-  total_earned_kobo: string;
-  this_week_kobo: string;
-  choice: "payout" | "reinvest" | "unset";
-  reinvest_stock: AppStockRefDto | null;
-  next_payout_on: string;
-  minimum_payout_kobo: string;
-  limits: string[];
-  weeks: {
-    week_of: string;
-    earned_kobo: string;
-    outcome: "pending" | "paid" | "reinvested" | "rolled_over" | "mixed";
-    detail: string;
-  }[];
-};
+export type { AppEarningsDto } from "@/types/app";
 
-const REINVEST_CAPS = {
-  max_action_ngn: 50_000_000n,
-  max_total_ngn: 2_000_000_000n,
-  max_fee_bps: 100,
-  max_slippage_bps: 100,
-  ttlMs: 30 * 86_400_000,
-};
+const DAY_MS = 86_400_000;
 
 class AppEarningsService {
   async summary(userId: string): Promise<AppEarningsDto> {
@@ -109,44 +91,55 @@ class AppEarningsService {
     input: { choice: "payout" | "reinvest"; stockId: string | null; pin: string },
   ): Promise<AppEarningsDto> {
     await securityService.verifyPin(userId, input.pin);
+    let reinvestStockId: string | null = null;
     if (input.choice === "reinvest") {
       if (!input.stockId) {
         throw new UnprocessableEntityException("Reinvest needs a stock", "STOCK_UNAVAILABLE");
       }
-      await stockService.get(input.stockId);
+      // Reinvest only into a stock the customer can see in the catalog.
+      const stock = await db.stock.findUnique({ where: { id: input.stockId } });
+      if (!stock || !appCatalogService.inCatalog(stock)) {
+        throw new NotFoundException("Stock not found");
+      }
+      reinvestStockId = stock.id;
     }
+    const defaults = policy.app.earnings;
     await earningsService.setPreference(userId, {
       mode: input.choice,
-      stock_id: input.choice === "reinvest" ? input.stockId ?? undefined : undefined,
-      consent_version: policy.app.policyVersion,
-      allow_background_conversion: true,
-      max_conversion_fee_bps: 100,
-      max_fx_bps: 200,
+      stock_id: reinvestStockId ?? undefined,
+      consent_version: defaults.consentVersion,
+      allow_background_conversion: defaults.allowBackgroundConversion,
+      max_conversion_fee_bps: defaults.maxConversionFeeBps,
+      max_fx_bps: defaults.maxFxBps,
     });
-    if (input.choice === "reinvest" && input.stockId) {
-      // Revoke any earlier reinvest consent, then create the standing one.
-      const previous = await authorizationService.findStanding(userId, "reinvest", {
-        stockId: input.stockId,
-      });
-      if (previous) {
-        await authorizationService.revoke(userId, previous.id);
-      }
+    // Any earlier reinvest consent ends here, whichever stock it was for; a
+    // reinvest choice then gets exactly one fresh standing consent.
+    const earlier = await db.investmentAuthorization.findMany({
+      where: { userId, kind: "standing", revokedAt: null, actions: { has: "reinvest" } },
+    });
+    for (const consent of earlier) {
+      await authorizationService.revoke(userId, consent.id);
+    }
+    if (reinvestStockId !== null) {
+      const automation = policy.app.earn.automation;
       await authorizationService.create(
         userId,
         {
           kind: "standing",
-          stock_ids: [input.stockId],
+          stock_ids: [reinvestStockId],
           strategy_ids: [],
           actions: ["reinvest"],
-          max_action_ngn: REINVEST_CAPS.max_action_ngn,
-          max_total_ngn: REINVEST_CAPS.max_total_ngn,
-          max_fee_bps: REINVEST_CAPS.max_fee_bps,
-          max_slippage_bps: REINVEST_CAPS.max_slippage_bps,
-          expires_at: new Date(now().getTime() + REINVEST_CAPS.ttlMs).toISOString(),
+          max_action_ngn: automation.perActionCapKobo,
+          max_total_ngn: automation.totalCapKobo,
+          max_fee_bps: policy.app.orders.consent.maxFeeBps,
+          max_slippage_bps: policy.app.orders.consent.maxSlippageBps,
+          expires_at: new Date(now().getTime() + automation.expiryDays * DAY_MS).toISOString(),
           policy_version: policy.app.policyVersion,
           disclosure_version: CUSTOMER_DOCUMENTS["earn-risks"].version,
         },
-        `reinvest-consent:${userId}:${input.stockId}`,
+        // Unique per choice: re-choosing the same stock after a revoke must not
+        // collide with the earlier consent's key.
+        `app-reinvest:${userId}:${reinvestStockId}:${newCuid()}`,
       );
     }
     return this.summary(userId);

@@ -10,7 +10,10 @@ export type ActivityListQuerySchema = z.infer<typeof activityListQuerySchema>;
 
 export const activityIdParamSchema = z
   .object({
-    id: z.string().regex(/^(dep|wd|pay|ord|inv|eop|wk)_[A-Za-z0-9]+$/, "Invalid activity id"),
+    // Week items are keyed by the week's date (wk_YYYY-MM-DD); the rest by row id.
+    id: z
+      .string()
+      .regex(/^(?:(?:dep|wd|pay|ord|inv|eop)_[A-Za-z0-9]+|wk_\d{4}-\d{2}-\d{2})$/, "Invalid activity id"),
   })
   .strict();
 export type ActivityIdParamSchema = z.infer<typeof activityIdParamSchema>;

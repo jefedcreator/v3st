@@ -4,21 +4,18 @@ import type { Prisma } from "@/server/prisma";
 import { db, lockRows, withTx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
-import { privyAuth } from "@/backend/services/privy";
+import { privyAuth, type PrivyLogin } from "@/backend/services/privy";
 import {
   ConflictException,
+  HttpException,
   LockedException,
   NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
 } from "@/utils/exceptions";
+import type { AppDeviceSessionDto } from "@/types/app";
 
-export type AppDeviceSessionDto = {
-  id: string;
-  device: string;
-  signed_in_at: string;
-  current: boolean;
-};
+export type { AppDeviceSessionDto } from "@/types/app";
 
 const PIN_PATTERN = /^\d{4}$/;
 
@@ -129,20 +126,29 @@ class SecurityService {
     currentSessionId: string,
   ): Promise<{ revoked: number }> {
     this.assertUsablePin(pin);
-    const login = await privyAuth.verifyLogin(tokens);
-    const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
+    const reauthRequired = () =>
+      new UnauthorizedException("A fresh sign-in is required to reset the PIN", "REAUTH_REQUIRED");
+    // Any token that fails verification (forged, expired, not a beta email) is
+    // reported as "sign in again", never as a lost session.
+    let login: PrivyLogin;
+    try {
+      login = await privyAuth.verifyLogin(tokens);
+    } catch (error) {
+      if (error instanceof HttpException && error.statusCode < 500) throw reauthRequired();
+      throw error;
+    }
     const fresh = now().getTime() - login.issuedAt.getTime() <= policy.app.privy.reauthMaxAgeSeconds * 1_000;
-    if (login.userId !== user.identitySubject || !fresh) {
-      throw new UnauthorizedException("A fresh sign-in is required to reset the PIN", "REAUTH_REQUIRED");
-    }
-    const seen = await db.session.findFirst({
-      where: { userId, privySessionId: login.sessionId },
-      select: { id: true },
-    });
-    if (seen) {
-      throw new UnauthorizedException("A fresh sign-in is required to reset the PIN", "REAUTH_REQUIRED");
-    }
     await withTx(async (tx) => {
+      // The user row lock serializes concurrent resets, so the same Privy session
+      // can reset the PIN at most once.
+      await lockRows(tx, "users", [userId]);
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      if (login.userId !== user.identitySubject || !fresh) throw reauthRequired();
+      const seen = await tx.session.findFirst({
+        where: { userId, privySessionId: login.sessionId },
+        select: { id: true },
+      });
+      if (seen) throw reauthRequired();
       const salt = randomBytes(policy.app.pin.saltBytes);
       const hash = hashPin(pin, salt);
       const userData: Prisma.UserUpdateInput = {

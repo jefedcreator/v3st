@@ -1,15 +1,10 @@
 import { db } from "@/server/db";
-import { appCashService, type AppBankAccountDto } from "@/backend/services/app/cash";
+import { appCashService } from "@/backend/services/app/cash";
 import { firstNameOf } from "@/backend/services/app/format";
 import { UnprocessableEntityException } from "@/utils/exceptions";
+import type { AppProfileDto } from "@/types/app";
 
-export type AppProfileDto = {
-  first_name: string | null;
-  preferred_name: string | null;
-  email: string | null;
-  identity: { verified: boolean; level: "standard" | "higher" | null };
-  bank_account: AppBankAccountDto | null;
-};
+export type { AppProfileDto } from "@/types/app";
 
 export const PREFERRED_NAME_PATTERN = /^[A-Za-z][A-Za-z' -]{0,39}$/;
 

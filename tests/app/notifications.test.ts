@@ -10,7 +10,7 @@ import { GET as sessionGET } from "@/app/api/v1/app/session/route";
 import { now } from "@/backend/clock";
 import { eventService } from "@/backend/services/events";
 import { notificationProjector } from "@/backend/services/notifications";
-import type { AppNotificationDto } from "@/backend/services/app/inbox";
+import type { AppNotificationDto } from "@/types/app";
 import { db } from "@/server/db";
 import type { AppSessionDto } from "@/types/app";
 import { toDbRaw } from "@/utils/asset-units";

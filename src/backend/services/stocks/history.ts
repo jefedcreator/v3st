@@ -2,8 +2,9 @@ import type { Prisma } from "@/server/prisma";
 import { db, type Tx } from "@/server/db";
 import { fromDbRaw } from "@/utils/asset-units";
 import type { Rate } from "@/utils/money";
+import type { ChartRange } from "@/types/app";
 
-export type ChartRange = "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL";
+export type { ChartRange } from "@/types/app";
 
 const RANGES: Record<ChartRange, { windowSeconds: number | null; bucketSeconds: number }> = {
   "1D": { windowSeconds: 86_400, bucketSeconds: 900 },

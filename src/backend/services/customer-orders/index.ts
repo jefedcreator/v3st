@@ -12,12 +12,15 @@ import { ledgerService } from "@/backend/services/ledger";
 import { cashReleased, cashReserved, stockReleased, stockReserved } from "@/backend/services/ledger/postings";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 import { sha256Hex } from "@/utils";
-import { ConflictException, NotFoundException } from "@/utils/exceptions";
+import { ConflictException, HttpException, NotFoundException } from "@/utils/exceptions";
 import { ngnToUsd } from "@/utils/money";
 
 // A waiting order lives for 72 hours; a preview only has to be placed within 5 minutes.
-export const ORDER_TTL_MS = 259_200_000;
-export const PREVIEW_TTL_MS = 300_000;
+export const ORDER_TTL_MS = policy.app.orders.lifetimeSeconds * 1_000;
+export const PREVIEW_TTL_MS = policy.app.orders.previewSeconds * 1_000;
+// A waiting order still "executing" without an investment after this long was
+// interrupted (a confirm is one short transaction) and can safely wait again.
+const EXECUTING_STALE_MS = 300_000;
 
 export type CreatePreviewInput = {
   userId: string;
@@ -109,31 +112,82 @@ class CustomerOrderService {
   }
 
   // Steps 2-4: bind a one-time consent to the preview's quote, confirm the
-  // investment under the order's keys, then link both on the order row.
+  // investment under the order's keys, then link both on the order row. When
+  // confirm throws, the order is settled by settleFailedConfirm before the error
+  // goes back to the caller.
   private async consentAndConfirm(order: CustomerOrder, quoteId: string): Promise<void> {
-    const consent = await authorizationService.create(
-      order.userId,
-      {
-        kind: "one_time",
-        quote_kind: "investment",
-        quote_id: quoteId,
-        policy_version: policy.app.policyVersion,
-        disclosure_version: CUSTOMER_DOCUMENTS.risks.version,
-      },
-      order.key + ":consent",
-    );
-    const investment = await investmentService.confirm(
-      order.userId,
-      quoteId,
-      consent.dto.id,
-      order.key + ":investment",
-    );
+    let investment: { id: string };
+    try {
+      const consent = await authorizationService.create(
+        order.userId,
+        {
+          kind: "one_time",
+          quote_kind: "investment",
+          quote_id: quoteId,
+          policy_version: policy.app.policyVersion,
+          disclosure_version: CUSTOMER_DOCUMENTS.risks.version,
+        },
+        order.key + ":consent",
+      );
+      if (order.authorizationId !== consent.dto.id) {
+        await db.customerOrder.update({
+          where: { id: order.id },
+          data: { authorizationId: consent.dto.id },
+        });
+      }
+      investment = await investmentService.confirm(
+        order.userId,
+        quoteId,
+        consent.dto.id,
+        order.key + ":investment",
+      );
+    } catch (error) {
+      await this.settleFailedConfirm(order.id, error);
+      throw error;
+    }
+    await this.linkInvestment(order.id, investment.id);
+  }
+
+  // Links the investment created under the order's key. A waiting order's hold
+  // was released inside that same confirm transaction, so it is marked released.
+  async linkInvestment(orderId: string, investmentId: string): Promise<void> {
     await withTx(async (tx) => {
-      await tx.customerOrder.update({
-        where: { id: order.id },
-        data: { authorizationId: consent.dto.id, investmentId: investment.id },
-      });
+      await lockRows(tx, "customer_orders", [orderId]);
+      const order = await tx.customerOrder.findUniqueOrThrow({ where: { id: orderId } });
+      if (order.investmentId) return;
+      const data: Prisma.CustomerOrderUpdateInput = { investmentId };
+      if (order.holdKey && !order.holdReleasedAt) data.holdReleasedAt = now();
+      // The investment is the truth: an order it belongs to is executing until
+      // the executor records the fill (or the failure).
+      if (order.status !== "executing" && order.status !== "completed" && order.status !== "failed") {
+        data.status = "executing";
+      }
+      await tx.customerOrder.update({ where: { id: orderId }, data });
     });
+  }
+
+  // After a confirm that threw. The investment may still exist under the order's
+  // key (it committed before the error surfaced): link it. A final refusal (a 4xx
+  // such as an expired quote or not enough cash) fails the order; anything else
+  // (a 5xx or a retryable error) leaves it executing for resumeNow.
+  async settleFailedConfirm(orderId: string, error: unknown): Promise<"linked" | "failed" | "retry"> {
+    const order = await db.customerOrder.findUniqueOrThrow({ where: { id: orderId } });
+    const existing = await db.investment.findUnique({ where: { key: order.key + ":investment" } });
+    if (existing) {
+      await this.linkInvestment(orderId, existing.id);
+      return "linked";
+    }
+    const final = error instanceof HttpException && error.statusCode < 500;
+    if (!final) return "retry";
+    await withTx(async (tx) => {
+      await lockRows(tx, "customer_orders", [orderId]);
+      const current = await tx.customerOrder.findUniqueOrThrow({ where: { id: orderId } });
+      if (current.status !== "executing" || current.investmentId) return;
+      await this.revokeConsent(tx, current);
+      await tx.customerOrder.update({ where: { id: orderId }, data: { status: "failed" } });
+      await eventService.emit(tx, current.userId, "customer_order.updated", orderId, "failed");
+    });
+    return "failed";
   }
 
   async placeNow(userId: string, previewId: string, key: string): Promise<CustomerOrder> {
@@ -149,16 +203,38 @@ class CustomerOrderService {
     return db.customerOrder.findUniqueOrThrow({ where: { id: order.id } });
   }
 
-  // Retries steps 2-4 with the same keys for an executing order whose
-  // investment was never created (e.g. the confirm call was interrupted).
+  // Finishes an executing order whose investment was never linked (the process
+  // stopped between steps). Immediate orders repeat steps 2-4 with the same keys.
+  // A waiting order links the investment its confirm created, or — when none
+  // exists and the attempt is clearly over — goes back to waiting with its hold.
   async resumeNow(orderId: string): Promise<void> {
     const order = await db.customerOrder.findUniqueOrThrow({ where: { id: orderId } });
     if (order.status !== "executing" || order.investmentId) return;
     const preview = await db.customerOrderPreview.findUniqueOrThrow({
       where: { id: order.previewId },
     });
-    if (!preview.investmentQuoteId) return;
-    await this.consentAndConfirm(order, preview.investmentQuoteId);
+    if (preview.mode === "now" && preview.investmentQuoteId) {
+      await this.consentAndConfirm(order, preview.investmentQuoteId).catch(async (error: unknown) => {
+        // A final refusal already failed the order; a retryable error waits for
+        // the next sweep.
+        if (error instanceof HttpException && error.statusCode < 500) return;
+        throw error;
+      });
+      return;
+    }
+    const existing = await db.investment.findUnique({ where: { key: order.key + ":investment" } });
+    if (existing) {
+      await this.linkInvestment(orderId, existing.id);
+      return;
+    }
+    if (order.updatedAt.getTime() > now().getTime() - EXECUTING_STALE_MS) return;
+    await withTx(async (tx) => {
+      await lockRows(tx, "customer_orders", [orderId]);
+      const current = await tx.customerOrder.findUniqueOrThrow({ where: { id: orderId } });
+      if (current.status !== "executing" || current.investmentId) return;
+      await tx.customerOrder.update({ where: { id: orderId }, data: { status: "waiting_for_price" } });
+      await eventService.emit(tx, current.userId, "customer_order.updated", orderId, "waiting_for_price");
+    });
   }
 
   // Releases a waiting order's hold exactly once (cash or shares back to the
@@ -293,20 +369,39 @@ class CustomerOrderService {
       return updated;
     });
     if (order.funding === "bank_transfer") {
-      const { deposit } = await depositService.create(
-        userId,
-        { ngn_amount: order.amountKobo },
-        order.key + ":deposit",
-        { chain: customerChain(), holdFor: { key: order.holdKey!, orderId: order.id } },
-      );
-      await withTx(async (tx) => {
-        await tx.customerOrder.update({
-          where: { id: order.id },
-          data: { depositOrderId: deposit.id },
-        });
-      });
+      await this.createFundingDeposit(order);
     }
     return db.customerOrder.findUniqueOrThrow({ where: { id: order.id } });
+  }
+
+  // Opens (or re-opens, under the same key) the bank transfer that pays for a
+  // waiting buy. A final refusal (deposits closed, over a limit, no bank account)
+  // fails the order at once, so it never waits for a transfer that can't happen.
+  async createFundingDeposit(order: CustomerOrder): Promise<void> {
+    try {
+      const { deposit } = await depositService.create(
+        order.userId,
+        { ngn_amount: order.amountKobo },
+        order.key + ":deposit",
+        { chain: customerChain(), holdFor: { key: order.holdKey ?? `order-hold:${order.id}`, orderId: order.id } },
+      );
+      await db.customerOrder.update({
+        where: { id: order.id },
+        data: { depositOrderId: deposit.id },
+      });
+    } catch (error) {
+      if (error instanceof HttpException && error.statusCode < 500) {
+        await withTx(async (tx) => {
+          await lockRows(tx, "customer_orders", [order.id]);
+          const current = await tx.customerOrder.findUniqueOrThrow({ where: { id: order.id } });
+          if (current.status !== "waiting_for_payment" || current.depositOrderId) return;
+          await this.revokeConsent(tx, current);
+          await tx.customerOrder.update({ where: { id: order.id }, data: { status: "failed" } });
+          await eventService.emit(tx, current.userId, "customer_order.updated", order.id, "failed");
+        });
+      }
+      throw error;
+    }
   }
 
   async cancel(userId: string, orderId: string): Promise<CustomerOrder> {

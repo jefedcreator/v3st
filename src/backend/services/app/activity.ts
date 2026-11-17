@@ -15,44 +15,19 @@ import {
   sharesMicroOf,
   toKobo,
 } from "@/backend/services/app/format";
-import { orderView, type AppOrderStatus } from "@/backend/services/app/orders";
+import { orderSharesRaw, orderView, type AppOrderStatus } from "@/backend/services/app/orders";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { earningsService } from "@/backend/services/earnings";
 import { unpack } from "@/backend/services/execution";
 import { ratesService } from "@/backend/services/rates";
 import type { AppProgress } from "@/types/app";
-import { fromDbRaw } from "@/utils/asset-units";
+import { effectiveSharePriceMicroUsd } from "@/backend/services/stocks/reference";
+import { fromDbRaw, fromDbRawNullable } from "@/utils/asset-units";
 import { NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 import type { Rate } from "@/utils/money";
+import type { AppActivityKind, AppActivityItemDto, AppActivityDetailDto, AppActivityPageDto } from "@/types/app";
 
-export type AppActivityKind =
-  | "add_money"
-  | "withdrawal"
-  | "buy"
-  | "sell"
-  | "earn_join"
-  | "earn_withdraw"
-  | "earnings"
-  | "earnings_payout"
-  | "reinvest";
-export type AppActivityItemDto = {
-  id: string;
-  kind: AppActivityKind;
-  title: string;
-  subtitle: string;
-  amount_kobo: string | null;
-  direction: "in" | "out" | "none";
-  status: AppProgress;
-  occurred_at: string;
-  reference: string;
-};
-export type AppActivityDetailDto = AppActivityItemDto & {
-  lines: { label: string; value: string }[];
-  timeline: { label: string; done: boolean; at: string | null }[];
-  bank: AppBankAccountDto | null;
-  bank_reference: string | null;
-};
-export type AppActivityPageDto = { items: AppActivityItemDto[]; next_cursor: string | null };
+export type { AppActivityKind, AppActivityItemDto, AppActivityDetailDto, AppActivityPageDto } from "@/types/app";
 
 type ActivityRow = {
   id: string;
@@ -489,8 +464,8 @@ class AppActivityService {
     const view = orderView(order, investment, deposit, stock);
     const buy = order.side === "buy";
     const rate: Rate = { kobo: order.rateKobo, microUsd: order.rateMicroUsd };
-    const sharesMicro =
-      order.quantityRaw === null ? null : sharesMicroOf(fromDbRaw(order.quantityRaw), stock.decimals);
+    const sharesRaw = orderSharesRaw(order, investment);
+    const sharesMicro = sharesRaw === null ? null : sharesMicroOf(sharesRaw, stock.decimals);
     const row: ActivityRow = {
       id: `ord_${order.id}`,
       kind: buy ? "buy" : "sell",
@@ -502,7 +477,20 @@ class AppActivityService {
       occurredAt: order.createdAt,
       reference: customerReference(order.id),
     };
-    const priceText = formatNaira(toKobo(order.limitPriceMicroUsd, rate));
+    const preview = await db.customerOrderPreview.findUnique({ where: { id: order.previewId } });
+    // The price per share actually paid (or received) once the order filled;
+    // until then the price the customer previewed. Never the protective limit.
+    const filled =
+      investment && (investment.status === "filled" || investment.status === "partial")
+        ? effectiveSharePriceMicroUsd(
+            stock,
+            order.side,
+            fromDbRaw(investment.amountIn),
+            fromDbRawNullable(investment.amountOut) ?? 0n,
+          )
+        : null;
+    const perShare = filled ?? preview?.referencePriceMicroUsd ?? null;
+    const priceText = perShare === null ? "—" : formatNaira(toKobo(perShare, rate));
     const lines: { label: string; value: string }[] = [];
     if (buy) {
       lines.push(
@@ -517,7 +505,6 @@ class AppActivityService {
         { label: "You received", value: formatNaira(order.settledKobo ?? order.amountKobo) },
       );
     }
-    const preview = await db.customerOrderPreview.findUnique({ where: { id: order.previewId } });
     const terms = preview?.terms as { fees?: { label: string; kobo: string | null; note: string | null }[] } | null;
     for (const fee of terms?.fees ?? []) {
       lines.push({

@@ -1,7 +1,6 @@
 import type { Stock } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
-import { productIdForStock } from "@/backend/content/earn-products";
 import { STOCK_PROFILES } from "@/backend/content/stock-profiles";
 import { WAD } from "@/backend/services/stocks/corporate-actions";
 import { stockHistory, type ChartRange } from "@/backend/services/stocks/history";
@@ -14,48 +13,13 @@ import { ratesService } from "@/backend/services/rates";
 import { positionService } from "@/backend/services/positions";
 import { customerChain } from "@/backend/services/app/network";
 import { displayValue } from "@/backend/services/app/valuation";
-import { fromDbRaw } from "@/utils/asset-units";
 import { NotFoundException } from "@/utils/exceptions";
 import type { Rate } from "@/utils/money";
 
 import { sharesMicroOf, toKobo } from "./format";
+import type { AppTrading, AppPriceStatus, AppStockRefDto, AppStockListItemDto, AppPositionSummaryDto, AppStockDetailDto, AppChartDto } from "@/types/app";
 
-export type AppTrading = "available" | "prices_updating" | "paused";
-export type AppPriceStatus = "live" | "delayed" | "unavailable";
-export type AppStockRefDto = {
-  id: string;
-  ticker: string;
-  name: string;
-  logo_path: string | null;
-};
-export type AppStockListItemDto = AppStockRefDto & {
-  sector: string;
-  price_kobo: string | null;
-  price_usd_micro: string | null;
-  price_status: AppPriceStatus;
-  price_as_of: string | null;
-  change_24h_bps: number | null;
-  trading: AppTrading;
-  on_watchlist: boolean;
-  is_test: boolean;
-};
-export type AppPositionSummaryDto = {
-  shares_micro: string;
-  value_kobo: string | null;
-  price_status: AppPriceStatus;
-};
-export type AppStockDetailDto = AppStockListItemDto & {
-  summary: string;
-  your_position: AppPositionSummaryDto | null;
-  earn_product_id: string | null;
-  documents: ["how-shares-are-held"];
-};
-export type AppChartDto = {
-  range: ChartRange;
-  status: "ok" | "not_enough_data";
-  points: { t: string; price_kobo: string }[];
-  change_bps: number | null;
-};
+export type { AppTrading, AppPriceStatus, AppStockRefDto, AppStockListItemDto, AppPositionSummaryDto, AppStockDetailDto, AppChartDto } from "@/types/app";
 
 function profileOf(stock: Stock) {
   return stock.displayTicker ? STOCK_PROFILES[stock.displayTicker] : undefined;
@@ -127,7 +91,9 @@ class AppCatalogService {
   ): Promise<AppStockListItemDto> {
     const profile = profileOf(stock);
     const display = referenceDisplay(stock, at);
-    const sharePrice = sharePriceMicroUsd(stock);
+    // A price older than the display window is unknown to the customer: no
+    // number is shown, only "unavailable".
+    const sharePrice = display ? sharePriceMicroUsd(stock) : null;
     const priceStatus: AppPriceStatus = display ? display.status : "unavailable";
     return {
       ...this.stockRef(stock),
@@ -231,7 +197,7 @@ class AppCatalogService {
       ...item,
       summary: profile?.summary ?? "",
       your_position: yourPosition,
-      earn_product_id: await productIdForStock(stock.id),
+      earn_product_id: await this.earnProductIdFor(stock.id),
       documents: ["how-shares-are-held"],
     };
   }
@@ -255,13 +221,19 @@ class AppCatalogService {
         point.rate ?? rate,
       ).toString(),
     }));
-    const first = series[0]!;
-    const last = series[series.length - 1]!;
-    const firstPrice = first.priceMicroUsd;
-    const lastPrice = last.priceMicroUsd;
+    // The change is measured on the naira points the customer sees.
+    const firstKobo = BigInt(points[0]!.price_kobo);
+    const lastKobo = BigInt(points[points.length - 1]!.price_kobo);
     const changeBps =
-      firstPrice === 0n ? null : Number(((lastPrice - firstPrice) * 10_000n) / firstPrice);
+      firstKobo === 0n ? null : Number(((lastKobo - firstKobo) * 10_000n) / firstKobo);
     return { range, status: "ok", points, change_bps: changeBps };
+  }
+
+  // Loaded lazily: the Earn service builds on this catalog, so a static import
+  // here would make the two modules depend on each other at load time.
+  private async earnProductIdFor(stockId: string): Promise<string | null> {
+    const { appEarnService } = await import("@/backend/services/app/earn");
+    return appEarnService.productIdForStock(stockId);
   }
 
   async watch(userId: string, stockId: string): Promise<void> {
