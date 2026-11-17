@@ -154,7 +154,7 @@ class AppCashService {
     userId: string,
     input: { bankCode: string; accountNumber: string; pin: string },
   ): Promise<AppBankAccountDto> {
-    await appOnboardingService.assertReady(userId, "add_money");
+    await appOnboardingService.assertReady(userId, "bank_account");
     await securityService.verifyPin(userId, input.pin);
     await bankAccountService.add(userId, {
       bank_code: input.bankCode,

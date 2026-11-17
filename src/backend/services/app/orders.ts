@@ -9,7 +9,6 @@ import { customerChain } from "@/backend/services/app/network";
 import { customerReference, formatNaira, formatShares, sharesMicroOf, toKobo } from "@/backend/services/app/format";
 import { appOnboardingService } from "@/backend/services/app/onboarding";
 import { customerOrderService, ORDER_TTL_MS, PREVIEW_TTL_MS } from "@/backend/services/customer-orders";
-import { bankAccountService } from "@/backend/services/bank-accounts";
 import { controlsService } from "@/backend/services/controls";
 import { rampRegistry } from "@/backend/services/ramp";
 import { ProviderError } from "@/backend/services/ramp/errors";
@@ -182,13 +181,10 @@ class AppOrdersService {
       if (payWith === "bank_transfer") {
         // Placing a bank-transfer buy opens a deposit. Refuse here what that
         // deposit would refuse, so an order never waits for a transfer that
-        // can't be opened.
+        // can't be opened (the bank account is already a readiness step).
         await controlsService.assertOpen("deposits", "DEPOSITS_PAUSED");
         if (amountKobo > policy.deposits.maxKobo) {
           throw new UnprocessableEntityException("Above the bank transfer limit", "LIMIT_EXCEEDED");
-        }
-        if (!(await bankAccountService.getActiveRow(userId))) {
-          throw new ConflictException("Add your bank account first", "ONBOARDING_INCOMPLETE");
         }
       }
     } else {

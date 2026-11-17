@@ -85,11 +85,10 @@ A vocabulary checker flags forbidden keys and values anywhere in a payload. Ever
 
 ### Onboarding and documents
 
-Steps run in this order: test identity, PIN, documents (terms, risks, how shares are held), then an optional bank account. Each action checks readiness on the server:
+Steps run in this order: test identity, PIN, documents (terms, risks, how shares are held), then a bank account. All four are required: a bank transfer comes from the customer's own, name-matched account, so money can't be added before it is saved (operator decision, 2026-11-17; the bank account was optional in the first draft). Each action checks readiness on the server:
 
-- **Add money:** needs identity and documents.
-- **Invest:** also needs a PIN.
-- **Withdraw:** also needs a bank account.
+- **Add the bank account:** needs identity, the PIN and the documents.
+- **Add money, invest, withdraw:** need all four steps.
 - **Earn:** also needs the Earn risk document.
 
 Documents are versioned content in the repository, and acceptances are stored per version.

@@ -7,7 +7,10 @@ import type { AppOnboardingStepKey, AppOnboardingStepDto, AppOnboardingDto } fro
 
 export type { AppOnboardingStepKey, AppOnboardingStepDto, AppOnboardingDto } from "@/types/app";
 
-export type AppReadiness = "add_money" | "invest" | "withdraw" | "earn";
+// "bank_account" is the last onboarding step itself (adding the account needs
+// the verified name, the PIN and the accepted documents); every money action
+// needs all four steps.
+export type AppReadiness = "bank_account" | "add_money" | "invest" | "withdraw" | "earn";
 
 const STEP_TITLES: Record<AppOnboardingStepKey, string> = {
   identity: "Verify your identity",
@@ -33,7 +36,9 @@ class AppOnboardingService {
       key,
       title: STEP_TITLES[key],
       done: done[key],
-      required: key !== "bank_account",
+      // Every step is required: a bank transfer comes from the customer's own
+      // account, so money can't be added until the account is saved.
+      required: true,
     }));
     const nextStep = steps.find((step) => step.required && !step.done)?.key ?? null;
     return {
@@ -44,26 +49,24 @@ class AppOnboardingService {
   }
 
   // Server-side readiness for each money action; every customer route that moves
-  // money checks this before doing anything else.
+  // money checks this before doing anything else. The checks follow the step
+  // order: identity, PIN, documents, then the bank account.
   async assertReady(userId: string, need: AppReadiness): Promise<void> {
     const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
     const accepted = await agreementService.acceptedCurrent(userId);
-    const identityOk = user.kycStatus === "verified";
-    const documentsOk = INVEST_DOCUMENTS.every((slug) => accepted.has(slug));
-    if (!identityOk || !documentsOk) {
-      throw new ConflictException("Finish setting up your account first", "ONBOARDING_INCOMPLETE");
+    if (user.kycStatus !== "verified") {
+      throw new ConflictException("Verify your identity first", "ONBOARDING_INCOMPLETE");
     }
-    // invest, withdraw and earn each build on add_money and need the PIN.
-    if (need !== "add_money") {
-      if (user.pinHash === null) {
-        throw new ConflictException("Create your PIN first", "ONBOARDING_INCOMPLETE");
-      }
+    if (user.pinHash === null) {
+      throw new ConflictException("Create your PIN first", "ONBOARDING_INCOMPLETE");
     }
-    if (need === "withdraw") {
-      const bankAccount = await bankAccountService.getActiveRow(userId);
-      if (!bankAccount) {
-        throw new ConflictException("Add your bank account first", "ONBOARDING_INCOMPLETE");
-      }
+    if (!INVEST_DOCUMENTS.every((slug) => accepted.has(slug))) {
+      throw new ConflictException("Accept the documents first", "ONBOARDING_INCOMPLETE");
+    }
+    if (need === "bank_account") return;
+    const bankAccount = await bankAccountService.getActiveRow(userId);
+    if (!bankAccount) {
+      throw new ConflictException("Add your bank account first", "ONBOARDING_INCOMPLETE");
     }
     if (need === "earn" && !accepted.has("earn-risks")) {
       throw new ConflictException("Accept the Earn risks first", "ONBOARDING_INCOMPLETE");

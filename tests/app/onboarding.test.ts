@@ -7,6 +7,7 @@ import { GET as documentsGET } from "@/app/api/v1/app/documents/route";
 import { GET as documentGET } from "@/app/api/v1/app/documents/[slug]/route";
 import { POST as agreementsPOST } from "@/app/api/v1/app/agreements/route";
 import { PUT as pinPUT } from "@/app/api/v1/app/security/pin/route";
+import { PUT as bankAccountPUT } from "@/app/api/v1/app/bank-account/route";
 import { CUSTOMER_DOCUMENTS, INVEST_DOCUMENTS, type DocumentSlug } from "@/backend/content/documents";
 import { appOnboardingService } from "@/backend/services/app/onboarding";
 import { withMiddleware } from "@/backend/middleware";
@@ -86,8 +87,22 @@ describe("customer onboarding, test identities and agreements", () => {
 
     await acceptInvestDocuments(cookie);
     status = await appOnboardingService.status(userId);
+    // The bank account is required too: transfers come from the customer's own account.
+    expect(status.complete).toBe(false);
+    expect(status.next_step).toBe("bank_account");
+    expect(status.steps.every((step) => step.required)).toBe(true);
+
+    const bank = await callAppRoute(bankAccountPUT, {
+      method: "PUT",
+      url: `${ORIGIN}/api/v1/app/bank-account`,
+      cookie,
+      body: { bank_code: "sim-bank-a", account_number: "0123456789", pin: "1357" },
+    });
+    expect(bank.status).toBe(200);
+    status = await appOnboardingService.status(userId);
     expect(status.complete).toBe(true);
     expect(status.next_step).toBeNull();
+    await appOnboardingService.assertReady(userId, "add_money");
   });
 
   it("blocks money actions until setup is done", async () => {
@@ -109,8 +124,8 @@ describe("customer onboarding, test identities and agreements", () => {
     expect(res.status).toBe(409);
     expect(res.json).toMatchObject({ code: "SETUP_REQUIRED" });
 
-    // Once identity and documents are accepted, add_money is ready but invest
-    // still needs the PIN.
+    // Identity and documents alone are not enough: the PIN and then the bank
+    // account come first.
     const { cookie } = await signInCustomer("blocked@v3st.test");
     await callAppRoute(identityPOST, {
       method: "POST",
@@ -119,16 +134,22 @@ describe("customer onboarding, test identities and agreements", () => {
       body: { test_identity_id: "tunde_tier1" },
     });
     await acceptInvestDocuments(cookie);
-    await appOnboardingService.assertReady(userId, "add_money");
-    await expect(appOnboardingService.assertReady(userId, "invest")).rejects.toMatchObject({
+    await expect(appOnboardingService.assertReady(userId, "bank_account")).rejects.toMatchObject({
       code: "ONBOARDING_INCOMPLETE",
     });
-    await expect(appOnboardingService.assertReady(userId, "withdraw")).rejects.toMatchObject({
-      code: "ONBOARDING_INCOMPLETE",
+    await callAppRoute(pinPUT, {
+      method: "PUT",
+      url: `${ORIGIN}/api/v1/app/security/pin`,
+      cookie,
+      body: { pin: "1357" },
     });
-    await expect(appOnboardingService.assertReady(userId, "earn")).rejects.toMatchObject({
-      code: "ONBOARDING_INCOMPLETE",
-    });
+    // Ready to add the bank account, but no money action yet.
+    await appOnboardingService.assertReady(userId, "bank_account");
+    for (const need of ["add_money", "invest", "withdraw", "earn"] as const) {
+      await expect(appOnboardingService.assertReady(userId, need)).rejects.toMatchObject({
+        code: "ONBOARDING_INCOMPLETE",
+      });
+    }
   });
 
   it("rejects a stale document version", async () => {

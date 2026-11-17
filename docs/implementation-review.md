@@ -232,11 +232,13 @@ A second pass compared the branch with the plan task by task and fixed these gap
 - **Docs:** `docs/api/customer-app.md` now has the exact vocabulary rule, the wire format, the error
   copy table and field messages, the beta sign-in rule and the full Privy frontend contract.
 
-Open question for the operator: deposits need a verified bank account (the transfer comes from the
-customer's own account), but the plan's onboarding marks the bank account optional and `add_money`
-readiness doesn't require it. Today adding money without one answers `SETUP_REQUIRED` while
-onboarding reports `complete`; `tests/helpers/app.ts` `readyCustomer()` adds a bank account to cover
-this. Decide whether the bank account becomes a required step, or deposits stop requiring it.
+Bank account decision (operator, 2026-11-17): deposits need a verified bank account (the transfer
+comes from the customer's own account), while the plan's onboarding marked it optional, so a
+customer could finish onboarding and then be told to finish setting up when adding money. The bank
+account is now a **required** onboarding step: `complete` needs all four steps, every money action
+(`add_money`, `invest`, `withdraw`, `earn`) needs it, and adding the account itself needs identity,
+PIN and documents (readiness `bank_account`). `readyCustomer()` in `tests/helpers/app.ts` already
+adds one; the design spec records the decision.
 
 Gate in the follow-up environment: `yarn prisma validate` passed; `yarn typecheck` 0 errors;
 `yarn lint` 0 errors (9 pre-existing warnings); DB-free unit tests 19/20 files passed (the 20th,

@@ -40,7 +40,7 @@ Every customer response, errors included, passes `findCustomerLeaks` (`src/backe
 | `POST /api/v1/app/auth/logout` | — | `{ signed_out: true }` |
 | `POST /api/v1/app/beta/privy-tokens` | `{ email }` (simulated mode only; `NOT_FOUND` otherwise) | `{ access_token, identity_token }` |
 | `GET /api/v1/app/session` | — | `AppSessionDto` (signed_in, customer, onboarding, unread_notifications, beta) |
-| `GET /api/v1/app/onboarding` | — | steps + next_step |
+| `GET /api/v1/app/onboarding` | — | steps (`identity`, `pin`, `agreements`, `bank_account`, all required, in that order), `next_step`, `complete`; every money action answers `SETUP_REQUIRED` until all four are done |
 | `POST /api/v1/app/identity` | `{ test_identity_id }` (beta) | identity status |
 | `GET /api/v1/app/identity/test-identities` | — | available test personas |
 | `POST /api/v1/app/agreements` | `{ documents: [{ slug, version }] }` | accepted documents |
@@ -60,7 +60,7 @@ Every customer response, errors included, passes `findCustomerLeaks` (`src/backe
 | `GET /api/v1/app/cash/deposits/[id]` | — | deposit progress |
 | `POST /api/v1/app/beta/deposits/[id]/complete` | — (beta) | marks the sim transfer paid |
 | `GET /api/v1/app/banks` | — | bank list |
-| `GET` / `PUT /api/v1/app/bank-account` | PUT: `{ bank_code, account_number, pin }` | saved payout account |
+| `GET` / `PUT /api/v1/app/bank-account` | PUT: `{ bank_code, account_number, pin }` (needs a verified identity, the PIN and the documents; the name must match the verified name) | saved account; transfers in come from it and withdrawals go to it |
 | `POST /api/v1/app/withdrawals/preview` | `{ amount_kobo }` | fee + you-receive preview |
 | `POST /api/v1/app/withdrawals` | `{ preview_id, pin }` + idempotency key | withdrawal |
 | `GET /api/v1/app/withdrawals/[id]` | — | withdrawal progress + bank reference |
