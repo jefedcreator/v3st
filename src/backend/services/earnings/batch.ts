@@ -2,9 +2,11 @@ import { Prisma } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
 import { policy } from "@/backend/config/policy";
 import { alertService } from "@/backend/services/alerts";
+import { authorizationService } from "@/backend/services/authorizations";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { complianceService } from "@/backend/services/compliance";
 import { controlsService } from "@/backend/services/controls";
+import { investmentService } from "@/backend/services/investments";
 import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
 import { ratesService } from "@/backend/services/rates";
@@ -20,12 +22,12 @@ export type BatchResult = {
   paid: number;
   reinvested: number;
   rolledOver: number;
-  skipped: Record<"needs_choice" | "kyc" | "bank_account" | "limit" | "paused", number>;
+  skipped: Record<"needs_choice" | "needs_consent" | "kyc" | "bank_account" | "limit" | "paused", number>;
   stoppedForFloat: boolean;
 };
 
 function emptySkipped(): BatchResult["skipped"] {
-  return { needs_choice: 0, kyc: 0, bank_account: 0, limit: 0, paused: 0 };
+  return { needs_choice: 0, needs_consent: 0, kyc: 0, bank_account: 0, limit: 0, paused: 0 };
 }
 
 class EarningsBatchService {
@@ -36,6 +38,7 @@ class EarningsBatchService {
       where: {
         payoutOrderId: null,
         reinvestTradeId: null,
+        reinvestInvestmentId: null,
         week: { lte: week },
       },
       orderBy: [{ harvestedAt: "asc" }, { userId: "asc" }],
@@ -126,6 +129,49 @@ class EarningsBatchService {
         const stockId = user.reinvestStockId;
         if (!stockId) {
           result.skipped.needs_choice += 1;
+          continue;
+        }
+        const stock = await db.stock.findUnique({ where: { id: stockId } });
+        if (stock?.networkId) {
+          // Onchain stock: reinvest through the investment pipeline, which needs
+          // the standing reinvest consent; without one the week is skipped.
+          const consent = await authorizationService.findStanding(user.id, "reinvest", { stockId });
+          if (!consent) {
+            result.skipped.needs_consent += 1;
+            continue;
+          }
+          try {
+            const quote = await investmentService.quote(user.id, {
+              stockId,
+              side: "buy",
+              inputRaw: candidate.total,
+            });
+            const inv = await investmentService.confirm(user.id, quote.id, consent.id, `reinvest:${user.id}:${week}`, {
+              standingAction: "reinvest",
+              purpose: "reinvest",
+            });
+            await withTx(async (tx) => {
+              await tx.earning.updateMany({
+                where: { id: { in: candidate.earningIds } },
+                data: { reinvestInvestmentId: inv.id },
+              });
+              if (candidate.receiptIds.length > 0) {
+                await tx.earningAllocation.updateMany({
+                  where: { receiptId: { in: candidate.receiptIds } },
+                  data: { state: "reserved", reinvestInvestmentId: inv.id },
+                });
+              }
+            });
+            if (!["failed", "cancelled", "needs_confirmation"].includes(inv.status)) result.reinvested += 1;
+          } catch (error) {
+            if (
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === "P2002"
+            ) {
+              continue;
+            }
+            throw error;
+          }
           continue;
         }
         try {

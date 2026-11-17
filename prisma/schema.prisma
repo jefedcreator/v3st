@@ -614,6 +614,8 @@ model Earning {
     harvestedAt     DateTime
     payoutOrderId   String?
     reinvestTradeId String?
+    // Onchain reinvest link (investment pipeline); sim reinvest uses reinvestTradeId.
+    reinvestInvestmentId String?
     provenance      String   @default("legacy_fixture")
     receiptId       String?
     createdAt       DateTime @default(now())
@@ -1186,6 +1188,7 @@ model EarningAllocation {
     state           AllocationState @default(reserved)
     payoutOrderId   String?
     reinvestTradeId String?
+    reinvestInvestmentId String?
     createdAt       DateTime        @default(now())
 
     @@index([userId, week])

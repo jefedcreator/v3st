@@ -156,6 +156,9 @@ class EarningsService {
     const tradeIds = rows.map((r) => r.reinvestTradeId).filter((id): id is string => id !== null);
     const trades = await db.tradeOrder.findMany({ where: { id: { in: tradeIds } } });
     const tradeStatus = new Map(trades.map((t) => [t.id, t.status]));
+    const investmentIds = rows.map((r) => r.reinvestInvestmentId).filter((id): id is string => id !== null);
+    const investments = await db.investment.findMany({ where: { id: { in: investmentIds } } });
+    const investmentStatus = new Map(investments.map((i) => [i.id, i.status]));
     const byWeek = new Map<string, typeof rows>();
     for (const row of rows) {
       const list = byWeek.get(row.week) ?? [];
@@ -175,6 +178,12 @@ class EarningsService {
           paid += BigInt(row.amountUsdc);
         }
         if (row.reinvestTradeId && tradeStatus.get(row.reinvestTradeId) === "filled") {
+          reinvested += BigInt(row.amountUsdc);
+        }
+        if (
+          row.reinvestInvestmentId &&
+          ["filled", "partial"].includes(investmentStatus.get(row.reinvestInvestmentId) ?? "")
+        ) {
           reinvested += BigInt(row.amountUsdc);
         }
       }

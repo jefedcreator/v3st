@@ -1,6 +1,7 @@
 import type { Stock } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
+import { productIdForStock } from "@/backend/content/earn-products";
 import { STOCK_PROFILES } from "@/backend/content/stock-profiles";
 import { WAD } from "@/backend/services/stocks/corporate-actions";
 import { stockHistory, type ChartRange } from "@/backend/services/stocks/history";
@@ -230,7 +231,7 @@ class AppCatalogService {
       ...item,
       summary: profile?.summary ?? "",
       your_position: yourPosition,
-      earn_product_id: null,
+      earn_product_id: await productIdForStock(stock.id),
       documents: ["how-shares-are-held"],
     };
   }

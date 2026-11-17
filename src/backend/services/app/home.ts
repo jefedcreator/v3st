@@ -44,7 +44,7 @@ export type AppHomeDto = {
 };
 
 // The next Friday in Lagos (the weekly payout day), as YYYY-MM-DD.
-function nextPayoutDate(at: Date): string {
+export function nextPayoutDate(at: Date): string {
   const payoutWeekday = policy.schedule.payouts.weekday;
   const parts = lagosParts(at);
   const dayStart = lagosDayStart(at).getTime();

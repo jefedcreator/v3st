@@ -441,7 +441,13 @@ class InvestmentService {
       if (quote.side === "buy") {
         await ledgerService.post(
           tx,
-          cashReserved({ key, userId, chain: stock.chain, amount: fromDbRaw(quote.inputRaw), from: "cash" }),
+          cashReserved({
+            key,
+            userId,
+            chain: stock.chain,
+            amount: fromDbRaw(quote.inputRaw),
+            from: opts?.purpose === "reinvest" ? "earnings" : "cash",
+          }),
         );
       } else {
         await ledgerService.post(
@@ -586,7 +592,13 @@ class InvestmentService {
           if (current.side === "buy") {
             await ledgerService.post(
               tx,
-              cashReleased({ key: current.key, userId: current.userId, chain: stock.chain, amount: reservedIn - actualIn, to: "cash" }),
+              cashReleased({
+                key: current.key,
+                userId: current.userId,
+                chain: stock.chain,
+                amount: reservedIn - actualIn,
+                to: current.purpose === "reinvest" ? "earnings" : "cash",
+              }),
             );
           } else {
             await ledgerService.post(
@@ -625,7 +637,13 @@ class InvestmentService {
         if (current.side === "buy") {
           await ledgerService.post(
             tx,
-            cashReleased({ key: current.key, userId: current.userId, chain: stock.chain, amount: fromDbRaw(current.amountIn), to: "cash" }),
+            cashReleased({
+              key: current.key,
+              userId: current.userId,
+              chain: stock.chain,
+              amount: fromDbRaw(current.amountIn),
+              to: current.purpose === "reinvest" ? "earnings" : "cash",
+            }),
           );
         } else {
           await ledgerService.post(
@@ -637,6 +655,18 @@ class InvestmentService {
           where: { id: current.id },
           data: { status: "failed", failureReason: op.errorReason ?? "EXECUTION_REVERTED" },
         });
+        // A failed reinvest returns the reserved earnings exactly once so the
+        // next batch can try again.
+        if (current.purpose === "reinvest") {
+          await tx.earning.updateMany({
+            where: { reinvestInvestmentId: current.id },
+            data: { reinvestInvestmentId: null },
+          });
+          await tx.earningAllocation.updateMany({
+            where: { reinvestInvestmentId: current.id },
+            data: { state: "available", reinvestInvestmentId: null },
+          });
+        }
         await eventService.emit(tx, current.userId, "investment.updated", current.id, "failed");
       });
     }
