@@ -31,6 +31,14 @@ export const policy = {
     quoteTtlSeconds: 30,
     executionWindowSeconds: 120,
     referenceMaxAgeSeconds: 60,
+    // Per-network reference freshness: trading window, display window and the
+    // fill-versus-reference band. Chains not listed keep referenceMaxAgeSeconds
+    // and have no band check.
+    reference: {
+      tradeMaxAgeSeconds: { testnet: 60, basesepolia: 7_200 } as Record<string, number>,
+      displayMaxAgeSeconds: 604_800,
+      venueBandBps: { basesepolia: 300 } as Record<string, number>,
+    },
     maxPriceImpactBps: 100,
     authorizationMaxDays: 30,
     strategy: {
@@ -85,6 +93,50 @@ export const policy = {
     identityTokenTtlSeconds: 300,
     sessionTtlSeconds: 2_592_000,
     testPhonePattern: "^\\+2340000000\\d{3}$",
+  },
+  app: {
+    policyVersion: "app-2026-11-17",
+    privy: {
+      reauthMaxAgeSeconds: 300,
+      simulatedAppId: "v3st-simulated",
+    },
+    pin: {
+      digits: 4,
+      maxFailures: 5,
+      lockSeconds: 1_800,
+      saltBytes: 16,
+      scrypt: { N: 16_384, r: 8, p: 1, keyLength: 32 },
+    },
+    orders: {
+      lifetimeSeconds: 259_200,
+      priceProtectionBps: 300,
+      previewSeconds: 300,
+      minBuyKobo: 100_000n,
+      consent: { maxFeeBps: 100, maxSlippageBps: 100 },
+    },
+    earn: {
+      minKobo: 500_000n,
+      automation: {
+        actions: ["claim", "reward_conversion"],
+        perActionCapKobo: 50_000_000n,
+        totalCapKobo: 2_000_000_000n,
+        expiryDays: 30,
+        renewReminderDays: 5,
+      },
+    },
+    earnings: {
+      maxConversionFeeBps: 100,
+      maxFxBps: 200,
+      allowBackgroundConversion: true,
+      consentVersion: "app-2026-11-17",
+    },
+    keeper: {
+      slotSeconds: 300,
+      bandBps: 50,
+      maxSpendMicroUsd: 5_000_000_000n,
+    },
+    sweepSeconds: 60,
+    notificationsSlotSeconds: 15,
   },
   sim: {
     yellowcard: {

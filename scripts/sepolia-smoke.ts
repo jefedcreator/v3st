@@ -16,6 +16,9 @@ import { investmentService } from "../src/backend/services/investments";
 import { reconciliationService, type CheckResult } from "../src/backend/services/reconciliation";
 import { rewardService } from "../src/backend/services/rewards";
 import { stockService } from "../src/backend/services/stocks";
+import { poolMidPriceMicroUsd, testPoolAligner } from "../src/backend/services/stocks/test-pools";
+import { readPool } from "../src/backend/services/onchain/providers/hydrex/pool";
+import { referenceUsable, tokenPriceMicroUsd } from "../src/backend/services/stocks/reference";
 import { strategyService } from "../src/backend/services/strategies";
 import { executionAccounts } from "../src/backend/services/wallets/execution-accounts";
 import { walletService } from "../src/backend/services/wallets";
@@ -186,7 +189,26 @@ async function main(): Promise<void> {
   const earnings = await earningsService.list(user.id, { page: 1, size: 20 });
   console.log(`earnings DTO: ${JSON.stringify(earnings.data.slice(0, 3))}`);
 
-  // 7. Ledger reconciliation must be clean.
+  // 7. Run the test-pool keeper once: every enabled stand-in must end within 50 bps
+  // of its reference.
+  const alignments = await testPoolAligner.run();
+  for (const result of alignments) {
+    console.log(`keeper: ${result.action} stock=${result.stockId}${result.reason ? ` (${result.reason})` : ""}`);
+  }
+  const enabledStandIns = await db.stock.findMany({ where: { chain: "basesepolia", enabled: true, paused: false } });
+  let misaligned = 0;
+  for (const standIn of enabledStandIns) {
+    const provenance = standIn.provenance as { hydrexPool?: string } | null;
+    if (!provenance?.hydrexPool || !referenceUsable(standIn, new Date()) || standIn.referencePriceMicroUsd === null) continue;
+    const ref = tokenPriceMicroUsd(standIn)!;
+    const state = await readPool(chainId, provenance.hydrexPool as Address);
+    const { midMicroUsd } = poolMidPriceMicroUsd(state, standIn.tokenAddress as Address, standIn.decimals);
+    const diff = midMicroUsd > ref ? midMicroUsd - ref : ref - midMicroUsd;
+    if ((diff * 10_000n) / ref > 50n) misaligned += 1;
+  }
+  if (misaligned > 0) throw new Error(`${misaligned} enabled stand-in(s) still more than 50 bps from their reference`);
+
+  // 8. Ledger reconciliation must be clean.
   const recon = await reconciliationService.run(new Date());
   const results = recon.results as unknown as CheckResult[];
   const breaches = results.filter((r) => r.status === "breach");

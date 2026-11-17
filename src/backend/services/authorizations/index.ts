@@ -1,4 +1,4 @@
-import { type Prisma } from "@/server/prisma";
+import { type InvestmentAuthorization, type Prisma } from "@/server/prisma";
 import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
@@ -17,7 +17,13 @@ import {
 // Inferred from the strict Task-4 validator: a one-time/standing union.
 export type AuthorizationInput = AuthorizationCreateBodySchema;
 
-export type StandingAction = "claim" | "reward_conversion" | "reinvest" | "withdrawal_sale";
+export type StandingAction =
+  | "claim"
+  | "reward_conversion"
+  | "reinvest"
+  | "withdrawal_sale"
+  | "order_buy"
+  | "order_sell";
 
 export type AuthorizationUsage = {
   // Present when a standing authorization is used; one-time authorizations are
@@ -32,6 +38,8 @@ export type AuthorizationUsage = {
     budgetNgnKobo?: bigint | null;
     feeMicroUsd?: bigint;
     slippageBps?: number;
+    // Effective per-share price of the accepted fill; required for order actions.
+    effectivePriceMicroUsd?: bigint;
   };
 };
 
@@ -285,6 +293,29 @@ class AuthorizationService {
         "AUTHORIZATION_EXCEEDED",
       );
     }
+    // Order consents carry a per-share price limit: a fill beyond it (above for
+    // buys, below for sells) is never authorized.
+    if (
+      (usage.action === "order_buy" || usage.action === "order_sell") &&
+      auth.limitPriceMicroUsd !== null
+    ) {
+      const effective = usage.quote?.effectivePriceMicroUsd;
+      if (effective === undefined) {
+        throw new UnprocessableEntityException(
+          "Order consent requires an effective fill price",
+          "AUTHORIZATION_EXCEEDED",
+        );
+      }
+      if (
+        (usage.action === "order_buy" && effective > auth.limitPriceMicroUsd) ||
+        (usage.action === "order_sell" && effective < auth.limitPriceMicroUsd)
+      ) {
+        throw new ConflictException(
+          "Fill price is beyond the authorized limit",
+          "AUTHORIZATION_EXCEEDED",
+        );
+      }
+    }
     const q = usage.quote;
     if (q?.stockId && !auth.stockIds.includes(q.stockId)) {
       throw new UnprocessableEntityException(
@@ -346,6 +377,62 @@ class AuthorizationService {
       throw new UnprocessableEntityException("Slippage exceeds the authorized ceiling", "AUTHORIZATION_EXCEEDED");
     }
     return ngnKobo;
+  }
+
+  // Single-use standing consent for one customer order: a price limit, fee and
+  // slippage caps, expiring with the order. Idempotent under the order's key.
+  async createOrderConsent(
+    tx: Tx,
+    userId: string,
+    input: {
+      orderId: string;
+      side: "buy" | "sell";
+      stockId: string;
+      maxNgnKobo: bigint;
+      limitPriceMicroUsd: bigint;
+      expiresAt: Date;
+    },
+  ): Promise<InvestmentAuthorization> {
+    const key = `auth:${userId}:order:${input.orderId}`;
+    const requestHash = sha256Hex(
+      canonicalJson({
+        orderId: input.orderId,
+        side: input.side,
+        stockId: input.stockId,
+        maxNgnKobo: input.maxNgnKobo.toString(),
+        limitPriceMicroUsd: input.limitPriceMicroUsd.toString(),
+        expiresAt: input.expiresAt.toISOString(),
+      }),
+    );
+    const existing = await tx.investmentAuthorization.findUnique({ where: { key } });
+    if (existing) {
+      if (existing.requestHash !== requestHash) {
+        throw new ConflictException(
+          "Idempotency key reused with a different body",
+          "IDEMPOTENCY_KEY_REUSED",
+        );
+      }
+      return existing;
+    }
+    return tx.investmentAuthorization.create({
+      data: {
+        userId,
+        key,
+        kind: "standing",
+        stockIds: [input.stockId],
+        strategyIds: [],
+        actions: [input.side === "buy" ? "order_buy" : "order_sell"],
+        maxActionNgn: toDbRaw(input.maxNgnKobo),
+        maxTotalNgn: toDbRaw(input.maxNgnKobo),
+        maxFeeBps: policy.app.orders.consent.maxFeeBps,
+        maxSlippageBps: policy.app.orders.consent.maxSlippageBps,
+        limitPriceMicroUsd: input.limitPriceMicroUsd,
+        expiresAt: input.expiresAt,
+        policyVersion: policy.app.policyVersion,
+        disclosureVersion: null,
+        requestHash,
+      },
+    });
   }
 
   // Finds an active standing authorization covering an action for a stock/strategy,

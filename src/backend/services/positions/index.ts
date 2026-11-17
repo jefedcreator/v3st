@@ -9,7 +9,7 @@ import type { AssetAmount } from "@/backend/services/onchain/types";
 import type { PositionView } from "@/types/dto";
 import { fromDbRaw } from "@/utils/asset-units";
 
-import { applyFillToLots, hasAnyLot, totalCostBasis, totalRealized } from "./lots";
+import { applyFillToLots, hasAnyLot, openLotsFor, totalCostBasis, totalRealized } from "./lots";
 
 // Applies a finalized onchain operation to FIFO lots. Called from investment
 // settlement inside the same transaction.
@@ -49,6 +49,18 @@ class PositionService {
   // Multiplier-aware positions with cost-basis status and signed performance.
   // Valuation uses share-equivalent x underlying share price only (never both
   // multipliers); unavailable reference data yields null valuation, not zero.
+  // Naira cost basis of the open lots: each lot's USD cost at its own purchase
+  // FX rate, floored per lot; null when any open lot has no recorded rate.
+  async costKobo(userId: string, stockId: string): Promise<bigint | null> {
+    const lots = await openLotsFor(db, userId, stockId);
+    if (lots.some((lot) => lot.fxRateKobo === null)) return null;
+    let sum = 0n;
+    for (const lot of lots) {
+      sum += (fromDbRaw(lot.costUsdc) * lot.fxRateKobo!) / 1_000_000n;
+    }
+    return sum;
+  }
+
   async list(userId: string): Promise<PositionView[]> {
     const balances = await ledgerService.balancesForUser(userId);
     const stocks = await db.stock.findMany();

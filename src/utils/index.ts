@@ -9,7 +9,7 @@ export function newCuid(): string {
 }
 
 const REDACT_KEY =
-  /(token|secret|password|account_?number|bvn|id_?number|phone|signature|authorization|cookie)/i;
+  /(token|secret|password|account_?number|bvn|id_?number|phone|signature|authorization|cookie|pin)/i;
 
 export function redact(value: unknown): unknown {
   if (Array.isArray(value)) {

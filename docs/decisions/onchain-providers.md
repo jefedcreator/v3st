@@ -131,3 +131,11 @@ current recipient, and treats unknown hook versions/entitlements as unavailable;
 holder claim API is invented. Feel ties eligibility to an eligible launch-token holding
 snapshot — ordinary ownership of the paired stock does not qualify. All schema/ABI names
 are V3ST replica definitions.
+
+## 2026-11-17 amendment (customer app beta: basesepolia trading window)
+
+Set on 2026-11-17 by the customer app backend plan; **pending operator confirmation**.
+
+1. On chain `84532` (Base Sepolia) in the customer beta (`APP_CUSTOMER_CHAIN=basesepolia`), the trading window for reference prices is **7,200 s (2 hours)**: a reference older than that is stale for trading, while display may still use the last known price.
+2. The venue band on Base Sepolia is **300 bps** around the reference price for customer executions.
+3. The test-pool keeper trades the labelled test pools every **300 s** to keep stand-in prices aligned; on testnet these keeper trades supply most Earn fee volume.

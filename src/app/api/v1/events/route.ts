@@ -3,7 +3,7 @@ import {
   queryValidatorMiddleware,
   withMiddleware,
 } from "@/backend/middleware";
-import { eventService } from "@/backend/services/events";
+import { eventStream } from "@/backend/services/events/stream";
 import {
   eventsQuerySchema,
   type EventsQuerySchema,
@@ -11,10 +11,6 @@ import {
 import { SESSION_COOKIE_NAME } from "@/server/auth/constants";
 
 export const dynamic = "force-dynamic";
-
-const POLL_MS = 2_000;
-const HEARTBEAT_MS = 15_000;
-const MAX_STREAM_MS = 300_000;
 
 export const GET = withMiddleware<null, null, EventsQuerySchema>(
   async (req) => {
@@ -29,48 +25,17 @@ export const GET = withMiddleware<null, null, EventsQuerySchema>(
         cursor = 0n;
       }
     }
-    const sessionToken = req.cookies.get(SESSION_COOKIE_NAME)?.value ?? req.headers.get("authorization")?.slice(7) ?? "";
-    let cancelled = false;
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const send = (chunk: string) => {
-          try {
-            controller.enqueue(encoder.encode(chunk));
-          } catch {
-            return false;
-          }
-          return true;
-        };
-        const startedAt = Date.now();
-        let lastHeartbeat = Date.now();
-        try {
-          while (!cancelled && !req.signal.aborted && Date.now() - startedAt < MAX_STREAM_MS) {
-            if (!(await eventService.sessionExists(sessionToken))) break;
-            const events = await eventService.list(userId, cursor);
-            for (const event of events) {
-              cursor = BigInt(event.id);
-              send(`id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-            }
-            if (Date.now() - lastHeartbeat >= HEARTBEAT_MS) {
-              send(": heartbeat\n\n");
-              lastHeartbeat = Date.now();
-            }
-            await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-          }
-        } catch {
-          // stream aborted by the client
-        }
-        try {
-          controller.close();
-        } catch {
-          // already closed
-        }
-      },
-      cancel() { cancelled = true; },
+    const sessionToken =
+      req.cookies.get(SESSION_COOKIE_NAME)?.value ??
+      req.headers.get("authorization")?.slice(7) ??
+      "";
+    const stream = eventStream({
+      userId,
+      cursor,
+      sessionToken,
+      signal: req.signal,
+      map: (event) => ({ event: event.type, data: event }),
     });
-
     return new Response(stream, {
       status: 200,
       headers: {

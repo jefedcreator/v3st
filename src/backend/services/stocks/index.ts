@@ -3,6 +3,9 @@ import { db } from "@/server/db";
 import type { StockDto } from "@/types/dto";
 import { fetchStocksPage } from "@/backend/services/stocks/base-stocks-client";
 import { standInFor, stockReference, type ReferenceStock } from "@/backend/services/stocks/reference";
+import { stockHistory } from "@/backend/services/stocks/history";
+import { ratesService } from "@/backend/services/rates";
+import type { Rate } from "@/utils/money";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
 import { BadRequestException, NotFoundException, UnprocessableEntityException } from "@/utils/exceptions";
 import { formatMinor } from "@/utils/money";
@@ -96,6 +99,7 @@ class StockService {
     } while (next !== null);
     let updated = 0;
     let skipped = 0;
+    const updatedIds: string[] = [];
     await db.$transaction(async (tx) => {
       for (const reference of stocks) {
         const data = {
@@ -110,10 +114,51 @@ class StockService {
           data,
         });
         const count = byAsset.count + byStandIn.count;
-        if (count === 0) skipped += 1;
-        else updated += count;
+        if (count === 0) {
+          skipped += 1;
+        } else {
+          updated += count;
+          const rows = await tx.stock.findMany({
+            where: {
+              OR: [
+                { assetKey: reference.assetKey },
+                { provenance: { path: ["standInFor"], equals: reference.assetKey } },
+              ],
+            },
+            select: { id: true },
+          });
+          updatedIds.push(...rows.map((row) => row.id));
+        }
       }
     });
+    // After the update transaction, keep one price snapshot per updated row that
+    // has a price and a time, at the current payout rate (null when rates are down).
+    if (updatedIds.length > 0) {
+      let rate: Rate | null = null;
+      try {
+        rate = (await ratesService.display()).payoutRate;
+      } catch {
+        rate = null;
+      }
+      await db.$transaction(async (tx) => {
+        for (const id of updatedIds) {
+          const row = await tx.stock.findUnique({ where: { id } });
+          if (row?.referencePriceMicroUsd != null && row.referenceBasis && row.referenceAsOf) {
+            await stockHistory.record(
+              tx,
+              row.id,
+              {
+                priceMicroUsd: row.referencePriceMicroUsd,
+                basis: row.referenceBasis,
+                asOf: row.referenceAsOf,
+                multiplierWad: fromDbRaw(row.multiplierWad),
+              },
+              rate,
+            );
+          }
+        }
+      });
+    }
     return { updated, skipped };
   }
 }

@@ -278,13 +278,18 @@ enum AllocationState {
 
 model User {
     id              String       @id @default(cuid())
-    phone           String       @unique
+    // Phone is kept for the operator test sign-in; Privy customers sign in by
+    // email and never store a phone number.
+    phone           String?      @unique
+    email           String?      @unique
     identitySubject String       @unique
     identityMode    ProviderMode
     role            UserRole     @default(user)
     kycStatus       KycStatus    @default(none)
     kycTier         Int          @default(0)
     verifiedName    String?
+    // The name the customer chose to be called; null falls back to the verified name.
+    preferredName   String?
     kycPersona      String?
     kycProfile      Json?
     kycMode         ProviderMode?
@@ -296,6 +301,13 @@ model User {
     allowBackgroundConversion Boolean @default(false)
     maxConversionFeeBps       Int?
     maxFxBps                  Int?
+    // Transaction PIN: scrypt hash with a per-user salt, plus the failure
+    // counter and lock used by the customer security flow.
+    pinHash           String?
+    pinSalt           String?
+    pinSetAt          DateTime?
+    pinFailedAttempts Int       @default(0)
+    pinLockedUntil    DateTime?
     createdAt       DateTime     @default(now())
     updatedAt       DateTime     @updatedAt
 
@@ -305,11 +317,13 @@ model User {
 }
 
 model Session {
-    id           String   @id @default(cuid())
-    sessionToken String   @unique
-    userId       String
-    expires      DateTime
-    createdAt    DateTime @default(now())
+    id             String   @id @default(cuid())
+    sessionToken   String   @unique
+    userId         String
+    expires        DateTime
+    deviceLabel    String?
+    privySessionId String?
+    createdAt      DateTime @default(now())
 
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -548,6 +562,8 @@ model Stock {
     enabled                       Boolean
     paused                        Boolean  @default(false)
     delisted                      Boolean  @default(false)
+    // Customer-facing ticker (e.g. "AAPL") for stand-in rows; null on fixtures.
+    displayTicker                 String?
     simPriceMicroUsdc             BigInt
     simWeeklyEarningMicroPerShare BigInt
     multiplierWad                 Decimal  @db.Decimal(78, 0) @default(1000000000000000000)
@@ -600,6 +616,8 @@ model Earning {
     harvestedAt     DateTime
     payoutOrderId   String?
     reinvestTradeId String?
+    // Onchain reinvest link (investment pipeline); sim reinvest uses reinvestTradeId.
+    reinvestInvestmentId String?
     provenance      String   @default("legacy_fixture")
     receiptId       String?
     createdAt       DateTime @default(now())
@@ -664,6 +682,38 @@ model UserEvent {
 
     @@index([userId, seq])
     @@map("user_events")
+}
+
+model Notification {
+    id        String    @id @default(cuid())
+    userId    String
+    kind      String
+    title     String
+    body      String
+    link      String
+    dedupeKey String    @unique
+    readAt    DateTime?
+    createdAt DateTime  @default(now())
+
+    @@index([userId, createdAt])
+    @@map("notifications")
+}
+
+// A short-lived lease for a long worker job, so it never holds a transaction open
+// across external calls. Expired leases may be taken over.
+model WorkerLease {
+    name      String   @id
+    holder    String
+    expiresAt DateTime
+
+    @@map("worker_leases")
+}
+
+model ProjectionCursor {
+    name     String @id
+    position BigInt
+
+    @@map("projection_cursors")
 }
 
 model OperationalControl {
@@ -870,6 +920,8 @@ model InvestmentAuthorization {
     maxTotalNgn       Decimal?  @db.Decimal(78, 0)
     maxFeeBps         Int?
     maxSlippageBps    Int?
+    // Standing order consent (order_buy/order_sell): the per-share price limit.
+    limitPriceMicroUsd BigInt?
     expiresAt         DateTime
     revokedAt     DateTime?
     epoch         Int       @default(0)
@@ -1170,6 +1222,7 @@ model EarningAllocation {
     state           AllocationState @default(reserved)
     payoutOrderId   String?
     reinvestTradeId String?
+    reinvestInvestmentId String?
     createdAt       DateTime        @default(now())
 
     @@index([userId, week])
@@ -1198,4 +1251,141 @@ model SignedPayload {
     createdAt    DateTime @default(now())
 
     @@map("signed_payloads")
+}
+
+// One acceptance per customer, document and version; the current version of a
+// document is the one in src/backend/content/documents.ts.
+model AgreementAcceptance {
+    id         String   @id @default(cuid())
+    userId     String
+    document   String
+    version    String
+    acceptedAt DateTime @default(now())
+
+    @@unique([userId, document, version])
+    @@map("agreement_acceptances")
+}
+
+// One snapshot per reference time; drives charts, 24-hour change and the
+// delayed-price display label.
+model StockPriceSnapshot {
+    id            String   @id @default(cuid())
+    stockId       String
+    asOf          DateTime
+    priceMicroUsd BigInt
+    basis         String
+    multiplierWad Decimal  @db.Decimal(78, 0)
+    rateKobo      BigInt?
+    rateMicroUsd  BigInt?
+    createdAt     DateTime @default(now())
+
+    @@unique([stockId, asOf])
+    @@map("stock_price_snapshots")
+}
+
+// One keeper alignment trade per run, kept for audit and smoke checks.
+model TestPoolAlignment {
+    id                String   @id @default(cuid())
+    stockId           String
+    pool              String
+    beforeMicroUsd    BigInt
+    afterMicroUsd     BigInt
+    referenceMicroUsd BigInt
+    txHash            String
+    createdAt         DateTime @default(now())
+
+    @@index([stockId, createdAt])
+    @@map("test_pool_alignments")
+}
+
+// Per-customer watchlist of catalog stocks.
+model WatchlistEntry {
+    userId    String
+    stockId   String
+    createdAt DateTime @default(now())
+
+    @@id([userId, stockId])
+    @@map("watchlist_entries")
+}
+
+enum CustomerOrderSide {
+    buy
+    sell
+}
+
+enum CustomerOrderFunding {
+    cash
+    bank_transfer
+}
+
+enum CustomerOrderStatus {
+    waiting_for_payment
+    waiting_for_price
+    executing
+    completed
+    failed
+    cancelled
+    expired
+}
+
+enum CustomerPreviewMode {
+    now
+    waiting
+}
+
+// A priced order preview the customer reviewed before confirming with their PIN.
+model CustomerOrderPreview {
+    id                     String              @id @default(cuid())
+    userId                 String
+    stockId                String
+    side                   CustomerOrderSide
+    funding                CustomerOrderFunding?
+    mode                   CustomerPreviewMode
+    amountKobo             BigInt
+    quantityRaw            Decimal?            @db.Decimal(78, 0)
+    budgetMicroUsd         BigInt?
+    investmentQuoteId      String?             @unique
+    referencePriceMicroUsd BigInt
+    limitPriceMicroUsd     BigInt
+    rateKobo               BigInt
+    rateMicroUsd           BigInt
+    terms                  Json
+    expiresAt              DateTime
+    consumedAt             DateTime?
+    createdAt              DateTime            @default(now())
+
+    @@index([userId, createdAt])
+    @@map("customer_order_previews")
+}
+
+model CustomerOrder {
+    id                 String                @id @default(cuid())
+    userId             String
+    key                String                @unique
+    requestHash        String
+    previewId          String                @unique
+    stockId            String
+    side               CustomerOrderSide
+    funding            CustomerOrderFunding?
+    status             CustomerOrderStatus
+    amountKobo         BigInt
+    budgetMicroUsd     BigInt?
+    quantityRaw        Decimal?              @db.Decimal(78, 0)
+    limitPriceMicroUsd BigInt
+    rateKobo           BigInt
+    rateMicroUsd       BigInt
+    authorizationId    String?
+    depositOrderId     String?               @unique
+    investmentId       String?               @unique
+    holdKey            String?
+    holdReleasedAt     DateTime?
+    settledKobo        BigInt?
+    expiresAt          DateTime
+    completedAt        DateTime?
+    createdAt          DateTime              @default(now())
+    updatedAt          DateTime              @updatedAt
+
+    @@index([userId, createdAt])
+    @@index([status])
+    @@map("customer_orders")
 }

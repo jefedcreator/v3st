@@ -258,14 +258,6 @@ class HydrexStrategyReplicaAdapter implements StrategyAdapter {
       const settlementIn = input.inputs.find((a) => a.asset === settlement);
       const stockIn = input.inputs.find((a) => a.asset === stock.assetKey);
       if (!settlementIn || !stockIn) throw new HydrexReplicaError("Enter requires settlement and stock inputs");
-      const { reserveSettlement, reserveStock } = await poolState(pool);
-      const totalShares = await poolUint(pool, "totalShares");
-      let shares = settlementIn.raw;
-      if (totalShares > 0n) {
-        const bySettlement = (settlementIn.raw * totalShares) / reserveSettlement;
-        const byStock = (stockIn.raw * totalShares) / reserveStock;
-        shares = bySettlement < byStock ? bySettlement : byStock;
-      }
       return {
         id: `hydrex-sq-${randomUUID()}`,
         request: input,

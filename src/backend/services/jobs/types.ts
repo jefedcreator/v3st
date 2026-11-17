@@ -1,5 +1,6 @@
 export type JobKind =
   | "wallets.provision"
+  | "wallets.prepare_execution"
   | "chain.progress"
   | "webhook.process"
   | "deposit.progress"
@@ -16,7 +17,11 @@ export type JobKind =
   | "operation.progress"
   | "investment.progress"
   | "strategy.progress"
-  | "stocks.reference_sync";
+  | "stocks.reference_sync"
+  | "stocks.align_test_pools"
+  | "orders.progress"
+  | "orders.sweep"
+  | "notifications.project";
 
 export type JobInput = {
   kind: JobKind;

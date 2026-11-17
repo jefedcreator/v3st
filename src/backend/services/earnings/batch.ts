@@ -2,9 +2,11 @@ import { Prisma } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
 import { policy } from "@/backend/config/policy";
 import { alertService } from "@/backend/services/alerts";
+import { authorizationService } from "@/backend/services/authorizations";
 import { bankAccountService } from "@/backend/services/bank-accounts";
 import { complianceService } from "@/backend/services/compliance";
 import { controlsService } from "@/backend/services/controls";
+import { investmentService } from "@/backend/services/investments";
 import { ProviderError } from "@/backend/services/ramp/errors";
 import { rampRegistry } from "@/backend/services/ramp";
 import { ratesService } from "@/backend/services/rates";
@@ -12,6 +14,7 @@ import { capacityService } from "@/backend/services/treasury/capacity";
 import { treasuryService } from "@/backend/services/treasury";
 import { tradeService } from "@/backend/services/trades";
 import { withdrawalService } from "@/backend/services/withdrawals";
+import { ledgerChainFor } from "@/backend/services/onchain/manifests";
 import { HttpException } from "@/utils/exceptions";
 import { ngnToUsd, usdToNgn } from "@/utils/money";
 
@@ -19,12 +22,12 @@ export type BatchResult = {
   paid: number;
   reinvested: number;
   rolledOver: number;
-  skipped: Record<"needs_choice" | "kyc" | "bank_account" | "limit" | "paused", number>;
+  skipped: Record<"needs_choice" | "needs_consent" | "kyc" | "bank_account" | "limit" | "paused", number>;
   stoppedForFloat: boolean;
 };
 
 function emptySkipped(): BatchResult["skipped"] {
-  return { needs_choice: 0, kyc: 0, bank_account: 0, limit: 0, paused: 0 };
+  return { needs_choice: 0, needs_consent: 0, kyc: 0, bank_account: 0, limit: 0, paused: 0 };
 }
 
 class EarningsBatchService {
@@ -35,6 +38,7 @@ class EarningsBatchService {
       where: {
         payoutOrderId: null,
         reinvestTradeId: null,
+        reinvestInvestmentId: null,
         week: { lte: week },
       },
       orderBy: [{ harvestedAt: "asc" }, { userId: "asc" }],
@@ -63,6 +67,22 @@ class EarningsBatchService {
           : 1
         : a.firstHarvestedAt.getTime() - b.firstHarvestedAt.getTime(),
     );
+  }
+
+  // The payout runs on the ledger chain of the candidate's receipts, so a Base
+  // Sepolia earning pays out of the basesepolia cash rails.
+  private async ledgerChainForCandidate(candidate: {
+    chain: string;
+    receiptIds: string[];
+  }): Promise<string> {
+    if (candidate.receiptIds.length > 0) {
+      const receipt = await db.rewardReceipt.findUnique({
+        where: { id: candidate.receiptIds[0]! },
+        include: { network: true },
+      });
+      if (receipt) return ledgerChainFor(receipt.network.chainId);
+    }
+    return candidate.chain;
   }
 
   async precheck(week: string): Promise<{ requiredUsd: bigint; floatAvailable: bigint }> {
@@ -109,6 +129,65 @@ class EarningsBatchService {
         const stockId = user.reinvestStockId;
         if (!stockId) {
           result.skipped.needs_choice += 1;
+          continue;
+        }
+        const stock = await db.stock.findUnique({ where: { id: stockId } });
+        if (stock?.networkId) {
+          // Onchain stock: reinvest through the investment pipeline, which needs
+          // the standing reinvest consent; without one the week is skipped.
+          const consent = await authorizationService.findStanding(user.id, "reinvest", { stockId });
+          if (!consent) {
+            result.skipped.needs_consent += 1;
+            continue;
+          }
+          try {
+            const quote = await investmentService.quote(user.id, {
+              stockId,
+              side: "buy",
+              inputRaw: candidate.total,
+            });
+            const inv = await investmentService.confirm(user.id, quote.id, consent.id, `reinvest:${user.id}:${week}`, {
+              standingAction: "reinvest",
+              purpose: "reinvest",
+            });
+            await withTx(async (tx) => {
+              await tx.earning.updateMany({
+                where: { id: { in: candidate.earningIds } },
+                data: { reinvestInvestmentId: inv.id },
+              });
+              if (candidate.receiptIds.length > 0) {
+                await tx.earningAllocation.updateMany({
+                  where: { receiptId: { in: candidate.receiptIds } },
+                  data: { state: "reserved", reinvestInvestmentId: inv.id },
+                });
+              }
+            });
+            if (!["failed", "cancelled", "needs_confirmation"].includes(inv.status)) result.reinvested += 1;
+          } catch (error) {
+            if (
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === "P2002"
+            ) {
+              continue;
+            }
+            // One customer's reinvest that can't run this week (stale price,
+            // paused stock, a consent cap) leaves their earnings for the next
+            // batch; it never stops everyone else's payouts.
+            if (error instanceof HttpException) {
+              if (
+                error.code === "TRADING_PAUSED" ||
+                error.code === "REFERENCE_STALE" ||
+                error.code === "PRICE_OUT_OF_RANGE" ||
+                error.code === "STOCK_UNAVAILABLE"
+              ) {
+                result.skipped.paused += 1;
+              } else {
+                result.skipped.limit += 1;
+              }
+              continue;
+            }
+            throw error;
+          }
           continue;
         }
         try {
@@ -206,7 +285,7 @@ class EarningsBatchService {
             earningIds: candidate.earningIds,
             amountUsdc: candidate.total,
             quote,
-            chain: candidate.chain,
+            chain: await this.ledgerChainForCandidate(candidate),
           });
           // Attach the payout identity when reserved; paid is reported only after
           // the order reaches its final paid state.

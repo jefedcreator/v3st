@@ -20,6 +20,21 @@ describe("execution accounts", () => {
     expect(await executionAccounts.find(user.id, 84532)).toBeNull();
   });
 
+  it("deploys one account through the relayer nonce allocator when callers race", async () => {
+    const user = await makeUserWithWallets();
+    const [a, b] = await Promise.all([
+      executionAccounts.ensure(user.id, 31337),
+      executionAccounts.ensure(user.id, 31337),
+    ]);
+    expect(b.accountAddress).toBe(a.accountAddress);
+    expect(await db.executionAccount.count({ where: { walletId: a.wallet.id } })).toBe(1);
+    // The deployment is a stored relayer transaction, so the nonce allocator sees it.
+    const deploys = await db.localChainTransfer.findMany({
+      where: { key: { startsWith: `exec-account:${a.wallet.id}:` } },
+    });
+    expect(deploys).toHaveLength(1);
+  });
+
   it("binds a Base Sepolia operation to that network's account, never the local one", async () => {
     const user = await makeUserWithWallets();
     const local = await executionAccounts.ensure(user.id, 31337);

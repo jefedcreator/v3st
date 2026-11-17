@@ -1,5 +1,5 @@
 import type { ChainTransfer, RampOrder, TradeOrder } from "@/server/prisma";
-import { db, withTx, type Tx } from "@/server/db";
+import { db, lockRows, withTx, type Tx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { alertService } from "@/backend/services/alerts";
@@ -11,6 +11,7 @@ import { controlsService } from "@/backend/services/controls";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import {
+  cashReserved,
   depositReceived,
   depositReceivedDirect,
   transferReleased,
@@ -24,29 +25,38 @@ import { RetryableError } from "@/backend/services/jobs/types";
 import { stockService } from "@/backend/services/stocks";
 import { tradeService } from "@/backend/services/trades";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
+import { executionAccounts } from "@/backend/services/wallets/execution-accounts";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import type { Chain as RampChain } from "@/backend/services/ramp/types";
 import { walletService } from "@/backend/services/wallets";
+import type { CustomerChain } from "@/backend/services/app/network";
 import { canonicalJson, sha256Hex } from "@/utils";
 import { fromDbRaw } from "@/utils/asset-units";
-import { ConflictException, ForbiddenException } from "@/utils/exceptions";
+import { ConflictException, ForbiddenException, UnprocessableEntityException } from "@/utils/exceptions";
 import { ngnToUsd } from "@/utils/money";
 
 import { toDepositDto, type DepositDto } from "./dto";
 
 export type DepositBody = { ngn_amount: bigint; stock_id?: string };
 
+const MANAGED_CHAINS: readonly string[] = ["testnet", "basesepolia"];
+
 class DepositService {
   async create(
     userId: string,
     body: DepositBody,
     idempotencyKey: string,
+    opts?: { chain?: CustomerChain; holdFor?: { key: string; orderId: string } },
   ): Promise<{ deposit: DepositDto; created: boolean }> {
     await controlsService.assertOpen("deposits", "DEPOSITS_PAUSED");
     const stock = body.stock_id ? await stockService.get(body.stock_id) : null;
+    if (stock && stock.networkId !== null) {
+      throw new UnprocessableEntityException("Onchain stocks are bought through investment orders", "CAPABILITY_UNAVAILABLE");
+    }
     const hasLocalCatalog = await db.stock.count({ where: { chain: "testnet", networkId: { not: null }, enabled: true } });
-    const fundingChain = stock?.chain ?? (hasLocalCatalog > 0 ? "testnet" : policy.defaultChain);
+    const fundingChain = stock?.chain ?? opts?.chain ?? (hasLocalCatalog > 0 ? "testnet" : policy.defaultChain);
     if (fundingChain === "testnet") await testnetWalletService.ensureExecutionAccount(userId);
+    if (fundingChain === "basesepolia") await executionAccounts.ensure(userId, 84532);
     const bankAccount = await bankAccountService.getActiveRow(userId);
     if (!bankAccount) {
       throw new ForbiddenException(
@@ -103,6 +113,13 @@ class DepositService {
         subjectId: order.id,
         runAt: new Date(now().getTime() + 15_000),
       });
+      if (opts?.holdFor) {
+        // Link a waiting bank-transfer order to its funding deposit and hold key.
+        await tx.customerOrder.update({
+          where: { id: opts.holdFor.orderId },
+          data: { depositOrderId: order.id, holdKey: opts.holdFor.key },
+        });
+      }
       return { order, created: true };
     });
     if (created.created) {
@@ -471,6 +488,38 @@ class DepositService {
           tx,
           userFunded({ id: t.id, userId: order.userId, chain: t.chain, amount: fromDbRaw(t.amount), to: "cash" }),
         );
+        // A waiting bank-transfer order holds the landed cash immediately in the
+        // same funding transaction, then wakes its own progress job.
+        // The order row is locked so a concurrent cancel either runs first (the
+        // hold is then marked released and the cash stays spendable) or sees the
+        // hold and its budget and releases exactly that amount.
+        const link = await tx.customerOrder.findUnique({
+          where: { depositOrderId: order.id },
+          select: { id: true },
+        });
+        if (link) await lockRows(tx, "customer_orders", [link.id]);
+        const linkedOrder = link
+          ? await tx.customerOrder.findUnique({ where: { id: link.id } })
+          : null;
+        if (linkedOrder?.holdKey && !linkedOrder.holdReleasedAt) {
+          const credited = fromDbRaw(t.amount);
+          await ledgerService.post(
+            tx,
+            cashReserved({
+              key: linkedOrder.holdKey,
+              userId: order.userId,
+              chain: t.chain,
+              amount: credited,
+              from: "cash",
+            }),
+          );
+          // The hold and the budget it covers are recorded together.
+          await tx.customerOrder.update({
+            where: { id: linkedOrder.id },
+            data: { budgetMicroUsd: credited },
+          });
+          await jobService.enqueue(tx, { kind: "orders.progress", subjectId: linkedOrder.id });
+        }
         if (order.stockId) {
           await tradeService.createBuy(tx, {
             key: `deposit-buy:${order.id}`,
@@ -484,14 +533,14 @@ class DepositService {
           await orderService.transition(tx, {
             order,
             to: "funded",
-            patch: { holdReason: null, onchainFundedAt: t.chain === "testnet" ? now() : null },
+            patch: { holdReason: null, onchainFundedAt: MANAGED_CHAINS.includes(t.chain) ? now() : null },
             actor: "system",
           });
         } else {
           const funded = await orderService.transition(tx, {
             order,
             to: "funded",
-            patch: { holdReason: null, onchainFundedAt: t.chain === "testnet" ? now() : null },
+            patch: { holdReason: null, onchainFundedAt: MANAGED_CHAINS.includes(t.chain) ? now() : null },
             actor: "system",
           });
           await orderService.transition(tx, { order: funded, to: "settled", actor: "system" });

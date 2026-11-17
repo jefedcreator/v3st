@@ -28,12 +28,15 @@
     "worker": "tsx --env-file-if-exists=.env src/backend/workers/run.ts",
     "test:e2e": "playwright test",
     "sepolia:deploy": "tsx --env-file-if-exists=.env scripts/sepolia-deploy.ts",
-    "sepolia:smoke": "tsx --env-file-if-exists=.env scripts/sepolia-smoke.ts"
+    "sepolia:smoke": "tsx --env-file-if-exists=.env scripts/sepolia-smoke.ts",
+    "sepolia:treasury": "tsx --env-file-if-exists=.env scripts/sepolia-treasury.ts",
+    "sepolia:customer-smoke": "tsx --env-file-if-exists=.env scripts/sepolia-customer-smoke.ts"
   },
   "dependencies": {
     "@hydrexfi/hydrex-sdk": "1.2.8",
     "@phosphor-icons/react": "2.1.10",
     "@prisma/client": "^6.6.0",
+    "@privy-io/node": "0.37.0",
     "@sentry/nextjs": "11.10.0",
     "@t3-oss/env-nextjs": "^0.12.0",
     "class-variance-authority": "0.7.1",

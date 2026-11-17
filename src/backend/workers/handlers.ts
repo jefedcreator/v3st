@@ -13,12 +13,17 @@ import { earningsService } from "@/backend/services/earnings";
 import { executionService } from "@/backend/services/execution";
 import { investmentService } from "@/backend/services/investments";
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
+import { notificationProjector } from "@/backend/services/notifications";
 import { pollOpenWork } from "@/backend/services/orders/poller";
 import { reconciliationService } from "@/backend/services/reconciliation";
 import { stockService } from "@/backend/services/stocks";
+import { testPoolAligner } from "@/backend/services/stocks/test-pools";
 import { strategyService } from "@/backend/services/strategies";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
+import { executionAccounts } from "@/backend/services/wallets/execution-accounts";
+import { customerChainId } from "@/backend/services/app/network";
+import { customerOrderExecutor } from "@/backend/services/customer-orders/executor";
 import { treasuryService } from "@/backend/services/treasury";
 import { webhookService } from "@/backend/services/webhooks";
 import { withdrawalService } from "@/backend/services/withdrawals";
@@ -29,6 +34,15 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "wallets.provision": async (job) => {
     await walletService.ensureUserWallets(job.subjectId);
+  },
+  "wallets.prepare_execution": async (job) => {
+    await executionAccounts.ensure(job.subjectId, customerChainId());
+  },
+  "orders.progress": async (job) => {
+    await customerOrderExecutor.progress(job.subjectId);
+  },
+  "orders.sweep": async () => {
+    await customerOrderExecutor.sweep();
   },
   "trade.progress": async (job) => {
     await tradeService.progress(job.subjectId);
@@ -42,6 +56,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   "strategy.progress": async (job) => {
     await strategyService.progress(job.subjectId);
   },
+  "notifications.project": async () => {
+    await notificationProjector.run();
+  },
   "deposit.progress": async (job) => {
     await depositService.progress(job.subjectId);
   },
@@ -53,6 +70,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
     // local replica path keep the seeded reference data.
     if (!process.env.BASE_SEPOLIA_RPC_URL) return;
     await stockService.syncReference();
+  },
+  "stocks.align_test_pools": async () => {
+    await testPoolAligner.run();
   },
   "payout.progress": async (job) => {
     await withdrawalService.progress(job.subjectId);

@@ -8,6 +8,7 @@ class UserService {
     return {
       id: user.id,
       phone: user.phone,
+      email: user.email,
       role: user.role,
       kyc: {
         status: user.kycStatus,

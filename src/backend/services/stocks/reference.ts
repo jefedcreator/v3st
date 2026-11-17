@@ -4,6 +4,8 @@ import type { Stock } from "@/server/prisma";
 import { policy } from "@/backend/config/policy";
 import { assetKey } from "@/backend/services/onchain/types";
 import { WAD } from "@/backend/services/stocks/corporate-actions";
+import { fromDbRaw } from "@/utils/asset-units";
+import { UnprocessableEntityException } from "@/utils/exceptions";
 
 export type ReferencePriceBasis = "token_nav" | "share_price";
 
@@ -192,11 +194,123 @@ export function evaluateReference(stock: ReferenceStock): { tradable: boolean; r
   return { tradable: reasons.length === 0, reasons };
 }
 
-// A reference NAV older than the policy window, or missing, cannot authorize trades.
+// The per-network trading window; unlisted chains keep the global default.
+function tradeWindowSeconds(stock: Stock): number {
+  return policy.onchain.reference.tradeMaxAgeSeconds[stock.chain] ?? policy.onchain.referenceMaxAgeSeconds;
+}
+
+// A reference NAV older than the trading window, or missing, cannot authorize trades.
 export function referenceUsable(stock: Stock, at: Date): boolean {
   if (stock.referencePriceMicroUsd === null || !stock.referenceBasis || !stock.referenceAsOf) {
     return false;
   }
   const ageMs = at.getTime() - stock.referenceAsOf.getTime();
-  return ageMs >= 0 && ageMs <= policy.onchain.referenceMaxAgeSeconds * 1000;
+  return ageMs >= 0 && ageMs <= tradeWindowSeconds(stock) * 1000;
+}
+
+export type DisplayReference = {
+  priceMicroUsd: bigint;
+  basis: ReferencePriceBasis;
+  asOf: Date;
+  status: "live" | "delayed";
+};
+
+// The last known price for display: "live" inside the trading window, "delayed"
+// up to the display window, null beyond it or when never priced.
+export function referenceDisplay(stock: Stock, at: Date): DisplayReference | null {
+  if (stock.referencePriceMicroUsd === null || !stock.referenceBasis || !stock.referenceAsOf) {
+    return null;
+  }
+  const ageMs = at.getTime() - stock.referenceAsOf.getTime();
+  if (ageMs < 0) return null;
+  const basis = stock.referenceBasis as ReferencePriceBasis;
+  if (ageMs <= tradeWindowSeconds(stock) * 1000) {
+    return { priceMicroUsd: stock.referencePriceMicroUsd, basis, asOf: stock.referenceAsOf, status: "live" };
+  }
+  if (ageMs <= policy.onchain.reference.displayMaxAgeSeconds * 1000) {
+    return { priceMicroUsd: stock.referencePriceMicroUsd, basis, asOf: stock.referenceAsOf, status: "delayed" };
+  }
+  return null;
+}
+
+// The price of one whole token in micro-USD: token_nav is used as-is; share_price
+// is the per-share price scaled by the token multiplier.
+export function tokenPriceMicroUsd(
+  stock: Pick<Stock, "referencePriceMicroUsd" | "referenceBasis" | "multiplierWad">,
+): bigint | null {
+  if (stock.referencePriceMicroUsd === null || !stock.referenceBasis) return null;
+  if (stock.referenceBasis === "token_nav") return stock.referencePriceMicroUsd;
+  return (stock.referencePriceMicroUsd * fromDbRaw(stock.multiplierWad)) / WAD;
+}
+
+// The price of one share in micro-USD (inverse of the multiplier).
+export function sharePriceMicroUsd(stock: Stock): bigint | null {
+  const tokenPrice = tokenPriceMicroUsd(stock);
+  if (tokenPrice === null) return null;
+  return (tokenPrice * WAD) / fromDbRaw(stock.multiplierWad);
+}
+
+// The effective per-share price (micro-USD) of an accepted quote's fill:
+// buy spends settlement input, sell receives settlement output.
+export function effectiveSharePriceMicroUsd(
+  stock: Stock,
+  side: "buy" | "sell",
+  inputRaw: bigint,
+  outputRaw: bigint,
+): bigint | null {
+  if (inputRaw <= 0n || outputRaw <= 0n) return null;
+  const pricePerToken =
+    side === "buy"
+      ? (inputRaw * 10n ** BigInt(stock.decimals)) / outputRaw
+      : (outputRaw * 10n ** BigInt(stock.decimals)) / inputRaw;
+  return (pricePerToken * WAD) / fromDbRaw(stock.multiplierWad);
+}
+
+// The worst price per share a quote can still fill at, rounded against the
+// customer: input per minimum output for a buy (rounded up), minimum output per
+// input for a sell (rounded down). A waiting order's price limit is checked against
+// this, so no allowed fill can land past the limit the customer accepted.
+export function worstFillSharePriceMicroUsd(
+  stock: Stock,
+  side: "buy" | "sell",
+  inputRaw: bigint,
+  minOutputRaw: bigint,
+): bigint | null {
+  if (inputRaw <= 0n || minOutputRaw <= 0n) return null;
+  const scale = 10n ** BigInt(stock.decimals);
+  const multiplier = fromDbRaw(stock.multiplierWad);
+  if (multiplier <= 0n) return null;
+  if (side === "buy") {
+    const perToken = ceilDiv(inputRaw * scale, minOutputRaw);
+    return ceilDiv(perToken * WAD, multiplier);
+  }
+  const perToken = (minOutputRaw * scale) / inputRaw;
+  return (perToken * WAD) / multiplier;
+}
+
+function ceilDiv(a: bigint, b: bigint): bigint {
+  return (a + b - 1n) / b;
+}
+
+// On chains with a fill-versus-reference band, a venue quote whose effective price
+// per whole token is further than the band from the reference is refused.
+export function assertVenueWithinBand(
+  stock: Stock,
+  side: "buy" | "sell",
+  inputRaw: bigint,
+  expectedOutputRaw: bigint,
+): void {
+  const band = policy.onchain.reference.venueBandBps[stock.chain];
+  if (band === undefined) return;
+  const ref = tokenPriceMicroUsd(stock);
+  if (ref === null || ref === 0n || expectedOutputRaw === 0n || inputRaw === 0n) {
+    throw new UnprocessableEntityException("Reference price is missing or stale", "REFERENCE_STALE");
+  }
+  const scale = 10n ** BigInt(stock.decimals);
+  const effective =
+    side === "buy" ? (inputRaw * scale) / expectedOutputRaw : (expectedOutputRaw * scale) / inputRaw;
+  const diff = effective > ref ? effective - ref : ref - effective;
+  if ((diff * 10_000n) / ref > BigInt(band)) {
+    throw new UnprocessableEntityException("Venue price is outside the reference band", "PRICE_OUT_OF_RANGE");
+  }
 }

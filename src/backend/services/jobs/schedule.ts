@@ -83,6 +83,20 @@ export function dueSchedules(at: Date): DueSchedule[] {
     job: { kind: "poll.open_work", subjectId: "global" },
   });
 
+  // Waiting customer orders are swept on a fixed bucket so a tick can never skip one.
+  out.push({
+    name: "orders.sweep",
+    slot: `bucket-${Math.floor(at.getTime() / 1000 / policy.app.sweepSeconds)}`,
+    job: { kind: "orders.sweep", subjectId: "global" },
+  });
+
+  // Notifications are projected from user events on a fixed slot bucket.
+  out.push({
+    name: "notifications.project",
+    slot: `bucket-${Math.floor(at.getTime() / 1000 / policy.app.notificationsSlotSeconds)}`,
+    job: { kind: "notifications.project", subjectId: "global" },
+  });
+
   // Live reference sync every referenceSyncSeconds, only when Base Sepolia is
   // configured. The worker ticks at irregular instants, so the slot is the
   // 30-second bucket containing `at` (deduplicated by schedule_runs), not an exact
@@ -93,6 +107,17 @@ export function dueSchedules(at: Date): DueSchedule[] {
       name: "stocks.reference_sync",
       slot: `bucket-${bucket}`,
       job: { kind: "stocks.reference_sync", subjectId: "global" },
+    });
+  }
+
+  // The test-pool keeper runs in fixed slots, only when Base Sepolia and its own
+  // keeper key are configured.
+  if (process.env.BASE_SEPOLIA_RPC_URL && process.env.BASE_SEPOLIA_KEEPER_PRIVATE_KEY) {
+    const keeperBucket = Math.floor(at.getTime() / 1000 / policy.app.keeper.slotSeconds);
+    out.push({
+      name: "stocks.align_test_pools",
+      slot: `bucket-${keeperBucket}`,
+      job: { kind: "stocks.align_test_pools", subjectId: "global" },
     });
   }
 

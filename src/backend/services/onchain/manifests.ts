@@ -3,10 +3,11 @@ import path from "node:path";
 
 import type { Address, Hex } from "viem";
 
-import { BASE_SEPOLIA_CHAIN_ID, TESTNET_CHAIN_ID, parseRpcEndpoint } from "@/backend/integrations/onchain-policy";
+import { BASE_SEPOLIA_CHAIN_ID, TESTNET_CHAIN_ID } from "@/backend/integrations/onchain-policy";
 import { sha256Hex } from "@/utils";
 
-import { manifestDir, readManifest, rpcRequest, settlementAssetKey, testnetService, TestnetError, type TestnetManifest } from "./testnet";
+import { rpcOn } from "./chains";
+import { manifestDir, readManifest, settlementAssetKey, testnetService, TestnetError, type TestnetManifest } from "./testnet";
 import type { IntegrationKind } from "./types";
 
 // A network manifest records every contract of one deployment. External (provider-owned)
@@ -15,6 +16,8 @@ export type NetworkManifest = Omit<TestnetManifest, "integrationKind" | "mode"> 
   integrationKind: IntegrationKind;
   mode: "sandbox" | "simulated";
   external: Record<string, { address: Address; codeHash: string }>;
+  // Catalog revision of the deployment (2 = multi-ticker stand-ins).
+  catalogVersion?: number;
 };
 
 export function manifestPathFor(chainId: number): string {
@@ -58,13 +61,6 @@ export function ledgerChainFor(chainId: number): string {
   throw new TestnetError(`No ledger namespace for chain ${chainId}`);
 }
 
-function rpcUrlFor(chainId: number): string {
-  if (chainId === TESTNET_CHAIN_ID) return process.env.TESTNET_RPC_URL ?? "http://127.0.0.1:8545";
-  const url = process.env.BASE_SEPOLIA_RPC_URL;
-  if (!url) throw new TestnetError("BASE_SEPOLIA_RPC_URL is not configured");
-  return parseRpcEndpoint(url, chainId).url;
-}
-
 export async function verifyManifest(chainId: number): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (chainId === TESTNET_CHAIN_ID) {
     const verified = await testnetService.verify(readManifest());
@@ -77,8 +73,9 @@ export async function verifyManifest(chainId: number): Promise<{ ok: true } | { 
     return { ok: false, reason: error instanceof Error ? error.message : "manifest unreadable" };
   }
   try {
-    const url = rpcUrlFor(chainId);
-    const reported = await rpcRequest<Hex>(url, chainId, "eth_chainId");
+    // rpcOn routes through the shared per-chain transport (and the chain-ID check),
+    // so non-local chains go through their own endpoint and the test transport applies.
+    const reported = await rpcOn<Hex>(chainId, "eth_chainId");
     if (Number(BigInt(reported)) !== chainId) {
       return { ok: false, reason: `node reports chain ${reported}, expected ${chainId}` };
     }
@@ -87,7 +84,7 @@ export async function verifyManifest(chainId: number): Promise<{ ok: true } | { 
       contracts[name] = { address: entry.address, codeHash: entry.codeHash };
     }
     for (const [name, entry] of Object.entries(contracts)) {
-      const code = await rpcRequest<Hex>(url, chainId, "eth_getCode", [entry.address, "latest"]);
+      const code = await rpcOn<Hex>(chainId, "eth_getCode", [entry.address, "latest"]);
       if (!code || code === "0x") return { ok: false, reason: `contract ${name} missing at ${entry.address}` };
       if (entry.codeHash && sha256Hex(code) !== entry.codeHash) {
         return { ok: false, reason: `contract ${name} code hash mismatch at ${entry.address}` };

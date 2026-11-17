@@ -15,7 +15,7 @@ import { onchainRegistry } from "@/backend/services/onchain/registry";
 import { positionService } from "@/backend/services/positions";
 import { testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
-import { referenceUsable } from "@/backend/services/stocks/reference";
+import { assertVenueWithinBand, referenceUsable, worstFillSharePriceMicroUsd } from "@/backend/services/stocks/reference";
 import { stockService } from "@/backend/services/stocks";
 import { ratesService } from "@/backend/services/rates";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
@@ -174,7 +174,7 @@ class InvestmentService {
       throw new UnprocessableEntityException("Stock is not tradable", "CAPABILITY_UNAVAILABLE");
     }
     if (!referenceUsable(stock, now())) {
-      throw new UnprocessableEntityException("Reference price is missing or stale", "STOCK_UNAVAILABLE");
+      throw new UnprocessableEntityException("Reference price is missing or stale", "REFERENCE_STALE");
     }
     const network = await db.onchainNetwork.findUniqueOrThrow({ where: { id: stock.networkId } });
     const chainId = network.chainId;
@@ -249,6 +249,8 @@ class InvestmentService {
       return a.providerId < b.providerId ? -1 : 1;
     });
     const best = viable[0]!;
+    // On banded chains, refuse a venue quote that is too far from the reference.
+    assertVenueWithinBand(stock, input.side, acceptedInputRaw, best.quote.expectedOutput.raw);
     const { onchainExpiryMs } = await import("@/backend/services/onchain/testnet");
     // The contract deadline is copied from this expiry and enforced onchain, so
     // the bound must hold on both the app and chain clocks.
@@ -309,7 +311,11 @@ class InvestmentService {
     quoteId: string,
     authorizationId: string,
     key: string,
-    opts?: { standingAction?: StandingAction },
+    opts?: {
+      standingAction?: StandingAction;
+      releaseHold?: { key: string; kind: "cash" | "stock"; amount: bigint };
+      purpose?: TradePurpose;
+    },
   ): Promise<InvestmentDto> {
     const requestHash = sha256Hex(canonicalJson({ quoteId, authorizationId, key }));
     return withTx(async (tx) => {
@@ -359,6 +365,13 @@ class InvestmentService {
           budgetNgnKobo: quote.budgetNgn === null ? null : BigInt(quote.budgetNgn),
           slippageBps: quote.slippageBps,
           feeMicroUsd: fromDbRaw(quote.feeUsdc) + fromDbRaw(quote.fxFeeUsdc) + fromDbRaw(quote.venueFeeUsdc),
+          // Order consents bound the worst fill this quote allows (minimum output).
+          effectivePriceMicroUsd: worstFillSharePriceMicroUsd(
+            stock,
+            quote.side,
+            fromDbRaw(quote.inputRaw),
+            fromDbRaw(quote.minOutputRaw),
+          ) ?? undefined,
         },
       });
       const context = quote.context as {
@@ -398,12 +411,44 @@ class InvestmentService {
         sourceBlock: BigInt(eq.sourceBlock),
         routeFingerprint: eq.routeFingerprint,
       };
+      // A waiting order's hold is released inside this transaction, before the
+      // new reservation, so the same cash or shares are never held twice.
+      if (opts?.releaseHold) {
+        if (opts.releaseHold.kind === "cash") {
+          await ledgerService.post(
+            tx,
+            cashReleased({
+              key: opts.releaseHold.key,
+              userId,
+              chain: stock.chain,
+              amount: opts.releaseHold.amount,
+              to: "cash",
+            }),
+          );
+        } else {
+          await ledgerService.post(
+            tx,
+            stockReleased({
+              key: opts.releaseHold.key,
+              userId,
+              stockId: quote.stockId,
+              quantity: opts.releaseHold.amount,
+            }),
+          );
+        }
+      }
       // Atomic reserve: the ledger post throws INSUFFICIENT_FUNDS under row locks, so
       // two concurrent reservations of the same cash cannot both succeed.
       if (quote.side === "buy") {
         await ledgerService.post(
           tx,
-          cashReserved({ key, userId, chain: stock.chain, amount: fromDbRaw(quote.inputRaw), from: "cash" }),
+          cashReserved({
+            key,
+            userId,
+            chain: stock.chain,
+            amount: fromDbRaw(quote.inputRaw),
+            from: opts?.purpose === "reinvest" ? "earnings" : "cash",
+          }),
         );
       } else {
         await ledgerService.post(
@@ -435,6 +480,7 @@ class InvestmentService {
           authorizationId,
           stockId: quote.stockId,
           side: quote.side,
+          purpose: opts?.purpose ?? "deposit_buy",
           status: "reserved",
           amountIn: quote.inputRaw,
           minAmountOut: quote.minOutputRaw,
@@ -547,7 +593,13 @@ class InvestmentService {
           if (current.side === "buy") {
             await ledgerService.post(
               tx,
-              cashReleased({ key: current.key, userId: current.userId, chain: stock.chain, amount: reservedIn - actualIn, to: "cash" }),
+              cashReleased({
+                key: current.key,
+                userId: current.userId,
+                chain: stock.chain,
+                amount: reservedIn - actualIn,
+                to: current.purpose === "reinvest" ? "earnings" : "cash",
+              }),
             );
           } else {
             await ledgerService.post(
@@ -586,7 +638,13 @@ class InvestmentService {
         if (current.side === "buy") {
           await ledgerService.post(
             tx,
-            cashReleased({ key: current.key, userId: current.userId, chain: stock.chain, amount: fromDbRaw(current.amountIn), to: "cash" }),
+            cashReleased({
+              key: current.key,
+              userId: current.userId,
+              chain: stock.chain,
+              amount: fromDbRaw(current.amountIn),
+              to: current.purpose === "reinvest" ? "earnings" : "cash",
+            }),
           );
         } else {
           await ledgerService.post(
@@ -598,6 +656,18 @@ class InvestmentService {
           where: { id: current.id },
           data: { status: "failed", failureReason: op.errorReason ?? "EXECUTION_REVERTED" },
         });
+        // A failed reinvest returns the reserved earnings exactly once so the
+        // next batch can try again.
+        if (current.purpose === "reinvest") {
+          await tx.earning.updateMany({
+            where: { reinvestInvestmentId: current.id },
+            data: { reinvestInvestmentId: null },
+          });
+          await tx.earningAllocation.updateMany({
+            where: { reinvestInvestmentId: current.id },
+            data: { state: "available", reinvestInvestmentId: null },
+          });
+        }
         await eventService.emit(tx, current.userId, "investment.updated", current.id, "failed");
       });
     }

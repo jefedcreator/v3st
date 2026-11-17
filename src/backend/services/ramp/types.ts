@@ -21,7 +21,8 @@ export type Quote = {
 export type Customer = {
   userId: string;
   name: string;
-  phone: string;
+  // Privy customers have no phone number; ramp requests omit it when null.
+  phone: string | null;
   country: "NG";
   dateOfBirth: string | null;
   idType: "BVN";
