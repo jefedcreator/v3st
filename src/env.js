@@ -31,6 +31,14 @@ export const env = createEnv({
       .string()
       .regex(/^0x[0-9a-fA-F]{64}$/)
       .optional(),
+    // Customer sign-in provider. "sandbox" is a Privy development app whose
+    // app ID and SPKI verification key are required below; "simulated" is a
+    // local issuer used in CI and local development. No Privy app secret is
+    // ever used: the backend verifies tokens offline only.
+    PRIVY_MODE: z.enum(["sandbox", "simulated"]).default("simulated"),
+    PRIVY_APP_ID: z.string().min(1).optional(),
+    PRIVY_VERIFICATION_KEY: z.string().min(1).optional(),
+    PRIVY_BETA_ALLOWLIST: z.string().optional(),
   },
 
   /**
@@ -61,6 +69,10 @@ export const env = createEnv({
     TESTNET_SIGNER_PRIVATE_KEY: process.env.TESTNET_SIGNER_PRIVATE_KEY,
     BASE_SEPOLIA_RPC_URL: process.env.BASE_SEPOLIA_RPC_URL,
     BASE_SEPOLIA_RELAYER_PRIVATE_KEY: process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY,
+    PRIVY_MODE: process.env.PRIVY_MODE,
+    PRIVY_APP_ID: process.env.PRIVY_APP_ID,
+    PRIVY_VERIFICATION_KEY: process.env.PRIVY_VERIFICATION_KEY,
+    PRIVY_BETA_ALLOWLIST: process.env.PRIVY_BETA_ALLOWLIST,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**

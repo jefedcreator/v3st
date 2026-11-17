@@ -14,7 +14,7 @@ export function customerFor(user: User): Customer {
   return {
     userId: user.id,
     name: user.verifiedName ?? "",
-    phone: user.phone,
+    phone: user.phone ?? null,
     country: "NG",
     dateOfBirth: profile.dateOfBirth ?? null,
     idType: "BVN",

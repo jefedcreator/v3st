@@ -112,6 +112,17 @@ export class YellowCardProvider implements RampProvider {
     key: string;
     recipient: { chain: Chain; address: string } | null;
   }): Promise<Collection> {
+    const recipient: Record<string, unknown> = {
+      name: input.customer.name,
+      country: "NG",
+      dob: input.customer.dateOfBirth ?? undefined,
+      idType: "BVN",
+      idNumber: input.customer.idNumber ?? undefined,
+      address: input.customer.address ?? undefined,
+    };
+    if (input.customer.phone !== null) {
+      recipient.phone = input.customer.phone;
+    }
     const body = {
       sequenceId: input.key,
       localAmount: Number(input.quote.ngnAmount) / 100,
@@ -127,15 +138,7 @@ export class YellowCardProvider implements RampProvider {
         accountType: "bank",
         networkId: input.source.bankCode,
       },
-      recipient: {
-        name: input.customer.name,
-        country: "NG",
-        phone: input.customer.phone,
-        dob: input.customer.dateOfBirth ?? undefined,
-        idType: "BVN",
-        idNumber: input.customer.idNumber ?? undefined,
-        address: input.customer.address ?? undefined,
-      },
+      recipient,
     };
     const raw = await this.client.request("POST", "/receive", body);
     const parsed = receiveResponseSchema.parse(raw);
@@ -180,6 +183,13 @@ export class YellowCardProvider implements RampProvider {
     key: string;
     maxUsd: bigint;
   }): Promise<PayoutResult> {
+    const sender: Record<string, unknown> = {
+      name: input.customer.name,
+      country: "NG",
+    };
+    if (input.customer.phone !== null) {
+      sender.phone = input.customer.phone;
+    }
     const body = {
       sequenceId: input.key,
       localAmount: Number(input.quote.ngnAmount - input.quote.feeNgn) / 100,
@@ -187,11 +197,7 @@ export class YellowCardProvider implements RampProvider {
       country: "NG",
       reason: "other",
       customerType: "retail",
-      sender: {
-        name: input.customer.name,
-        country: "NG",
-        phone: input.customer.phone,
-      },
+      sender,
       destination: {
         accountNumber: input.destination.accountNumber,
         accountType: "bank",

@@ -10,3 +10,11 @@ export type AppProgress =
   | "failed"
   | "cancelled"
   | "action_needed";
+
+export type AppSessionDto =
+  | { signed_in: false; beta: AppBetaDto }
+  | {
+      signed_in: true;
+      customer: { first_name: string | null; email: string | null };
+      beta: AppBetaDto;
+    };

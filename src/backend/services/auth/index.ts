@@ -7,7 +7,9 @@ import { db, withTx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "@/server/auth/constants";
 import { jobService } from "@/backend/services/jobs";
-import { UnauthorizedException } from "@/utils/exceptions";
+import type { PrivyLogin } from "@/backend/services/privy";
+import { privyRuntime } from "@/backend/services/privy/simulated";
+import { ConflictException, UnauthorizedException } from "@/utils/exceptions";
 import type { AuthenticatedUser } from "@/backend/middleware/types";
 
 import { issueIdentityToken, simulatedIdentityVerifier } from "./identity";
@@ -46,6 +48,51 @@ class AuthService {
         sessionToken,
         userId: user.id,
         expires,
+      };
+      await tx.session.create({ data: sessionData });
+      return { user, sessionToken, expires, created };
+    });
+  }
+
+  // Privy email sign-in: the customer is keyed by their Privy user ID, their
+  // email is stored and no phone number is ever written for them.
+  async signInWithPrivy(
+    login: PrivyLogin,
+    deviceLabel: string,
+  ): Promise<{
+    user: User;
+    sessionToken: string;
+    expires: Date;
+    created: boolean;
+  }> {
+    return withTx(async (tx) => {
+      let user = await tx.user.findUnique({ where: { identitySubject: login.userId } });
+      let created = false;
+      if (!user) {
+        const withEmail = await tx.user.findUnique({ where: { email: login.email } });
+        if (withEmail) {
+          throw new ConflictException("Email already linked to another account", "IDENTITY_CONFLICT");
+        }
+        const data: Prisma.UserCreateInput = {
+          email: login.email,
+          identitySubject: login.userId,
+          identityMode: privyRuntime().mode,
+        };
+        user = await tx.user.create({ data });
+        created = true;
+        await jobService.enqueue(tx, {
+          kind: "wallets.provision",
+          subjectId: user.id,
+        });
+      }
+      const sessionToken = randomBytes(32).toString("base64url");
+      const expires = new Date(now().getTime() + SESSION_MAX_AGE_SECONDS * 1_000);
+      const sessionData: Prisma.SessionUncheckedCreateInput = {
+        sessionToken,
+        userId: user.id,
+        expires,
+        deviceLabel,
+        privySessionId: login.sessionId,
       };
       await tx.session.create({ data: sessionData });
       return { user, sessionToken, expires, created };

@@ -345,6 +345,24 @@ export const operatorMiddleware = async <B, P, Q>(
   return { message: "", statusCode: 200, next: true };
 };
 
+// Customer sign-in and other token-exchange routes: reject any request that
+// carries an Origin header pointing somewhere other than the app itself.
+export const sameOriginMiddleware: MiddlewareFunction = async (request) => {
+  const origin = request.headers.get("origin");
+  if (origin !== null) {
+    const expected = new URL(env.NEXT_PUBLIC_APP_URL).origin;
+    if (origin !== expected) {
+      return {
+        message: "Cross-origin request rejected",
+        statusCode: 403,
+        next: false,
+        code: "CROSS_ORIGIN",
+      };
+    }
+  }
+  return { message: "", statusCode: 200, next: true };
+};
+
 export const originMiddleware = async <B, P, Q>(
   request: AuthRequest<B, P, Q>,
 ): Promise<MiddlewareResponse> => {

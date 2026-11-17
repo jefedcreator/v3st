@@ -11,7 +11,8 @@ export type IntegrationId =
   | "wallets"
   | "venues"
   | "earnings"
-  | "settlement";
+  | "settlement"
+  | "privy";
 
 export type IntegrationModes = Record<IntegrationId, ProviderMode>;
 
@@ -25,6 +26,7 @@ export const BETA_ALLOWED_MODES: Record<IntegrationId, readonly ProviderMode[]> 
   venues: ["simulated"],
   earnings: ["simulated"],
   settlement: ["simulated"],
+  privy: ["sandbox", "simulated"],
 };
 
 export const YELLOWCARD_SANDBOX_URL = "https://sandbox.api.yellowcard.io/business";
@@ -42,6 +44,9 @@ export type BetaEnvSource = {
   YELLOWCARD_MODE?: string;
   YELLOWCARD_API_KEY?: string;
   YELLOWCARD_API_SECRET?: string;
+  PRIVY_MODE?: string;
+  PRIVY_APP_ID?: string;
+  PRIVY_VERIFICATION_KEY?: string;
 };
 
 const SIMULATED_ONLY: readonly IntegrationId[] = [
@@ -72,8 +77,20 @@ export function assertBetaRuntime(source: BetaEnvSource): IntegrationModes {
       "YELLOWCARD_MODE=sandbox requires YELLOWCARD_API_KEY and YELLOWCARD_API_SECRET",
     );
   }
+  const privyMode = source.PRIVY_MODE ?? "simulated";
+  if (!BETA_ALLOWED_MODES.privy.includes(privyMode as ProviderMode)) {
+    throw new BetaPolicyError(
+      `PRIVY_MODE must be one of ${BETA_ALLOWED_MODES.privy.join(", ")} (got ${JSON.stringify(privyMode)})`,
+    );
+  }
+  if (privyMode === "sandbox" && (!source.PRIVY_APP_ID || !source.PRIVY_VERIFICATION_KEY)) {
+    throw new BetaPolicyError(
+      "PRIVY_MODE=sandbox requires PRIVY_APP_ID and PRIVY_VERIFICATION_KEY (SPKI PEM); no app secret is used",
+    );
+  }
   const modes = {} as IntegrationModes;
   modes.yellowcard = yellowcardMode as ProviderMode;
+  modes.privy = privyMode as ProviderMode;
   for (const id of SIMULATED_ONLY) {
     modes[id] = "simulated";
   }
@@ -89,6 +106,9 @@ export function integrationModes(): IntegrationModes {
     YELLOWCARD_MODE: env.YELLOWCARD_MODE,
     YELLOWCARD_API_KEY: env.YELLOWCARD_API_KEY,
     YELLOWCARD_API_SECRET: env.YELLOWCARD_API_SECRET,
+    PRIVY_MODE: env.PRIVY_MODE,
+    PRIVY_APP_ID: env.PRIVY_APP_ID,
+    PRIVY_VERIFICATION_KEY: env.PRIVY_VERIFICATION_KEY,
   });
   return cachedModes;
 }

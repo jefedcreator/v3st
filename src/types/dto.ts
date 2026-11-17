@@ -38,7 +38,8 @@ export type BankAccountDto = {
 
 export type MeDto = {
   id: string;
-  phone: string;
+  phone: string | null;
+  email: string | null;
   role: UserRole;
   kyc: KycDto;
   wallets: { family: WalletFamily; address: string }[];

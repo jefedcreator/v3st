@@ -278,7 +278,10 @@ enum AllocationState {
 
 model User {
     id              String       @id @default(cuid())
-    phone           String       @unique
+    // Phone is kept for the operator test sign-in; Privy customers sign in by
+    // email and never store a phone number.
+    phone           String?      @unique
+    email           String?      @unique
     identitySubject String       @unique
     identityMode    ProviderMode
     role            UserRole     @default(user)
@@ -305,11 +308,13 @@ model User {
 }
 
 model Session {
-    id           String   @id @default(cuid())
-    sessionToken String   @unique
-    userId       String
-    expires      DateTime
-    createdAt    DateTime @default(now())
+    id             String   @id @default(cuid())
+    sessionToken   String   @unique
+    userId         String
+    expires        DateTime
+    deviceLabel    String?
+    privySessionId String?
+    createdAt      DateTime @default(now())
 
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
