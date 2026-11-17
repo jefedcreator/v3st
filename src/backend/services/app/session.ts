@@ -14,7 +14,11 @@ class AppSessionService {
     const onboarding = await appOnboardingService.status(user.id);
     return {
       signed_in: true,
-      customer: { first_name: firstNameOf(user.verifiedName), email: user.email },
+      customer: {
+        first_name: firstNameOf(user.verifiedName),
+        display_name: user.preferredName ?? firstNameOf(user.verifiedName),
+        email: user.email,
+      },
       onboarding: { complete: onboarding.complete, next_step: onboarding.next_step },
       unread_notifications: await appInboxService.unreadCount(user.id),
       beta,

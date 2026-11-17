@@ -288,6 +288,8 @@ model User {
     kycStatus       KycStatus    @default(none)
     kycTier         Int          @default(0)
     verifiedName    String?
+    // The name the customer chose to be called; null falls back to the verified name.
+    preferredName   String?
     kycPersona      String?
     kycProfile      Json?
     kycMode         ProviderMode?

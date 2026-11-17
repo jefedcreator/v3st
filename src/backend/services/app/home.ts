@@ -3,6 +3,7 @@ import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { sharePriceFromSnapshot } from "@/backend/services/app/catalog";
 import type { AppCashDto } from "@/backend/services/app/cash";
+import { appAutomationsService } from "@/backend/services/app/automations";
 import { appCashService } from "@/backend/services/app/cash";
 import { firstNameOf, formatNaira, toKobo } from "@/backend/services/app/format";
 import type { AppHoldingDto } from "@/backend/services/app/holdings";
@@ -200,9 +201,21 @@ class AppHomeService {
         link: "/settings/bank",
       });
     }
+    const automations = await appAutomationsService.list(userId);
+    const renewal = automations
+      .filter((automation) => automation.needs_renewal)
+      .sort((a, b) => a.expires_at.localeCompare(b.expires_at))[0];
+    if (renewal) {
+      actionItems.push({
+        kind: "renew_automation",
+        title: "Keep your automatic actions on",
+        detail: `Renew before ${lagosParts(new Date(renewal.expires_at)).isoDate}.`,
+        link: "/settings/automations",
+      });
+    }
 
     return {
-      greeting_name: firstNameOf(user.verifiedName),
+      greeting_name: user.preferredName ?? firstNameOf(user.verifiedName),
       total_kobo: totalKobo,
       total_status: totalStatus,
       as_of: at.toISOString(),

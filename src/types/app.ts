@@ -20,7 +20,7 @@ export type AppSessionDto =
   | { signed_in: false; beta: AppBetaDto }
   | {
       signed_in: true;
-      customer: { first_name: string | null; email: string | null };
+      customer: { first_name: string | null; display_name: string | null; email: string | null };
       onboarding: AppOnboardingSummaryDto;
       unread_notifications: number;
       beta: AppBetaDto;
