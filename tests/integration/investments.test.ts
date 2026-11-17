@@ -332,7 +332,7 @@ describe("consent-bound investments on the local testnet", () => {
     expect(op.status).toBe("signed");
     expect(op.txHash).toBe(signed.executeHash);
     const transaction = await (await import("@/backend/services/onchain/testnet")).rpcRequest(
-      ctx.handle.url, "eth_getTransactionByHash", [signed.executeHash],
+      ctx.handle.url, 31337, "eth_getTransactionByHash", [signed.executeHash],
     );
     expect(transaction).toBeNull();
     expect(await ledgerService.balance(acct.userReserved(ctx.u.id, "testnet"))).toBe(2_000_000n);

@@ -16,7 +16,7 @@ resources, `403` for non-operators on `/ops/*`.
 
 | Endpoint | Notes |
 | --- | --- |
-| `GET /stocks` | Catalog; `tradable`, `asset_key`, reference price basis and test provenance per row |
+| `GET /stocks` | Catalog; `tradable`, `asset_key`, reference price basis and test provenance per row. On Base Sepolia, `stand_in_for` names the live tokenized-stock asset key the test stand-in tracks (e.g. `tAAPL` → the AAPLc contract); reference prices sync from Base's tokenized stocks API |
 | `GET /stocks/:id` | Detail; unknown IDs are `404`, paused/delisted rows stay visible with flags |
 | `GET /strategies`, `GET /strategies/:id` | Enabled versioned mechanisms: input/receipt/reward assets, `separate_claim`, lock and caps, provenance |
 
@@ -63,7 +63,7 @@ resources, `403` for non-operators on `/ops/*`.
 | Endpoint | Notes |
 | --- | --- |
 | `POST /beta/onchain-scenarios` | User-owned local-testnet operation plus a named scenario (`delayed_confirmation`, `revert`, `partial_fill`, `sponsor_shortage`, `zero_rewards`) + `Idempotency-Key`. Scenarios alter only local fixture state through signed testnet contract calls and the normal worker; no arbitrary RPC, mint recipient or calldata inputs |
-| `GET /ops/integrations` | Operator-only: one row per provider with `beta_adapter: "local_testnet_replica"`, `actual_integration: "disabled_unverified"`, capabilities, evidence id, `testnet_evidence` status, `real_provider_calls` (always `0`) and the replica limitation |
+| `GET /ops/integrations` | Operator-only: one row per provider with `integration_kind` (`local_testnet_replica` for the five replicas; `verified_provider_testnet` for Hydrex while Base Sepolia is configured and the manifest verifies), `beta_adapter`, `actual_integration: "disabled_unverified" \| "verified_provider_testnet"`, `verified_chain_id` (`84532`, or `null` when unverified), capabilities, evidence id, `testnet_evidence` status, `real_provider_calls` (live count of actual provider factory calls in this process; `0` while unverified) and the replica limitation |
 | `GET /ops/onchain-operations` | Operator-only: network identity + verification, unresolved operation count, operation holds, sponsor spend vs daily cap, stale observations. Never secrets |
 
 Journeys are covered by `tests/api/onchain-journey.test.ts` (login → bank receipt → testnet

@@ -20,15 +20,8 @@ import type {
   StrategyPlan,
   StrategyQuote,
 } from "@/backend/services/onchain/types";
-import {
-  publicClientFor,
-  readManifest,
-  relayerAccount,
-  rpcRequest,
-  testnetRpcUrl,
-  walletClientFor,
-  testnetService,
-} from "@/backend/services/onchain/testnet";
+import { chainObject, chainTarget, publicClientOn, relayerOn, rpcOn, walletClientOn } from "@/backend/services/onchain/chains";
+import { manifestFor, verifyManifest } from "@/backend/services/onchain/manifests";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
 import { canonicalJson, sha256Hex } from "@/utils";
 import { fromDbRaw, toDbRaw } from "@/utils/asset-units";
@@ -47,6 +40,7 @@ import {
   PartialFillViolation,
   fetchReceipt,
   observationState,
+  requiredConfirmations,
   revertReasonOf,
   txExists,
 } from "./receipts";
@@ -112,7 +106,7 @@ export type CreateOperationInput = {
 // provider_managed profile (e.g. Bankr) uses its own managed account, anything
 // else uses the wallet's application execution account.
 export async function accountAddressFor(
-  prisma: Pick<Tx, "custodyProfile" | "wallet">,
+  prisma: Pick<Tx, "custodyProfile" | "wallet" | "onchainNetwork" | "executionAccount">,
   op: OnchainOperation,
 ): Promise<Address> {
   const profile = await prisma.custodyProfile.findUnique({ where: { id: op.custodyProfileId } });
@@ -120,9 +114,27 @@ export async function accountAddressFor(
     if (!profile.managedAddress) throw new NotFoundException("Managed account missing", "WALLET_NOT_READY");
     return profile.managedAddress as Address;
   }
+  // Every network has its own execution account. Only the local network mirrors it
+  // on Wallet.executionAddress; any other network must resolve the account of the
+  // operation's own deployment, never the local one.
+  const network = await prisma.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
+  if (network.chainId !== 31337) {
+    const account = await prisma.executionAccount.findUnique({
+      where: { walletId_deploymentId: { walletId: op.walletId, deploymentId: network.deploymentId } },
+    });
+    if (account?.chainId !== network.chainId) {
+      throw new NotFoundException("Execution account missing for this network", "WALLET_NOT_READY");
+    }
+    return account.address as Address;
+  }
   const wallet = await prisma.wallet.findUniqueOrThrow({ where: { id: op.walletId } });
   if (!wallet.executionAddress) throw new NotFoundException("Execution account missing", "WALLET_NOT_READY");
   return wallet.executionAddress as Address;
+}
+
+function operationChainId(quote: ExecutionQuote | StrategyQuote): number {
+  const context = "context" in quote ? quote.context : quote.request.context;
+  return context.chainId;
 }
 
 function planAssets(plan: ExecutionPlan | StrategyPlan): string[] {
@@ -156,7 +168,7 @@ class ExecutionService {
         quoteId: input.quoteId,
         authorizationId: input.authorizationId,
         fingerprint: input.fingerprint,
-        requiredConfirmations: policy.onchain.requiredConfirmations,
+        requiredConfirmations: requiredConfirmations(operationChainId(input.quote)),
         expected: pack({
           quote: input.quote,
           recipient: input.recipient,
@@ -222,10 +234,17 @@ class ExecutionService {
     });
   }
 
-  private async reserveSponsorBudget(tx: Tx, operationId: string, estWei: bigint): Promise<void> {
+  private async reserveSponsorBudget(tx: Tx, operationId: string, estWei: bigint, chainId: number): Promise<void> {
+    // Sponsor budgets are scoped per network so a public testnet relayer has its own
+    // daily cap, separate from the local node's.
+    const caps = policy.onchain.sponsor.byChain[chainId] ?? {
+      dailyCapWei: policy.onchain.sponsor.dailyCapWei,
+      perOperationCapWei: policy.onchain.sponsor.perOperationCapWei,
+    };
+    const dailyScope = `relayer:${chainId}:${now().toISOString().slice(0, 10)}`;
     const scopes: [string, bigint][] = [
-      [`operation:${operationId}`, policy.onchain.sponsor.perOperationCapWei],
-      [`daily:${now().toISOString().slice(0, 10)}`, policy.onchain.sponsor.dailyCapWei],
+      [`operation:${operationId}`, caps.perOperationCapWei],
+      [dailyScope, caps.dailyCapWei],
     ];
     // One advisory lock serializes all sponsor reservations, so concurrent
     // operations never race the upsert's create branch on the shared daily scope;
@@ -258,10 +277,11 @@ class ExecutionService {
     accountAddress: Address,
     opNonce: bigint,
   ): Promise<{ approveTx: Hex; executeTx: Hex; approveHash: Hex; executeHash: Hex }> {
-    const account = relayerAccount();
-    const walletClient = walletClientFor(account);
+    const chainId = plan.context.chainId;
+    const account = relayerOn(chainId);
+    const walletClient = walletClientOn(chainId);
     const opKey = operationKeyBytes32(op.id);
-    const epoch = (await testnetWalletService.accountState(accountAddress)).epoch;
+    const epoch = (await testnetWalletService.accountState(accountAddress, chainId)).epoch;
     const deadlineSeconds = BigInt(Math.floor(plan.deadline.getTime() / 1000));
     const calls = plan.calls.map((c: PreparedCall) => ({
       target: c.to,
@@ -292,11 +312,13 @@ class ExecutionService {
       functionName: "executeBatch",
       args: [opKey, opNonce, deadlineSeconds, epoch, calls],
     });
-    const gasPrice = BigInt(await rpcRequest<Hex>(testnetRpcUrl(), "eth_gasPrice"));
-    const approveGas = await rpcRequest<Hex>(testnetRpcUrl(), "eth_estimateGas", [
+    const gasPrice = BigInt(await rpcOn<Hex>(chainId, "eth_gasPrice"));
+    const approveGas = await rpcOn<Hex>(chainId, "eth_estimateGas", [
       { from: account.address, to: accountAddress, data: approveCalldata },
     ]);
     const signedApprove = await walletClient.signTransaction({
+      account,
+      chain: chainObject(chainId),
       to: accountAddress,
       data: approveCalldata,
       nonce: signerNonce,
@@ -306,6 +328,8 @@ class ExecutionService {
     // executeBatch is only valid after the approval tx lands, so it cannot be
     // estimated up front; use a fixed generous budget (sponsor-paid test gas).
     const signedExecute = await walletClient.signTransaction({
+      account,
+      chain: chainObject(chainId),
       to: accountAddress,
       data: executeCalldata,
       nonce: signerNonce + 1,
@@ -334,14 +358,13 @@ class ExecutionService {
       const quote = this.quoteOf(op);
       assertQuoteBinding(plan, quote, op, String((op.expected as { recipient: string }).recipient));
       await assertExecutionPlan(plan);
-      const context = (quote as ExecutionQuote).context;
-      const manifest = readManifest();
-      const client = publicClientFor();
-      const chainId = await client.getChainId();
-      if (chainId !== manifest.chainId) {
-        throw new ServiceUnavailableException("Local testnet unhealthy", "NETWORK_UNHEALTHY");
+      const chainId = operationChainId(quote);
+      const manifest = manifestFor(chainId);
+      const client = publicClientOn(chainId);
+      const nodeChainId = await client.getChainId();
+      if (nodeChainId !== chainId || nodeChainId !== manifest.chainId) {
+        throw new ServiceUnavailableException("Network unhealthy", "NETWORK_UNHEALTHY");
       }
-      void context;
       await withTx(async (tx) => {
         await lockRows(tx, "onchain_operations", [op.id]);
         const current = await tx.onchainOperation.findUniqueOrThrow({ where: { id: op.id } });
@@ -350,14 +373,14 @@ class ExecutionService {
           // Revalidate consent before signing; the epoch check rejects revoked work.
           await authorizationService.assertActive(tx, current.userId, current.authorizationId);
         }
-        const gasPrice = BigInt(await rpcRequest<Hex>(testnetRpcUrl(), "eth_gasPrice"));
+        const gasPrice = BigInt(await rpcOn<Hex>(chainId, "eth_gasPrice"));
         const estWei = gasPrice * 4_000_000n + 1n;
-        await this.reserveSponsorBudget(tx, op.id, estWei);
+        await this.reserveSponsorBudget(tx, op.id, estWei, chainId);
         const accountAddress = await accountAddressFor(tx, current);
         // Execution-account operation nonce and shared relayer transaction nonce are
         // distinct persisted resources under separate concurrency controls.
-        const opNonce = await accountOperationNonce(accountAddress);
-        const signerNonce = await allocateSignerNonce(tx, current.id, relayerAccount().address);
+        const opNonce = await accountOperationNonce(accountAddress, chainId);
+        const signerNonce = await allocateSignerNonce(tx, current.id, relayerOn(chainId).address, chainId);
 
         const signed = await this.signOperation(current, plan, signerNonce, accountAddress, opNonce);
         await tx.signedPayload.upsert({
@@ -372,7 +395,7 @@ class ExecutionService {
           update: {},
         });
         const expected = (current.expected as Record<string, unknown>) ?? {};
-        expected.sponsor = { reservedWei: estWei.toString(), dailyScope: `daily:${now().toISOString().slice(0, 10)}`, settled: false };
+        expected.sponsor = { reservedWei: estWei.toString(), dailyScope: `relayer:${chainId}:${now().toISOString().slice(0, 10)}`, settled: false };
 
         expected.approveTxHash = signed.approveHash;
         await tx.onchainOperation.update({
@@ -396,11 +419,11 @@ class ExecutionService {
     await this.assertDeployment(op);
     const payload = await db.signedPayload.findUnique({ where: { operationId } });
     if (!payload) throw new NotFoundException("No signed payload", "OPERATION_UNRESOLVED");
-    const url = testnetRpcUrl();
-    const client = publicClientFor();
+    const chainId = this.planOf(op).context.chainId;
+    const client = publicClientOn(chainId);
     // Already accepted transactions always reconcile. Revocation or expiry can
     // stop new economic execution, but cannot erase a possible earlier effect.
-    if (!(await txExists(payload.executeHash as Hex))) {
+    if (!(await txExists(payload.executeHash as Hex, chainId))) {
       const plan = this.planOf(op);
       await assertExecutionPlan(plan);
       if (op.authorizationId) await authorizationService.assertActive(db, op.userId, op.authorizationId);
@@ -412,7 +435,7 @@ class ExecutionService {
       [payload.approveHash, payload.approveTx],
       [payload.executeHash, payload.executeTx],
     ] as [string, Hex][]) {
-      if (await txExists(hash as Hex)) continue;
+      if (await txExists(hash as Hex, chainId)) continue;
       if (fault && !fault.consumedAt) {
         await db.simFault.update({
           where: { scope_key: { scope: "execution.broadcast", key: operationId } },
@@ -421,10 +444,15 @@ class ExecutionService {
         throw new RetryableError("BROADCAST_INTERRUPTED", 1_000);
       }
       const sentHash = await client.sendRawTransaction({ serializedTransaction: serialized });
-      // Wait for inclusion: anvil returns the hash before the block is visible to
-      // reads, and an immediate observe would otherwise report a false "unknown".
-      await client.waitForTransactionReceipt({ hash: sentHash });
-      void url;
+      if (chainTarget(chainId).canMine) {
+        // Wait for inclusion: anvil returns the hash before the block is visible to
+        // reads, and an immediate observe would otherwise report a false "unknown".
+        await client.waitForTransactionReceipt({ hash: sentHash });
+      } else {
+        // On a public testnet the relayer cannot mine; wait for the confirmations
+        // required by this network instead of returning before inclusion.
+        await client.waitForTransactionReceipt({ hash: sentHash, confirmations: chainTarget(chainId).confirmations });
+      }
     }
     await db.onchainOperation.update({
       where: { id: operationId },
@@ -437,9 +465,11 @@ class ExecutionService {
     await this.assertDeployment(op);
     const expected = (op.expected as { plan?: unknown; preBalances?: Record<string, string> }) ?? {};
     const plan = expected.plan ? (unpackInner(expected.plan) as ExecutionPlan | StrategyPlan) : null;
+    const network = await db.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
+    const chainId = plan?.context.chainId ?? network.chainId;
     const txHash = op.txHash as Hex | null;
-    const state = await observationState(txHash, op.requiredConfirmations);
-    const receipt = txHash ? await fetchReceipt(txHash) : null;
+    const state = await observationState(txHash, op.requiredConfirmations, chainId);
+    const receipt = txHash ? await fetchReceipt(txHash, chainId) : null;
     let actualInput: AssetAmount | null = null;
     let actualOutput: AssetAmount | null = null;
     let gasCostWei: bigint | null = null;
@@ -449,7 +479,7 @@ class ExecutionService {
       const inputAsset = "expectedInput" in plan ? plan.expectedInput.asset : plan.maximumInputs[0]?.asset;
       const outputAsset = "minimumOutput" in plan ? plan.minimumOutput.asset : plan.minimumOutputs[0]?.asset;
       const accountAddress = await accountAddressFor(db, op);
-      deltas = receipt ? await transactionDeltas(txHash, assets, accountAddress) : [];
+      deltas = receipt ? await transactionDeltas(txHash, assets, accountAddress, chainId) : [];
       const obs = buildObservation({
         operationId,
         txHash,
@@ -468,7 +498,7 @@ class ExecutionService {
       gasCostWei = obs.gasCostWei;
       const approveHash = (op.expected as { approveTxHash?: Hex }).approveTxHash;
       if (gasCostWei !== null && approveHash) {
-        const approval = await fetchReceipt(approveHash);
+        const approval = await fetchReceipt(approveHash, chainId);
         if (approval) gasCostWei += approval.gasUsed * approval.effectiveGasPrice;
       }
     }
@@ -502,7 +532,7 @@ class ExecutionService {
         // A reverted inclusion is labelled with the decoded onchain reason (e.g.
         // MIN_OUTPUT_BREACH) so downstream holds carry the real cause.
         const errorReason =
-          status === "reverted" && txHash ? ((await revertReasonOf(txHash)) ?? "EXECUTION_REVERTED") : undefined;
+          status === "reverted" && txHash ? ((await revertReasonOf(txHash, chainId)) ?? "EXECUTION_REVERTED") : undefined;
         await db.onchainOperation.update({
           where: { id: operationId },
           data: {
@@ -647,8 +677,9 @@ class ExecutionService {
 
   private async assertDeployment(op: OnchainOperation): Promise<void> {
     const network = await db.onchainNetwork.findUniqueOrThrow({ where: { id: op.networkId } });
-    const manifest = readManifest();
-    const verified = await testnetService.verify(manifest);
+    const chainId = network.chainId;
+    const manifest = manifestFor(chainId);
+    const verified = await verifyManifest(chainId);
     if (!verified.ok || network.deploymentId !== manifest.deploymentId || network.networkId !== manifest.networkId) {
       await db.onchainOperation.update({ where: { id: op.id }, data: { status: "needs_review", errorReason: "DEPLOYMENT_MISMATCH" } });
       throw new ServiceUnavailableException("Execution deployment requires reconciliation", "NETWORK_UNHEALTHY");

@@ -24,6 +24,13 @@ export const env = createEnv({
       .string()
       .regex(/^0x[0-9a-fA-F]{64}$/)
       .optional(),
+    BASE_SEPOLIA_RPC_URL: z.string().url().optional(),
+    // Must be a fresh testnet-only relayer key, never the local test key and
+    // never a key that has held mainnet funds.
+    BASE_SEPOLIA_RELAYER_PRIVATE_KEY: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
   },
 
   /**
@@ -52,6 +59,8 @@ export const env = createEnv({
     TESTNET_RPC_URL: process.env.TESTNET_RPC_URL,
     TESTNET_CHAIN_ID: process.env.TESTNET_CHAIN_ID,
     TESTNET_SIGNER_PRIVATE_KEY: process.env.TESTNET_SIGNER_PRIVATE_KEY,
+    BASE_SEPOLIA_RPC_URL: process.env.BASE_SEPOLIA_RPC_URL,
+    BASE_SEPOLIA_RELAYER_PRIVATE_KEY: process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**

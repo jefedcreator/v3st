@@ -1,9 +1,13 @@
 # Local onchain beta operations
 
 This backend uses isolated Anvil 31337 and labelled replicas. Bankr, o1,
-Hydrex/Hydropump, Stonks, BaseStonk and Feel actual-provider factories remain
-unverified and disabled. See [provider evidence](../decisions/onchain-providers.md).
-No setting or operator endpoint activates live providers.
+Hydropump, Stonks, BaseStonk and Feel actual-provider factories remain
+unverified and disabled. Hydrex is verified on Base Sepolia (84532) only while
+`BASE_SEPOLIA_RPC_URL` is set and the deployed manifest's code hashes still
+match; `GET /api/v1/ops/integrations` then reports it as
+`verified_provider_testnet` with `verified_chain_id: 84532`, otherwise
+`disabled_unverified`. See [provider evidence](../decisions/onchain-providers.md).
+No setting or operator endpoint activates live providers or mainnet chains.
 
 ## Setup and evidence
 
@@ -41,6 +45,16 @@ confirmed local transfer, without a separate customer balance injection.
   and user namespace. Do not replay old payloads into redeployed addresses.
 - **Sponsor outage:** restore the fixture relayer and its budget. Gas is an
   application cost; users never acquire ETH or sign gas top-ups.
+- **Base Sepolia manifest code-hash mismatch:** `verifyManifest(84532)` fails,
+  so Hydrex drops back to `disabled_unverified` and Base Sepolia operations
+  hold. Do not force the flag or edit the manifest by hand. Redeploy with
+  `yarn sepolia:deploy` into a fresh `TESTNET_STATE_DIR` (or restore the matching
+  manifest and chain state together), then confirm the ops row flips back to
+  verified before resuming.
+- **Exhausted Base Sepolia relayer:** the relayer key is out of test ETH or has
+  hit the per-chain sponsor cap. New operations fail closed with a sponsor
+  shortage and stay queued; top the relayer up from the Base Sepolia faucet.
+  Never bridge or move funds from another chain, and never ask users for gas.
 - **Revocation:** blocks new signing/broadcast; already accepted effects reconcile.
   An exit requires its own valid instruction. Do not release an uncertain reserve.
 - **Underfunded claim or conversion:** retain reward assets and original accrual

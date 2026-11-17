@@ -3,7 +3,7 @@ import { type Address, type Hex, encodeFunctionData, keccak256, toHex } from "vi
 import { db, withTx } from "@/server/db";
 import type { ChainTransfer, Prisma } from "@/server/prisma";
 import { policy } from "@/backend/config/policy";
-import { assertBetaStage } from "@/backend/integrations/onchain-policy";
+import { assertBetaStage, TESTNET_CHAIN_ID } from "@/backend/integrations/onchain-policy";
 import { settlementTokenAbi } from "@/backend/services/onchain/abis";
 import { publicClientFor, readManifest, relayerAccount, rpcRequest, testnetRpcUrl, testnetService, walletClientFor } from "@/backend/services/onchain/testnet";
 import { allocateRelayerNonce } from "@/backend/services/execution/nonce";
@@ -25,12 +25,12 @@ async function perform(t: Pick<ChainTransfer, "key" | "fromAddress" | "toAddress
     throw new ConflictException("Transfer context changed; reconciliation required", "OPERATION_UNRESOLVED");
   }
   if (!payload) {
-    const gasPrice = BigInt(await rpcRequest<Hex>(testnetRpcUrl(), "eth_gasPrice"));
+    const gasPrice = BigInt(await rpcRequest<Hex>(testnetRpcUrl(), TESTNET_CHAIN_ID, "eth_gasPrice"));
     payload = await withTx(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(72011::bigint)`;
       const existing = await tx.localChainTransfer.findUnique({ where: { key: t.key } });
       if (existing) return existing;
-      const nonce = await allocateRelayerNonce(tx);
+      const nonce = await allocateRelayerNonce(tx, TESTNET_CHAIN_ID);
       const data = mint
         ? encodeFunctionData({ abi: settlementTokenAbi, functionName: "managedMint", args: [keccak256(toHex(t.key)), t.toAddress as Address, fromDbRaw(t.amount)] })
         : encodeFunctionData({ abi: settlementTokenAbi, functionName: "managedTransfer", args: [keccak256(toHex(t.key)), t.fromAddress as Address, t.toAddress as Address, fromDbRaw(t.amount)] });
@@ -39,7 +39,7 @@ async function perform(t: Pick<ChainTransfer, "key" | "fromAddress" | "toAddress
       return tx.localChainTransfer.create({ data: input });
     });
   }
-  if (!(await txExists(payload.txHash as Hex))) {
+  if (!(await txExists(payload.txHash as Hex, TESTNET_CHAIN_ID))) {
     await client.sendRawTransaction({ serializedTransaction: payload.signedTx as Hex });
   }
   const receipt = await client.waitForTransactionReceipt({ hash: payload.txHash as Hex });
@@ -47,13 +47,13 @@ async function perform(t: Pick<ChainTransfer, "key" | "fromAddress" | "toAddress
   // arrive. This is permitted only after deployment verification on loopback Anvil.
   const head = await client.getBlockNumber();
   const required = receipt.blockNumber + BigInt(policy.onchain.requiredConfirmations);
-  if (head < required) await rpcRequest(testnetRpcUrl(), "anvil_mine", [`0x${(required - head).toString(16)}`]);
+  if (head < required) await rpcRequest(testnetRpcUrl(), TESTNET_CHAIN_ID, "anvil_mine", [`0x${(required - head).toString(16)}`]);
   const canonical = await client.getBlock({ blockNumber: receipt.blockNumber });
   if (canonical.hash !== receipt.blockHash) throw new ServiceUnavailableException("Transfer reorg requires reconciliation", "NETWORK_UNHEALTHY");
   const status: "confirmed" | "failed" = receipt.status === "success" ? "confirmed" : "failed";
   if (status === "confirmed") {
     const asset = `testnet-${manifest.deploymentId}:${manifest.chainId}:${settlement.toLowerCase()}`;
-    const deltas = await transactionDeltas(payload.txHash as Hex, [asset], t.toAddress as Address);
+    const deltas = await transactionDeltas(payload.txHash as Hex, [asset], t.toAddress as Address, TESTNET_CHAIN_ID);
     if (deltas[0]?.signedRaw !== fromDbRaw(t.amount)) throw new ConflictException("Transfer receipt mismatch", "OPERATION_UNRESOLVED");
   }
   return { status, txHash: payload.txHash };

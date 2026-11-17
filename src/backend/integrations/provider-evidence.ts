@@ -16,7 +16,7 @@ export type ProviderEvidence = {
     chainId: number | null;
     detail: string;
   };
-  betaAdapter: "local_testnet_replica" | "disabled";
+  betaAdapter: "local_testnet_replica" | "verified_provider_testnet" | "disabled";
   note: string;
 };
 
@@ -27,9 +27,9 @@ const EVIDENCE: Record<StockProviderId, ProviderEvidence> = {
     id: "o1",
     documentation: [
       {
-        label: "DEX aggregator API (quote + unsigned transaction)",
-        url: "https://docs.o1.exchange/api/dex-aggregator/introduction",
-        checkedAt: CHECKED_AT,
+        label: "Trading API (unsigned transactions)",
+        url: "https://docs.o1.exchange/api/trading.md",
+        checkedAt: "2026-11-16",
       },
       {
         label: "Launchpad trading API",
@@ -77,6 +77,7 @@ const EVIDENCE: Record<StockProviderId, ProviderEvidence> = {
   hydrex: {
     id: "hydrex",
     documentation: [
+      { label: "Hydrex SDK", url: "https://github.com/hydrexfi/hydrex-sdk", checkedAt: "2026-11-16" },
       { label: "Protocol docs", url: "https://docs.hydrex.fi/", checkedAt: CHECKED_AT },
       { label: "Liquidity (manual fees, account-locking incentives)", url: "https://www.hydrex.fi/liquidity", checkedAt: CHECKED_AT },
       { label: "Hydropump (permanently locked liquidity, alternative fee destinations)", url: "https://www.hydrex.fi/hydropump/create", checkedAt: CHECKED_AT },
@@ -86,10 +87,10 @@ const EVIDENCE: Record<StockProviderId, ProviderEvidence> = {
     abiVersion: null,
     capabilities: ["spot_liquidity", "lp_fees_manual_claim", "hydropump_permanent_lock", "creator_fee_destinations"],
     testnetEvidence: {
-      status: "unverified",
-      chainId: null,
+      status: "verified",
+      chainId: 84532,
       detail:
-        "No verified stock-paired pool or test deployment; local pool/locker replicas only, not a full Algebra implementation.",
+        "@hydrexfi/hydrex-sdk@1.2.8 lists Base Sepolia pool deployer, position manager and swap router; all three return code from sepolia.base.org (checked 2026-11-16). Stock pool is V3ST-deployed with a stand-in token.",
     },
     betaAdapter: "local_testnet_replica",
     note: "Hydropump principal is permanently locked; it is provenance, not a redeemable strategy.",

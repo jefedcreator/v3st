@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   BASE_MAINNET_CHAIN_ID,
+  BASE_SEPOLIA_CHAIN_ID,
   TESTNET_CHAIN_ID,
   assertChainIdAllowed,
   assertOnchainContext,
@@ -34,7 +35,7 @@ describe("onchain policy", () => {
       if (!isLoopbackRpcUrl(url)) mainnetCalls.push(url);
     };
     for (const url of ["https://mainnet.base.org", "https://eth.llamarpc.com"]) {
-      expect(() => parseRpcEndpoint(url)).toThrow();
+      expect(() => parseRpcEndpoint(url, TESTNET_CHAIN_ID)).toThrow();
       guardedRpc(url);
     }
     expect(() => assertChainIdAllowed(BASE_MAINNET_CHAIN_ID)).toThrow(/mainnet/i);
@@ -75,20 +76,59 @@ describe("onchain policy", () => {
     expect(context.chainId).toBe(31337);
   });
 
-  it("records evidence for all six providers with testnet evidence unverified", () => {
+  it("records evidence for all six providers: only hydrex is verified, on Base Sepolia", () => {
     const ids = listProviderEvidence().map((e) => e.id).sort();
     expect(ids).toEqual(["bankr", "basestonk", "feel", "hydrex", "o1", "stonks"]);
     for (const evidence of listProviderEvidence()) {
-      expect(evidence.testnetEvidence.status).toBe("unverified");
+      if (evidence.id === "hydrex") {
+        expect(evidence.testnetEvidence.status).toBe("verified");
+        expect(evidence.testnetEvidence.chainId).toBe(BASE_SEPOLIA_CHAIN_ID);
+      } else {
+        expect(evidence.testnetEvidence.status).toBe("unverified");
+      }
       expect(evidence.betaAdapter).toBe("local_testnet_replica");
       expect(evidence.documentation.length).toBeGreaterThan(0);
     }
   });
 
-  it("only accepts loopback RPC endpoints", () => {
+  it("only accepts loopback RPC endpoints on the local testnet", () => {
     expect(isLoopbackRpcUrl("http://127.0.0.1:8545")).toBe(true);
     expect(isLoopbackRpcUrl("http://localhost:8545")).toBe(true);
     expect(isLoopbackRpcUrl("https://rpc.example.com")).toBe(false);
-    expect(() => parseRpcEndpoint("https://mainnet.base.org")).toThrow(/loopback/);
+    expect(() => parseRpcEndpoint("https://mainnet.base.org", TESTNET_CHAIN_ID)).toThrow(/loopback/);
+  });
+
+  it("allows Base Sepolia only for hydrex as a verified provider testnet", () => {
+    const sepolia = replicaContext({
+      integrationKind: "verified_provider_testnet",
+      mode: "sandbox",
+      chainId: BASE_SEPOLIA_CHAIN_ID,
+      providerId: "hydrex",
+      networkId: "basesepolia:84532",
+    });
+    expect(() => assertOnchainContext(sepolia)).not.toThrow();
+    expect(() => assertOnchainContext({ ...sepolia, providerId: "o1" })).toThrow(/verified testnet evidence/i);
+    expect(() =>
+      assertOnchainContext({ ...sepolia, integrationKind: "local_testnet_replica", mode: "simulated" }),
+    ).toThrow();
+    expect(() => assertOnchainContext({ ...sepolia, chainId: BASE_MAINNET_CHAIN_ID })).toThrow();
+  });
+
+  it("accepts a non-loopback RPC only for the configured Base Sepolia host over https", () => {
+    process.env.BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org";
+    try {
+      expect(parseRpcEndpoint("https://sepolia.base.org", BASE_SEPOLIA_CHAIN_ID).loopback).toBe(false);
+      expect(parseRpcEndpoint("https://sepolia.base.org", BASE_SEPOLIA_CHAIN_ID).chainId).toBe(
+        BASE_SEPOLIA_CHAIN_ID,
+      );
+      expect(() => parseRpcEndpoint("http://sepolia.base.org", BASE_SEPOLIA_CHAIN_ID)).toThrow();
+      expect(() => parseRpcEndpoint("https://mainnet.base.org", BASE_SEPOLIA_CHAIN_ID)).toThrow();
+      expect(() => parseRpcEndpoint("https://sepolia.base.org", TESTNET_CHAIN_ID)).toThrow();
+      expect(parseRpcEndpoint("http://127.0.0.1:8545", TESTNET_CHAIN_ID).loopback).toBe(true);
+      delete process.env.BASE_SEPOLIA_RPC_URL;
+      expect(() => parseRpcEndpoint("https://sepolia.base.org", BASE_SEPOLIA_CHAIN_ID)).toThrow(/not configured/i);
+    } finally {
+      delete process.env.BASE_SEPOLIA_RPC_URL;
+    }
   });
 });

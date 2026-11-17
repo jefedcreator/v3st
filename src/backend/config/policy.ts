@@ -27,6 +27,7 @@ export const policy = {
     chainId: 31337,
     networkNamespace: "testnet",
     requiredConfirmations: 2,
+    confirmations: { 31337: 2, 84532: 3, 8453: 5 } as Record<number, number>,
     quoteTtlSeconds: 30,
     executionWindowSeconds: 120,
     referenceMaxAgeSeconds: 60,
@@ -39,6 +40,10 @@ export const policy = {
     sponsor: {
       dailyCapWei: 10n ** 21n,
       perOperationCapWei: 10n ** 19n,
+      // Per-network overrides; chains not listed keep the defaults above.
+      byChain: {
+        84532: { dailyCapWei: 2n * 10n ** 16n, perOperationCapWei: 2n * 10n ** 15n },
+      } as Record<number, { dailyCapWei: bigint; perOperationCapWei: bigint }>,
     },
   },
   rates: {
@@ -60,6 +65,7 @@ export const policy = {
   },
   schedule: {
     pollEveryMinutes: 1,
+    referenceSyncSeconds: 30,
     rebalanceMinuteOfHour: 30,
     reconcileHour: 2,
     harvest: { weekday: 4, hour: 22, minute: 0 },

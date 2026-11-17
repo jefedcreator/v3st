@@ -13,7 +13,7 @@ import { authorizationService } from "@/backend/services/authorizations";
 import { strategyService } from "@/backend/services/strategies";
 import { unpack } from "@/backend/services/execution";
 import type { AssetAmount } from "@/backend/services/onchain/types";
-import { readManifest, settlementAssetKey } from "@/backend/services/onchain/testnet";
+import { manifestFor, settlementAssetKeyOn } from "@/backend/services/onchain/manifests";
 import { userIdForBeneficiary } from "@/backend/services/rewards";
 import type { PaginationQuerySchema } from "@/backend/validators/index.validator";
 import type { EarningsPreferenceDto, EarningsWeekDto } from "@/types/dto";
@@ -73,9 +73,11 @@ class EarningsService {
       const stock = await tx.stock.findFirst({ where: { assetKey: receipt.asset } });
       const chain = stock?.chain ?? policy.onchain.networkNamespace;
       const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: receipt.networkId } });
-      const manifest = readManifest();
+      // Recognize against the receipt's own network deployment (local or Base Sepolia).
+      const manifest = manifestFor(network.chainId);
       if (network.deploymentId !== manifest.deploymentId) return;
-      if (!stock && receipt.asset !== settlementAssetKey(manifest)) return;
+      const settlementAsset = settlementAssetKeyOn(network.chainId);
+      if (!stock && receipt.asset !== settlementAsset) return;
       let amountUsdc = fromDbRaw(receipt.amountRaw);
       if (stock) {
         const opId = receipt.conversionOperationId;
@@ -83,7 +85,7 @@ class EarningsService {
         const op = await tx.onchainOperation.findUnique({ where: { id: opId } });
         if (op?.status !== "finalized") return;
         const actual = unpack(op.actual) as { input?: AssetAmount; output?: AssetAmount };
-        if (actual.input?.asset !== receipt.asset || actual.input.raw !== fromDbRaw(receipt.amountRaw) || actual.output?.asset !== settlementAssetKey(manifest)) return;
+        if (actual.input?.asset !== receipt.asset || actual.input.raw !== fromDbRaw(receipt.amountRaw) || actual.output?.asset !== settlementAsset) return;
         amountUsdc = actual.output?.raw ?? 0n;
         if (amountUsdc <= 0n) return;
         await ledgerService.post(

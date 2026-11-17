@@ -74,6 +74,9 @@ export type StockDto = {
   reference_basis: string | null;
   reference_as_of: string | null;
   provenance: unknown;
+  // Base Sepolia stand-ins: the live tokenized-stock asset key whose reference price
+  // the test token tracks (e.g. base:8453:0x…); null for every other row.
+  stand_in_for: string | null;
   tradable: boolean;
 };
 

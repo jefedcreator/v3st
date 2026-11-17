@@ -360,7 +360,7 @@ describe("hydrex pool and hydropump locker replicas on the local testnet", () =>
     });
     // Withdrawal always reverts: principal is permanently locked.
     await expect(
-      rpcRequest(testnetRpcUrl(), "eth_call", [
+      rpcRequest(testnetRpcUrl(), 31337, "eth_call", [
         {
           from: ctx.handle.account.address,
           to: locker,
@@ -372,7 +372,7 @@ describe("hydrex pool and hydropump locker replicas on the local testnet", () =>
     expect(await readLockerUint(locker, "principalLocked", lockId)).toBe(principal);
     // Non-beneficiary fee claims revert.
     await expect(
-      rpcRequest(testnetRpcUrl(), "eth_call", [
+      rpcRequest(testnetRpcUrl(), 31337, "eth_call", [
         {
           from: "0x000000000000000000000000000000000000dEaD",
           to: locker,

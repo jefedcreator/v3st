@@ -15,6 +15,7 @@ import { investmentService } from "@/backend/services/investments";
 import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
 import { pollOpenWork } from "@/backend/services/orders/poller";
 import { reconciliationService } from "@/backend/services/reconciliation";
+import { stockService } from "@/backend/services/stocks";
 import { strategyService } from "@/backend/services/strategies";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
@@ -46,6 +47,12 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "poll.open_work": async () => {
     await pollOpenWork(now());
+  },
+  "stocks.reference_sync": async () => {
+    // Live reference sync runs only when Base Sepolia is configured; CI and the
+    // local replica path keep the seeded reference data.
+    if (!process.env.BASE_SEPOLIA_RPC_URL) return;
+    await stockService.syncReference();
   },
   "payout.progress": async (job) => {
     await withdrawalService.progress(job.subjectId);

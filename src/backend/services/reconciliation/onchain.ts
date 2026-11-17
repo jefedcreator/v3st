@@ -3,9 +3,10 @@ import { type Address, type Hex } from "viem";
 import { db } from "@/server/db";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
-import { policy } from "@/backend/config/policy";
 import { hydrexPoolAbi, settlementTokenAbi } from "@/backend/services/onchain/abis";
-import { publicClientFor, readManifest, testnetService } from "@/backend/services/onchain/testnet";
+import { publicClientOn } from "@/backend/services/onchain/chains";
+import { ledgerChainFor, manifestFor, verifyManifest } from "@/backend/services/onchain/manifests";
+import { requiredConfirmations } from "@/backend/services/execution/receipts";
 import { fromDbRaw } from "@/utils/asset-units";
 import type { CheckResult } from ".";
 
@@ -23,19 +24,32 @@ export async function onchainChecks(): Promise<CheckResult[]> {
       results.push({ check: `${check}:${reason}`, expected: "0", observed: null, delta: null, threshold: "0", status: "unavailable" });
     };
     try {
-      const manifest = readManifest();
-      const verified = await testnetService.verify(manifest);
+      const chainId = network.chainId;
+      const manifest = manifestFor(chainId);
+      const verified = await verifyManifest(chainId);
       if (!verified.ok || manifest.deploymentId !== network.deploymentId || manifest.networkId !== network.networkId) {
         unavailable("deployment_mismatch");
         await db.onchainOperation.updateMany({ where: { networkId: network.id, status: { in: [...UNRESOLVED] } }, data: { status: "needs_review", errorReason: "DEPLOYMENT_MISMATCH" } });
         continue;
       }
-      const client = publicClientFor();
+      const client = publicClientOn(chainId);
       const head = await client.getBlockNumber();
-      const depth = BigInt(policy.onchain.requiredConfirmations);
+      const depth = BigInt(requiredConfirmations(chainId));
       if (head < depth) { unavailable("finality_unavailable"); continue; }
       const cutoff = await client.getBlock({ blockNumber: head - depth });
-      const wallets = await db.wallet.findMany({ where: { executionAddress: { not: null } } });
+      // Each network reconciles its own execution accounts against its own ledger
+      // namespace: the local replica mirrors the account on Wallet.executionAddress,
+      // other networks (Base Sepolia) keep it only in execution_accounts.
+      const ledgerChain = ledgerChainFor(chainId);
+      const wallets: { id: string; userId: string; executionAddress: string }[] = [];
+      if (chainId === 31337) {
+        for (const w of await db.wallet.findMany({ where: { executionAddress: { not: null } } })) {
+          wallets.push({ id: w.id, userId: w.userId, executionAddress: w.executionAddress! });
+        }
+      } else {
+        const rows = await db.executionAccount.findMany({ where: { deploymentId: network.deploymentId, chainId }, include: { wallet: true } });
+        for (const row of rows) wallets.push({ id: row.walletId, userId: row.wallet.userId, executionAddress: row.address });
+      }
       const stocks = await db.stock.findMany({ where: { networkId: network.id } });
       const compare = (name: string, expected: bigint, observed: bigint): void => {
         const delta = observed - expected;
@@ -61,7 +75,7 @@ export async function onchainChecks(): Promise<CheckResult[]> {
         };
         const balances = await ledgerService.balancesForUser(wallet.userId);
         const get = (code: string): bigint => balances.get(code) ?? 0n;
-        const cash = get(acct.userCash(wallet.userId, "testnet").code) + get(acct.userReserved(wallet.userId, "testnet").code) + get(acct.userEarnings(wallet.userId, "testnet").code);
+        const cash = get(acct.userCash(wallet.userId, ledgerChain).code) + get(acct.userReserved(wallet.userId, ledgerChain).code) + get(acct.userEarnings(wallet.userId, ledgerChain).code);
         compare(`cash:${wallet.id}`, cash, await balance(manifest.contracts.TestSettlementToken!.address));
         for (const stock of stocks) {
           const owned = get(acct.userStock(wallet.userId, stock.id).code) + get(acct.userStockReserved(wallet.userId, stock.id).code);
@@ -69,8 +83,12 @@ export async function onchainChecks(): Promise<CheckResult[]> {
         }
         const positions = await db.strategyPosition.findMany({ where: { userId: wallet.userId }, include: { strategy: true } });
         for (const position of positions) {
-          const pool = (position.strategy.provenance as { pool?: Hex }).pool;
+          const provenance = position.strategy.provenance as { pool?: Hex; kind?: string; chainId?: number };
+          const pool = provenance.pool;
           if (!pool) continue;
+          // Only this network's replica share pools expose sharesOf; real Hydrex NFT
+          // positions are proved by their position-manager events, not a share count.
+          if (provenance.kind === "hydrex_nft" || (provenance.chainId ?? 31337) !== chainId) continue;
           const shares = await client.readContract({ address: pool, abi: hydrexPoolAbi, functionName: "sharesOf", args: [wallet.executionAddress as Address], blockNumber: cutoff.number });
           const samePool = positions.filter((p) => (p.strategy.provenance as { pool?: string }).pool === pool);
           const expected = samePool.reduce((sum, p) => sum + fromDbRaw(p.receiptRaw), 0n);

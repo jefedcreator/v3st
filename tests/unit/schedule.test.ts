@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   dueSchedules,
@@ -41,4 +41,21 @@ it("emits the scheduled slots that are due", () => {
 it("caps exponential backoff at one hour", () => {
   expect(backoffMs(1)).toBe(5_000);
   expect(backoffMs(20)).toBe(3_600_000);
+});
+
+describe("live reference sync schedule", () => {
+  it("is scheduled only with Base Sepolia configured, once per 30-second bucket", () => {
+    delete process.env.BASE_SEPOLIA_RPC_URL;
+    expect(dueSchedules(new Date("2026-11-16T10:00:07Z")).some((s) => s.name === "stocks.reference_sync")).toBe(false);
+    process.env.BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org";
+    try {
+      const slotAt = (iso: string) => dueSchedules(new Date(iso)).find((s) => s.name === "stocks.reference_sync")?.slot;
+      // Irregular worker ticks inside one bucket share a slot; the next bucket gets a new one.
+      expect(slotAt("2026-11-16T10:00:07Z")).toBeDefined();
+      expect(slotAt("2026-11-16T10:00:29Z")).toBe(slotAt("2026-11-16T10:00:07Z"));
+      expect(slotAt("2026-11-16T10:00:31Z")).not.toBe(slotAt("2026-11-16T10:00:07Z"));
+    } finally {
+      delete process.env.BASE_SEPOLIA_RPC_URL;
+    }
+  });
 });

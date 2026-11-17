@@ -85,7 +85,74 @@ function parseEntry(entry: z.infer<typeof referenceEntrySchema>): ReferenceStock
   };
 }
 
+// Live Base Tokenized Stocks API shape. The API omits fields that hold their default
+// value, so nav_price/nav_price_updated_at are optional per record; a record without
+// them is skipped, never parsed as a zero or guessed price.
+const liveTokenSchema = z.object({
+  contract_address: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
+  symbol: z.string().min(1),
+  name: z.string().min(1),
+  decimals: z.number().int().min(0).max(36),
+  multiplier: z.union([z.string(), z.number()]).optional(),
+  nav_price: z.union([z.string(), z.number()]).optional(),
+  nav_price_updated_at: z.string().optional(),
+});
+
+const livePageSchema = z.object({
+  tokens: z.array(liveTokenSchema),
+  next_page_token: z.string().optional(),
+});
+
+// Exact decimal conversion with string arithmetic (never Number): integer part plus
+// the fraction truncated/padded to the target number of decimals.
+export function decimalToRaw(value: string | number, targetDecimals: number): bigint {
+  const text = String(value);
+  if (!/^\d+(\.\d+)?$/.test(text)) {
+    throw new ReferenceParseError(`Not a non-negative decimal: ${text}`);
+  }
+  const [intPart, fracPart = ""] = text.split(".");
+  const frac = fracPart.slice(0, targetDecimals).padEnd(targetDecimals, "0");
+  return BigInt(intPart + frac);
+}
+
+function parseLiveEntry(entry: z.infer<typeof liveTokenSchema>): ReferenceStock {
+  if (entry.nav_price === undefined || entry.nav_price_updated_at === undefined) {
+    throw new ReferenceParseError(`Token ${entry.symbol} has no nav_price`);
+  }
+  const address = entry.contract_address.toLowerCase();
+  return {
+    assetKey: assetKey("base", 8453, address),
+    chainId: 8453,
+    address,
+    symbol: entry.symbol,
+    name: entry.name,
+    decimals: entry.decimals,
+    kind: "stock",
+    issuer: "Coinbase Onchain SPV Ltd",
+    rightsSummary: "Tokenized stock certificate; economic exposure only, no voting or direct redemption rights",
+    multiplierWad: decimalToRaw(entry.multiplier ?? 1, 18),
+    referencePriceMicroUsd: decimalToRaw(entry.nav_price, 6),
+    referenceBasis: "token_nav",
+    referenceAsOf: new Date(entry.nav_price_updated_at),
+  };
+}
+
 export const stockReference = {
+  parseLive(input: unknown): { stocks: ReferenceStock[]; next: string | null } {
+    const result = livePageSchema.safeParse(input);
+    if (!result.success) {
+      throw new ReferenceParseError(`Live stocks payload does not match the documented schema: ${result.error.issues[0]?.message}`);
+    }
+    // Records without a published NAV are skipped; a zero or guessed price is never
+    // written.
+    const stocks: ReferenceStock[] = [];
+    for (const entry of result.data.tokens) {
+      if (entry.nav_price === undefined || entry.nav_price_updated_at === undefined) continue;
+      stocks.push(parseLiveEntry(entry));
+    }
+    return { stocks, next: result.data.next_page_token ?? null };
+  },
+
   parse(input: unknown): ReferenceStock[] {
     const result = referencePageSchema.safeParse(input);
     if (!result.success) {
@@ -105,6 +172,13 @@ export const stockReference = {
     };
   },
 };
+
+// The real mainnet asset a Base Sepolia stand-in token represents, e.g.
+// "base:8453:0xb2…fb", recorded in stock provenance; null when not a stand-in.
+export function standInFor(stock: Stock): string | null {
+  const provenance = stock.provenance as { standInFor?: unknown } | null;
+  return typeof provenance?.standInFor === "string" ? provenance.standInFor : null;
+}
 
 // Unknown metadata is never proof of tradability: an approved issuer, a rights
 // summary, stock kind and chain+address identity are all required, and a usable

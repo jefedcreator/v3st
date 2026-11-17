@@ -13,7 +13,7 @@ import { ledgerService } from "@/backend/services/ledger";
 import { cashReleased, cashReserved, stockReleased, stockReserved, tradeFilled } from "@/backend/services/ledger/postings";
 import { onchainRegistry } from "@/backend/services/onchain/registry";
 import { positionService } from "@/backend/services/positions";
-import { settlementAssetKey, testnetService } from "@/backend/services/onchain/testnet";
+import { testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
 import { referenceUsable } from "@/backend/services/stocks/reference";
 import { stockService } from "@/backend/services/stocks";
@@ -177,15 +177,30 @@ class InvestmentService {
       throw new UnprocessableEntityException("Reference price is missing or stale", "STOCK_UNAVAILABLE");
     }
     const network = await db.onchainNetwork.findUniqueOrThrow({ where: { id: stock.networkId } });
-    const manifest = (await import("@/backend/services/onchain/testnet")).readManifest();
-    const settlement = settlementAssetKey(manifest);
+    const chainId = network.chainId;
+    const { settlementAssetKeyOn } = await import("@/backend/services/onchain/manifests");
+    const { contextOn } = await import("@/backend/services/onchain/chains");
+    const { executionAccounts } = await import("@/backend/services/wallets/execution-accounts");
+    const { HYDREX_ACTUAL_VERSION } = await import("@/backend/services/onchain/providers/hydrex/actual");
+    const settlement = settlementAssetKeyOn(chainId);
     const slippageBps = input.slippageBps ?? policy.trading.maxSlippageBps;
 
+    // Chain 31337 keeps the local candidate loop; on Base Sepolia the only route is
+    // the verified Hydrex provider.
+    const providerIds: StockProviderId[] = chainId === 31337 ? SPOT_PROVIDERS : ["hydrex"];
     const candidates = await Promise.all(
-      SPOT_PROVIDERS.map(async (providerId) => {
+      providerIds.map(async (providerId) => {
         try {
-          const profile = await custodyProfileFor(db, userId, providerId);
-          const context = await testnetService.defaultContext(providerId, "replica-1.0.0", profile.id);
+          let profile: { id: string; address: Address };
+          let context;
+          if (chainId === 31337) {
+            profile = await custodyProfileFor(db, userId, providerId);
+            context = await testnetService.defaultContext(providerId, "replica-1.0.0", profile.id);
+          } else {
+            const ref = await executionAccounts.ensure(userId, chainId);
+            profile = { id: ref.custodyProfileId, address: ref.accountAddress };
+            context = await contextOn(chainId, providerId, HYDREX_ACTUAL_VERSION, profile.id);
+          }
           const adapter = onchainRegistry.spot(providerId, context);
           const side = input.side;
           const quote = await withTimeout(
@@ -237,7 +252,7 @@ class InvestmentService {
     const { onchainExpiryMs } = await import("@/backend/services/onchain/testnet");
     // The contract deadline is copied from this expiry and enforced onchain, so
     // the bound must hold on both the app and chain clocks.
-    const expiresAt = new Date(Math.min(best.quote.expiresAt.getTime(), await onchainExpiryMs(30)));
+    const expiresAt = new Date(Math.min(best.quote.expiresAt.getTime(), await onchainExpiryMs(30, chainId)));
     const row = await db.investmentQuote.create({
       data: {
         userId,
@@ -397,7 +412,20 @@ class InvestmentService {
         );
       }
       const network = await tx.onchainNetwork.findUniqueOrThrow({ where: { id: stock.networkId! } });
-      const profile = await custodyProfileFor(tx, userId, quote.providerId as StockProviderId);
+      // The recipient is the execution account of the quote's own network: a Base
+      // Sepolia buy must never be paid to the local execution account.
+      let profile: { id: string; address: Address };
+      if (network.chainId === 31337) {
+        profile = await custodyProfileFor(tx, userId, quote.providerId as StockProviderId);
+      } else {
+        const { executionAccounts } = await import("@/backend/services/wallets/execution-accounts");
+        const ref = await executionAccounts.find(userId, network.chainId);
+        if (!ref) throw new UnprocessableEntityException("Execution account missing for this network", "WALLET_NOT_READY");
+        profile = { id: ref.custodyProfileId, address: ref.accountAddress };
+      }
+      if (executionQuote.context.chainId !== network.chainId) {
+        throw new ConflictException("Quote network differs from the stock's network", "QUOTE_CHANGED");
+      }
       const inv = await tx.investment.create({
         data: {
           key,

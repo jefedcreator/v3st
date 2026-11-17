@@ -703,7 +703,7 @@ describe("onchain beta HTTP journey", () => {
       const client = publicClientFor();
       expect(await client.getBalance({ address: wallet.address as Address })).toBe(0n);
       expect(await client.getBalance({ address: wallet.executionAddress as Address })).toBe(0n);
-      const sponsor = await db.sponsorBudget.findFirst({ where: { scope: { startsWith: "daily:" } } });
+      const sponsor = await db.sponsorBudget.findFirst({ where: { scope: { startsWith: "relayer:" } } });
       expect(sponsor).not.toBeNull();
       expect(fromDbRaw(sponsor!.spentWei)).toBeGreaterThan(0n);
 
@@ -775,11 +775,18 @@ describe("onchain beta HTTP journey", () => {
       expect(providers.data.length).toBe(6);
       for (const p of providers.data) {
         expect(p.beta_adapter).toBe("local_testnet_replica");
+        // BASE_SEPOLIA_RPC_URL is unset in tests, so even Hydrex's verified
+        // evidence cannot surface as a live integration here.
         expect(p.actual_integration).toBe("disabled_unverified");
-        expect(p.testnet_evidence).toBe("unverified");
+        expect(p.verified_chain_id).toBeNull();
         expect(p.real_provider_calls).toBe(0);
         expect(p.evidence_id).toMatch(/^evidence:/);
         expect(p.integration_kind).toBe("local_testnet_replica");
+        if (p.provider_id === "hydrex") {
+          expect(p.testnet_evidence).toBe("verified");
+        } else {
+          expect(p.testnet_evidence).toBe("unverified");
+        }
       }
       const opsRes = await callRoute(onchainOpsGET, {
         method: "GET",

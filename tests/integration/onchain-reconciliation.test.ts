@@ -34,7 +34,7 @@ describe("onchain reconciliation", () => {
     await ensureTestnetNetwork();
     const snapshot = await handle.snapshot();
     try {
-      await rpcRequest(handle.url, "anvil_setCode", [handle.settlement, "0x"]);
+      await rpcRequest(handle.url, 31337, "anvil_setCode", [handle.settlement, "0x"]);
       const checks = await onchainChecks();
       expect(checks.some((c) => c.status === "unavailable" && c.observed === null)).toBe(true);
       expect(checks.some((c) => c.status === "ok")).toBe(false);
