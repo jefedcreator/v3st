@@ -39,6 +39,9 @@ export const env = createEnv({
     PRIVY_APP_ID: z.string().min(1).optional(),
     PRIVY_VERIFICATION_KEY: z.string().min(1).optional(),
     PRIVY_BETA_ALLOWLIST: z.string().optional(),
+    // The one network the customer app serves: the local replica (CI default)
+    // or Base Sepolia. Customers see only this network's stocks and cash.
+    APP_CUSTOMER_CHAIN: z.enum(["testnet", "basesepolia"]).default("testnet"),
   },
 
   /**
@@ -73,6 +76,7 @@ export const env = createEnv({
     PRIVY_APP_ID: process.env.PRIVY_APP_ID,
     PRIVY_VERIFICATION_KEY: process.env.PRIVY_VERIFICATION_KEY,
     PRIVY_BETA_ALLOWLIST: process.env.PRIVY_BETA_ALLOWLIST,
+    APP_CUSTOMER_CHAIN: process.env.APP_CUSTOMER_CHAIN,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**

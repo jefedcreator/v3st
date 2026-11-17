@@ -59,6 +59,21 @@ export function depositReceivedDirect(input: {
   };
 }
 
+// Test settlement tokens minted straight into a managed treasury (Base Sepolia
+// top-ups), outside any customer order.
+export function testTreasuryMinted(input: {
+  key: string;
+  chain: string;
+  amount: bigint;
+}): JournalInput {
+  return {
+    key: input.key,
+    kind: "testTreasuryMinted",
+    orderId: null,
+    entries: [entry(acct.equityOpening("USDC"), acct.treasury(input.chain), input.amount)],
+  };
+}
+
 export function transferReserved(input: {
   id: string;
   chain: string;

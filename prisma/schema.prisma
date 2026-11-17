@@ -1211,3 +1211,16 @@ model SignedPayload {
 
     @@map("signed_payloads")
 }
+
+// One acceptance per customer, document and version; the current version of a
+// document is the one in src/backend/content/documents.ts.
+model AgreementAcceptance {
+    id         String   @id @default(cuid())
+    userId     String
+    document   String
+    version    String
+    acceptedAt DateTime @default(now())
+
+    @@unique([userId, document, version])
+    @@map("agreement_acceptances")
+}

@@ -20,6 +20,7 @@ import {
   payoutSubmitted,
   userFunded,
 } from "@/backend/services/ledger/postings";
+import type { CustomerChain } from "@/backend/services/app/network";
 import { jobService } from "@/backend/services/jobs";
 import { RetryableError } from "@/backend/services/jobs/types";
 import { orderService } from "@/backend/services/orders";
@@ -50,7 +51,11 @@ import { reduceRate, toWithdrawalDto, type WithdrawalDto, type WithdrawalQuoteDt
 export type WithdrawalQuoteBody = { ngn_amount: bigint; stock_id?: string };
 
 class WithdrawalService {
-  async quote(userId: string, body: WithdrawalQuoteBody): Promise<WithdrawalQuoteDto> {
+  async quote(
+    userId: string,
+    body: WithdrawalQuoteBody,
+    opts?: { chain?: CustomerChain },
+  ): Promise<WithdrawalQuoteDto> {
     await controlsService.assertOpen("payouts", "PAYOUTS_PAUSED");
     const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.kycStatus !== "verified") {
@@ -70,7 +75,7 @@ class WithdrawalService {
       throw new UnprocessableEntityException("Net amount is zero or negative", "BELOW_MINIMUM");
     }
     const debitUsdc = ngnToUsd(body.ngn_amount, providerQuote.rate, "ceil");
-    const chain = (body.stock_id ? (await db.stock.findUnique({ where: { id: body.stock_id } }))?.chain : null) ?? ((await db.wallet.findFirst({ where: { userId, executionAddress: { not: null } } })) ? "testnet" : policy.defaultChain);
+    const chain = (body.stock_id ? (await db.stock.findUnique({ where: { id: body.stock_id } }))?.chain : null) ?? opts?.chain ?? ((await db.wallet.findFirst({ where: { userId, executionAddress: { not: null } } })) ? "testnet" : policy.defaultChain);
 
     let stockId: string | null = null;
     let sellQuantity: bigint | null = null;

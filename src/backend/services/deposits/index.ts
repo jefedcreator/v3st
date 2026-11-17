@@ -24,29 +24,38 @@ import { RetryableError } from "@/backend/services/jobs/types";
 import { stockService } from "@/backend/services/stocks";
 import { tradeService } from "@/backend/services/trades";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
+import { executionAccounts } from "@/backend/services/wallets/execution-accounts";
 import { CHAINS, type Chain } from "@/backend/services/wallets/chains";
 import type { Chain as RampChain } from "@/backend/services/ramp/types";
 import { walletService } from "@/backend/services/wallets";
+import type { CustomerChain } from "@/backend/services/app/network";
 import { canonicalJson, sha256Hex } from "@/utils";
 import { fromDbRaw } from "@/utils/asset-units";
-import { ConflictException, ForbiddenException } from "@/utils/exceptions";
+import { ConflictException, ForbiddenException, UnprocessableEntityException } from "@/utils/exceptions";
 import { ngnToUsd } from "@/utils/money";
 
 import { toDepositDto, type DepositDto } from "./dto";
 
 export type DepositBody = { ngn_amount: bigint; stock_id?: string };
 
+const MANAGED_CHAINS: readonly string[] = ["testnet", "basesepolia"];
+
 class DepositService {
   async create(
     userId: string,
     body: DepositBody,
     idempotencyKey: string,
+    opts?: { chain?: CustomerChain },
   ): Promise<{ deposit: DepositDto; created: boolean }> {
     await controlsService.assertOpen("deposits", "DEPOSITS_PAUSED");
     const stock = body.stock_id ? await stockService.get(body.stock_id) : null;
+    if (stock && stock.networkId !== null) {
+      throw new UnprocessableEntityException("Onchain stocks are bought through investment orders", "CAPABILITY_UNAVAILABLE");
+    }
     const hasLocalCatalog = await db.stock.count({ where: { chain: "testnet", networkId: { not: null }, enabled: true } });
-    const fundingChain = stock?.chain ?? (hasLocalCatalog > 0 ? "testnet" : policy.defaultChain);
+    const fundingChain = stock?.chain ?? opts?.chain ?? (hasLocalCatalog > 0 ? "testnet" : policy.defaultChain);
     if (fundingChain === "testnet") await testnetWalletService.ensureExecutionAccount(userId);
+    if (fundingChain === "basesepolia") await executionAccounts.ensure(userId, 84532);
     const bankAccount = await bankAccountService.getActiveRow(userId);
     if (!bankAccount) {
       throw new ForbiddenException(
@@ -484,14 +493,14 @@ class DepositService {
           await orderService.transition(tx, {
             order,
             to: "funded",
-            patch: { holdReason: null, onchainFundedAt: t.chain === "testnet" ? now() : null },
+            patch: { holdReason: null, onchainFundedAt: MANAGED_CHAINS.includes(t.chain) ? now() : null },
             actor: "system",
           });
         } else {
           const funded = await orderService.transition(tx, {
             order,
             to: "funded",
-            patch: { holdReason: null, onchainFundedAt: t.chain === "testnet" ? now() : null },
+            patch: { holdReason: null, onchainFundedAt: MANAGED_CHAINS.includes(t.chain) ? now() : null },
             actor: "system",
           });
           await orderService.transition(tx, { order: funded, to: "settled", actor: "system" });

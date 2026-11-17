@@ -74,6 +74,14 @@ export function __setRpcTransportForTests(fn: RpcTransport | null): void {
   transportOverride = fn;
 }
 
+// Drops cached per-chain clients and chain-ID verifications so a test can swap
+// in a fresh node (new relayer key, new loopback URL) for the same chain.
+export function __resetChainClientsForTests(): void {
+  publicClients.clear();
+  walletClients.clear();
+  verifiedChains.clear();
+}
+
 function rpcVia(url: string, chainId: number, method: string, params: unknown[]): Promise<unknown> {
   if (transportOverride) return transportOverride(url, chainId, method, params);
   return rpcRequest(url, chainId, method, params);

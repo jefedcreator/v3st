@@ -12,8 +12,14 @@ import { manifestFor } from "@/backend/services/onchain/manifests";
 // is persisted on the operation row (relayerNonce) before broadcast.
 const RELAYER_NONCE_LOCK_BASE = 72_011n;
 
+// The advisory lock every relayer nonce allocation (and every managed transfer)
+// takes for a network, so concurrent operations on one relayer never share a nonce.
+export function relayerLockKey(chainId: number): bigint {
+  return RELAYER_NONCE_LOCK_BASE + BigInt(chainId);
+}
+
 export async function allocateRelayerNonce(tx: Tx, chainId: number): Promise<number> {
-  await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${(RELAYER_NONCE_LOCK_BASE + BigInt(chainId))}::bigint)`);
+  await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${relayerLockKey(chainId)}::bigint)`);
   const chainNonce = await publicClientOn(chainId).getTransactionCount({
     address: relayerOn(chainId).address,
     blockTag: "pending",

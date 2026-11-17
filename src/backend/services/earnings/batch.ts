@@ -12,6 +12,7 @@ import { capacityService } from "@/backend/services/treasury/capacity";
 import { treasuryService } from "@/backend/services/treasury";
 import { tradeService } from "@/backend/services/trades";
 import { withdrawalService } from "@/backend/services/withdrawals";
+import { ledgerChainFor } from "@/backend/services/onchain/manifests";
 import { HttpException } from "@/utils/exceptions";
 import { ngnToUsd, usdToNgn } from "@/utils/money";
 
@@ -63,6 +64,22 @@ class EarningsBatchService {
           : 1
         : a.firstHarvestedAt.getTime() - b.firstHarvestedAt.getTime(),
     );
+  }
+
+  // The payout runs on the ledger chain of the candidate's receipts, so a Base
+  // Sepolia earning pays out of the basesepolia cash rails.
+  private async ledgerChainForCandidate(candidate: {
+    chain: string;
+    receiptIds: string[];
+  }): Promise<string> {
+    if (candidate.receiptIds.length > 0) {
+      const receipt = await db.rewardReceipt.findUnique({
+        where: { id: candidate.receiptIds[0]! },
+        include: { network: true },
+      });
+      if (receipt) return ledgerChainFor(receipt.network.chainId);
+    }
+    return candidate.chain;
   }
 
   async precheck(week: string): Promise<{ requiredUsd: bigint; floatAvailable: bigint }> {
@@ -206,7 +223,7 @@ class EarningsBatchService {
             earningIds: candidate.earningIds,
             amountUsdc: candidate.total,
             quote,
-            chain: candidate.chain,
+            chain: await this.ledgerChainForCandidate(candidate),
           });
           // Attach the payout identity when reserved; paid is reported only after
           // the order reaches its final paid state.

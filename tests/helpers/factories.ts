@@ -48,10 +48,10 @@ export async function seedTreasury(chain: string, microUsdc: bigint): Promise<vo
     ),
   );
   if (chain === "testnet") {
-    const { seedLocalTreasury } = await import("@/backend/services/wallets/local-transfers");
+    const { seedManagedTreasury } = await import("@/backend/services/wallets/managed-transfers");
     const { toDbRaw } = await import("@/utils/asset-units");
     const journal = await db.ledgerJournal.findUniqueOrThrow({ where: { key: `opening:${acct.treasury(chain).code}` } });
-    await seedLocalTreasury(journal.id, await walletService.treasuryAddress("testnet"), toDbRaw(microUsdc));
+    await seedManagedTreasury(31337, journal.id, await walletService.treasuryAddress("testnet"), toDbRaw(microUsdc));
   }
 }
 

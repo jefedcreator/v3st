@@ -19,10 +19,17 @@ function seedTokenAddress(symbol: string): string {
 async function main(): Promise<void> {
   assertBetaRuntime(process.env);
   await walletService.ensureTreasuryWallets();
-  const opening = {
+  const sepoliaManifestFile = path.join(process.cwd(), ".testnet", "base-sepolia", "manifest.json");
+  const opening: {
+    treasuryMicroUsdc: Partial<Record<import("../src/backend/services/wallets/chains").Chain, bigint>>;
+    floatMicroUsd: bigint;
+  } = {
     treasuryMicroUsdc: { base: 100_000_000_000n, solana: 0n },
     floatMicroUsd: 10_000_000_000n,
   };
+  if (existsSync(sepoliaManifestFile)) {
+    opening.treasuryMicroUsdc.basesepolia = 1_000_000_000_000n;
+  }
   await treasuryService.seedOpeningBalances(opening);
   await stockService.upsertCatalog([
     {
@@ -86,7 +93,6 @@ async function main(): Promise<void> {
       console.log(`seeded testnet catalog rows for deployment ${manifest.deploymentId}`);
     }
   }
-  const sepoliaManifestFile = path.join(process.cwd(), ".testnet", "base-sepolia", "manifest.json");
   if (existsSync(sepoliaManifestFile)) {
     const manifest = JSON.parse(readFileSync(sepoliaManifestFile, "utf8")) as NetworkManifest;
     const network = await db.onchainNetwork.upsert({

@@ -346,11 +346,13 @@ describe("consent-bound investments on the local testnet", () => {
     const u = await makeUserWithWallets();
     await kycService.verify(u.id, { persona: "ada_tier2" });
     await makeBankAccount(u.id);
-    const { stock } = await makeTestnetStock({ symbol: "FUND" });
+    // The catalog row keeps the funding chain on the local testnet; onchain
+    // stocks themselves are bought through investment orders, not deposits.
+    await makeTestnetStock({ symbol: "FUND" });
     await seedTreasury("testnet", 1_000_000_000_000n);
     const { deposit } = await depositService.create(
       u.id,
-      { ngn_amount: 1_500_000n, stock_id: stock.id },
+      { ngn_amount: 1_500_000n },
       randomUUID(),
     );
     await simRamp.markCollectionPaid("yellowcard", deposit.id, {
