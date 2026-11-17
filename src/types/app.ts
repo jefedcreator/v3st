@@ -22,5 +22,6 @@ export type AppSessionDto =
       signed_in: true;
       customer: { first_name: string | null; email: string | null };
       onboarding: AppOnboardingSummaryDto;
+      unread_notifications: number;
       beta: AppBetaDto;
     };

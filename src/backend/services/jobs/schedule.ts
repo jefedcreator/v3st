@@ -90,6 +90,13 @@ export function dueSchedules(at: Date): DueSchedule[] {
     job: { kind: "orders.sweep", subjectId: "global" },
   });
 
+  // Notifications are projected from user events on a fixed slot bucket.
+  out.push({
+    name: "notifications.project",
+    slot: `bucket-${Math.floor(at.getTime() / 1000 / policy.app.notificationsSlotSeconds)}`,
+    job: { kind: "notifications.project", subjectId: "global" },
+  });
+
   // Live reference sync every referenceSyncSeconds, only when Base Sepolia is
   // configured. The worker ticks at irregular instants, so the slot is the
   // 30-second bucket containing `at` (deduplicated by schedule_runs), not an exact

@@ -2,6 +2,7 @@ import { Prisma } from "@/server/prisma";
 import { db, withTx } from "@/server/db";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
+import { eventService } from "@/backend/services/events";
 import { cashReleased, conversionProceedsRecognized } from "@/backend/services/ledger/postings";
 import { ledgerService } from "@/backend/services/ledger";
 import { lagosWeek } from "@/backend/services/jobs/schedule";
@@ -117,6 +118,7 @@ class EarningsService {
         data: { receiptId, week, userId, amountUsdc: toDbRaw(amountUsdc), state: "available" },
       });
       await tx.rewardReceipt.update({ where: { id: receiptId }, data: { state: "available" } });
+      await eventService.emit(tx, userId, "earning.recognized", receiptId, null);
     });
   }
 

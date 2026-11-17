@@ -20,7 +20,8 @@ export type JobKind =
   | "stocks.reference_sync"
   | "stocks.align_test_pools"
   | "orders.progress"
-  | "orders.sweep";
+  | "orders.sweep"
+  | "notifications.project";
 
 export type JobInput = {
   kind: JobKind;
