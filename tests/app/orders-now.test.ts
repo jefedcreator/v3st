@@ -369,7 +369,7 @@ describe("customer orders: preview and immediate buy or sell", () => {
     expect(d.detail).toBe("This is taking longer than usual. Your money is safe.");
   });
 
-  it("refuses a stale price in this task", async () => {
+  it("turns a stale price into a waiting preview", async () => {
     const { cookie, stock } = await setupWorld("stale@v3st.test");
     await addMoneyAndComplete(cookie, "10000000", "ord-dep-stale-1");
     await db.stock.update({
@@ -382,7 +382,11 @@ describe("customer orders: preview and immediate buy or sell", () => {
       cookie,
       body: { stock_id: stock.id, side: "buy", amount_kobo: "2000000", pay_with: "cash" },
     });
-    expect(res.status).toBe(422);
-    expect((res.json as { code: string }).code).toBe("PRICES_UPDATING");
+    expect(res.status).toBe(200);
+    const p = dataOf<AppOrderPreviewDto>(res.json);
+    expect(p.executes).toBe("when_prices_update");
+    expect(p.price_limit_kobo).not.toBeNull();
+    expect(p.order_valid_until).not.toBeNull();
+    expect(p.notes.length).toBeGreaterThan(0);
   });
 });

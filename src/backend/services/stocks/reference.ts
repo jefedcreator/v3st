@@ -250,6 +250,22 @@ export function sharePriceMicroUsd(stock: Stock): bigint | null {
   return (tokenPrice * WAD) / fromDbRaw(stock.multiplierWad);
 }
 
+// The effective per-share price (micro-USD) of an accepted quote's fill:
+// buy spends settlement input, sell receives settlement output.
+export function effectiveSharePriceMicroUsd(
+  stock: Stock,
+  side: "buy" | "sell",
+  inputRaw: bigint,
+  outputRaw: bigint,
+): bigint | null {
+  if (inputRaw <= 0n || outputRaw <= 0n) return null;
+  const pricePerToken =
+    side === "buy"
+      ? (inputRaw * 10n ** BigInt(stock.decimals)) / outputRaw
+      : (outputRaw * 10n ** BigInt(stock.decimals)) / inputRaw;
+  return (pricePerToken * WAD) / fromDbRaw(stock.multiplierWad);
+}
+
 // On chains with a fill-versus-reference band, a venue quote whose effective price
 // per whole token is further than the band from the reference is refused.
 export function assertVenueWithinBand(

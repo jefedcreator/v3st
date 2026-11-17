@@ -11,6 +11,7 @@ import { controlsService } from "@/backend/services/controls";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import {
+  cashReserved,
   depositReceived,
   depositReceivedDirect,
   transferReleased,
@@ -45,7 +46,7 @@ class DepositService {
     userId: string,
     body: DepositBody,
     idempotencyKey: string,
-    opts?: { chain?: CustomerChain },
+    opts?: { chain?: CustomerChain; holdFor?: { key: string; orderId: string } },
   ): Promise<{ deposit: DepositDto; created: boolean }> {
     await controlsService.assertOpen("deposits", "DEPOSITS_PAUSED");
     const stock = body.stock_id ? await stockService.get(body.stock_id) : null;
@@ -112,6 +113,13 @@ class DepositService {
         subjectId: order.id,
         runAt: new Date(now().getTime() + 15_000),
       });
+      if (opts?.holdFor) {
+        // Link a waiting bank-transfer order to its funding deposit and hold key.
+        await tx.customerOrder.update({
+          where: { id: opts.holdFor.orderId },
+          data: { depositOrderId: order.id, holdKey: opts.holdFor.key },
+        });
+      }
       return { order, created: true };
     });
     if (created.created) {
@@ -480,6 +488,24 @@ class DepositService {
           tx,
           userFunded({ id: t.id, userId: order.userId, chain: t.chain, amount: fromDbRaw(t.amount), to: "cash" }),
         );
+        // A waiting bank-transfer order holds the landed cash immediately in the
+        // same funding transaction, then wakes its own progress job.
+        const linkedOrder = await tx.customerOrder.findUnique({
+          where: { depositOrderId: order.id },
+        });
+        if (linkedOrder?.holdKey && !linkedOrder.holdReleasedAt) {
+          await ledgerService.post(
+            tx,
+            cashReserved({
+              key: linkedOrder.holdKey,
+              userId: order.userId,
+              chain: t.chain,
+              amount: fromDbRaw(t.amount),
+              from: "cash",
+            }),
+          );
+          await jobService.enqueue(tx, { kind: "orders.progress", subjectId: linkedOrder.id });
+        }
         if (order.stockId) {
           await tradeService.createBuy(tx, {
             key: `deposit-buy:${order.id}`,

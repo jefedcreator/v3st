@@ -884,6 +884,8 @@ model InvestmentAuthorization {
     maxTotalNgn       Decimal?  @db.Decimal(78, 0)
     maxFeeBps         Int?
     maxSlippageBps    Int?
+    // Standing order consent (order_buy/order_sell): the per-share price limit.
+    limitPriceMicroUsd BigInt?
     expiresAt         DateTime
     revokedAt     DateTime?
     epoch         Int       @default(0)

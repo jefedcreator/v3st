@@ -8,7 +8,8 @@ import type { AppPayToDto } from "@/backend/services/app/cash";
 import { customerChain } from "@/backend/services/app/network";
 import { customerReference, formatNaira, formatShares, sharesMicroOf, toKobo } from "@/backend/services/app/format";
 import { appOnboardingService } from "@/backend/services/app/onboarding";
-import { customerOrderService } from "@/backend/services/customer-orders";
+import { customerOrderService, ORDER_TTL_MS, PREVIEW_TTL_MS } from "@/backend/services/customer-orders";
+import { rampRegistry } from "@/backend/services/ramp";
 import type { InvestmentQuoteDto } from "@/backend/services/investments";
 import { investmentService } from "@/backend/services/investments";
 import { ledgerService } from "@/backend/services/ledger";
@@ -16,12 +17,17 @@ import { acct } from "@/backend/services/ledger/accounts";
 import { positionService } from "@/backend/services/positions";
 import { ratesService } from "@/backend/services/rates";
 import { securityService } from "@/backend/services/security";
-import { referenceUsable, sharePriceMicroUsd, tokenPriceMicroUsd } from "@/backend/services/stocks/reference";
+import {
+  referenceDisplay,
+  sharePriceMicroUsd,
+  tokenPriceMicroUsd,
+} from "@/backend/services/stocks/reference";
 import type { OrderPreviewBody } from "@/backend/validators/app/orders.validator";
 import { fromDbRaw } from "@/utils/asset-units";
 import { sha256Hex } from "@/utils";
 import {
   ConflictException,
+  HttpException,
   NotFoundException,
   UnprocessableEntityException,
 } from "@/utils/exceptions";
@@ -197,6 +203,9 @@ class AppOrdersService {
       const cash = await ledgerService.balance(acct.userCash(userId, customerChain()));
       const needed = ngnToUsd(amountKobo, depositRate, "floor");
       payWith = input.pay_with ?? (cash >= needed ? "cash" : "bank_transfer");
+      if (payWith === "cash" && cash < needed) {
+        throw new ConflictException("Insufficient funds", "INSUFFICIENT_FUNDS");
+      }
     } else {
       amountKobo = sellAll ? 0n : input.amount_kobo;
     }
@@ -229,50 +238,103 @@ class AppOrdersService {
       }
     }
 
-    const trading =
-      stock.paused || stock.delisted ? "paused" : referenceUsable(stock, at) ? "available" : "prices_updating";
-    const immediate = trading === "available" && (side === "sell" || payWith === "cash");
-
-    // In this task every preview is priced through a live quote; a stale or
-    // out-of-band reference propagates as PRICES_UPDATING.
-    const quote: InvestmentQuoteDto =
-      side === "buy"
-        ? await investmentService.quote(userId, {
-            stockId: stock.id,
-            side: "buy",
-            budgetNgn: amountKobo,
-          })
-        : await investmentService.quote(userId, {
-            stockId: stock.id,
-            side: "sell",
-            inputRaw: quantityRaw!,
-          });
+    // Immediate mode is a cash buy or any sell with a live quote. A stale or
+    // out-of-band reference turns the preview into a waiting order instead.
+    const wantsImmediate = side === "sell" || payWith === "cash";
+    let quote: InvestmentQuoteDto | null = null;
+    if (wantsImmediate) {
+      try {
+        quote =
+          side === "buy"
+            ? await investmentService.quote(userId, {
+                stockId: stock.id,
+                side: "buy",
+                budgetNgn: amountKobo,
+              })
+            : await investmentService.quote(userId, {
+                stockId: stock.id,
+                side: "sell",
+                inputRaw: quantityRaw!,
+              });
+      } catch (error) {
+        if (
+          error instanceof HttpException &&
+          (error.code === "REFERENCE_STALE" || error.code === "PRICE_OUT_OF_RANGE")
+        ) {
+          quote = null;
+        } else {
+          throw error;
+        }
+      }
+    }
 
     const rate: Rate = side === "buy" ? depositRate : payoutRate;
     const sharePrice = sharePriceMicroUsd(stock);
-    if (sharePrice === null || sharePrice <= 0n) {
-      throw new UnprocessableEntityException("Reference price is missing or stale", "REFERENCE_STALE");
+    const tokenPrice = tokenPriceMicroUsd(stock);
+    const displayRef = referenceDisplay(stock, at);
+    if (sharePrice === null || sharePrice <= 0n || (quote === null && displayRef === null)) {
+      throw new UnprocessableEntityException("Stock is not available right now", "STOCK_UNAVAILABLE");
     }
     const limitPriceMicroUsd =
       side === "buy"
         ? (sharePrice * 10_300n + 9_999n) / 10_000n
         : (sharePrice * 9_700n) / 10_000n;
-    const feeKobo = (raw: string): string | null => toKobo(BigInt(raw), rate).toString();
-    const fees = [
-      { label: "V3ST fee", kobo: feeKobo(quote.fee_usdc_raw), note: null },
-      { label: "Currency conversion", kobo: feeKobo(quote.fx_fee_usdc_raw), note: null },
-      { label: "Trading fee", kobo: feeKobo(quote.venue_fee_usdc_raw), note: null },
-    ];
+    const immediate = quote !== null;
+    const mode = immediate ? ("now" as const) : ("waiting" as const);
+    const executes = immediate
+      ? ("now" as const)
+      : payWith === "bank_transfer"
+        ? ("after_your_transfer" as const)
+        : ("when_prices_update" as const);
+
+    const budgetMicroUsd =
+      side === "buy"
+        ? immediate
+          ? BigInt(quote!.input_raw)
+          : payWith === "cash"
+            ? ngnToUsd(amountKobo, depositRate, "floor")
+            : null
+        : null;
+    const estimatedQuantityRaw =
+      side === "buy"
+        ? immediate
+          ? BigInt(quote!.expected_output_raw)
+          : tokenPrice === null || tokenPrice <= 0n || budgetMicroUsd === null
+            ? null
+            : (budgetMicroUsd * 10n ** BigInt(stock.decimals)) / tokenPrice
+        : quantityRaw;
+
+    let fees: { label: string; kobo: string | null; note: string | null }[];
+    let notes: string[] = [];
+    if (immediate) {
+      const feeKobo = (raw: string): string | null => toKobo(BigInt(raw), rate).toString();
+      fees = [
+        { label: "V3ST fee", kobo: feeKobo(quote!.fee_usdc_raw), note: null },
+        { label: "Currency conversion", kobo: feeKobo(quote!.fx_fee_usdc_raw), note: null },
+        { label: "Trading fee", kobo: feeKobo(quote!.venue_fee_usdc_raw), note: null },
+      ];
+    } else {
+      fees = [{ label: "Trading fee", kobo: null, note: "Up to 1%" }];
+      if (payWith === "bank_transfer") {
+        const provider = await rampRegistry.selectForNewOrder("in");
+        const rampQuote = await provider.quote("in", amountKobo);
+        fees.push({ label: "Bank transfer fee", kobo: rampQuote.feeNgn.toString(), note: null });
+      }
+      notes = [
+        "If the price moves more than 3% against you before your order goes through, it won't go through and your money stays safe.",
+      ];
+    }
+
     const preview = await customerOrderService.createPreview({
       userId,
       stockId: stock.id,
       side,
       funding: side === "buy" ? payWith : null,
-      mode: immediate ? "now" : "waiting",
+      mode,
       amountKobo,
-      quantityRaw: side === "buy" ? BigInt(quote.expected_output_raw) : quantityRaw,
-      budgetMicroUsd: side === "buy" ? BigInt(quote.input_raw) : null,
-      investmentQuoteId: immediate ? quote.id : null,
+      quantityRaw: estimatedQuantityRaw,
+      budgetMicroUsd,
+      investmentQuoteId: immediate ? quote!.id : null,
       referencePriceMicroUsd: sharePrice,
       limitPriceMicroUsd,
       rateKobo: rate.kobo,
@@ -281,28 +343,40 @@ class AppOrdersService {
         policy_version: policy.app.policyVersion,
         disclosure_version: CUSTOMER_DOCUMENTS.risks.version,
         fees,
+        notes,
       },
-      expiresAt: new Date(quote.expires_at),
+      expiresAt: immediate
+        ? new Date(quote!.expires_at)
+        : new Date(now().getTime() + PREVIEW_TTL_MS),
     });
+    const sharesMicro =
+      estimatedQuantityRaw === null
+        ? null
+        : sharesMicroOf(estimatedQuantityRaw, stock.decimals);
     return {
       preview_id: preview.id,
       stock: appCatalogService.stockRef(stock),
       side,
       pay_with: side === "buy" ? payWith : null,
-      executes: immediate ? "now" : "after_your_transfer",
+      executes,
       amount_kobo: amountKobo.toString(),
-      shares_micro: sharesMicroOf(
-        side === "buy" ? BigInt(quote.expected_output_raw) : quantityRaw!,
-        stock.decimals,
-      ).toString(),
+      shares_micro: sharesMicro === null ? "0" : sharesMicro.toString(),
       price_kobo: toKobo(sharePrice, rate).toString(),
       price_limit_kobo: immediate ? null : toKobo(limitPriceMicroUsd, rate).toString(),
       fees,
       you_receive_kobo:
-        side === "sell" ? toKobo(BigInt(quote.expected_output_raw), rate).toString() : null,
+        side === "sell"
+          ? immediate
+            ? toKobo(BigInt(quote!.expected_output_raw), rate).toString()
+            : tokenPrice === null
+              ? null
+              : toKobo((quantityRaw! * tokenPrice) / 10n ** BigInt(stock.decimals), rate).toString()
+          : null,
       expires_at: preview.expiresAt.toISOString(),
-      order_valid_until: null,
-      notes: [],
+      order_valid_until: immediate
+        ? null
+        : new Date(now().getTime() + ORDER_TTL_MS).toISOString(),
+      notes,
     };
   }
 
@@ -329,14 +403,11 @@ class AppOrdersService {
     if (preview?.userId !== userId) {
       throw new NotFoundException("Preview not found");
     }
-    if (preview.mode !== "now" || !preview.investmentQuoteId) {
-      throw new UnprocessableEntityException(
-        "This preview is waiting on a price or a transfer",
-        "VALIDATION_FAILED",
-      );
-    }
     try {
-      const order = await customerOrderService.placeNow(userId, input.previewId, clientKey);
+      const order =
+        preview.mode === "now" && preview.investmentQuoteId
+          ? await customerOrderService.placeNow(userId, input.previewId, clientKey)
+          : await customerOrderService.placeWaiting(userId, input.previewId, clientKey);
       return { dto: await this.get(userId, order.id), created: true };
     } catch (error) {
       // A concurrent place with the same key won the preview lock; return the
@@ -349,6 +420,11 @@ class AppOrdersService {
       }
       throw error;
     }
+  }
+
+  async cancel(userId: string, orderId: string): Promise<AppOrderDto> {
+    await customerOrderService.cancel(userId, orderId);
+    return this.get(userId, orderId);
   }
 
   async get(userId: string, orderId: string): Promise<AppOrderDto> {

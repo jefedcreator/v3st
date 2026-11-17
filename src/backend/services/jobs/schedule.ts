@@ -83,6 +83,13 @@ export function dueSchedules(at: Date): DueSchedule[] {
     job: { kind: "poll.open_work", subjectId: "global" },
   });
 
+  // Waiting customer orders are swept on a fixed bucket so a tick can never skip one.
+  out.push({
+    name: "orders.sweep",
+    slot: `bucket-${Math.floor(at.getTime() / 1000 / policy.app.sweepSeconds)}`,
+    job: { kind: "orders.sweep", subjectId: "global" },
+  });
+
   // Live reference sync every referenceSyncSeconds, only when Base Sepolia is
   // configured. The worker ticks at irregular instants, so the slot is the
   // 30-second bucket containing `at` (deduplicated by schedule_runs), not an exact

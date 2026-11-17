@@ -15,7 +15,7 @@ import { onchainRegistry } from "@/backend/services/onchain/registry";
 import { positionService } from "@/backend/services/positions";
 import { testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
-import { assertVenueWithinBand, referenceUsable } from "@/backend/services/stocks/reference";
+import { assertVenueWithinBand, effectiveSharePriceMicroUsd, referenceUsable } from "@/backend/services/stocks/reference";
 import { stockService } from "@/backend/services/stocks";
 import { ratesService } from "@/backend/services/rates";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
@@ -311,7 +311,11 @@ class InvestmentService {
     quoteId: string,
     authorizationId: string,
     key: string,
-    opts?: { standingAction?: StandingAction },
+    opts?: {
+      standingAction?: StandingAction;
+      releaseHold?: { key: string; kind: "cash" | "stock"; amount: bigint };
+      purpose?: TradePurpose;
+    },
   ): Promise<InvestmentDto> {
     const requestHash = sha256Hex(canonicalJson({ quoteId, authorizationId, key }));
     return withTx(async (tx) => {
@@ -361,6 +365,12 @@ class InvestmentService {
           budgetNgnKobo: quote.budgetNgn === null ? null : BigInt(quote.budgetNgn),
           slippageBps: quote.slippageBps,
           feeMicroUsd: fromDbRaw(quote.feeUsdc) + fromDbRaw(quote.fxFeeUsdc) + fromDbRaw(quote.venueFeeUsdc),
+          effectivePriceMicroUsd: effectiveSharePriceMicroUsd(
+            stock,
+            quote.side,
+            fromDbRaw(quote.inputRaw),
+            fromDbRaw(quote.expectedOutputRaw),
+          ) ?? undefined,
         },
       });
       const context = quote.context as {
@@ -400,6 +410,32 @@ class InvestmentService {
         sourceBlock: BigInt(eq.sourceBlock),
         routeFingerprint: eq.routeFingerprint,
       };
+      // A waiting order's hold is released inside this transaction, before the
+      // new reservation, so the same cash or shares are never held twice.
+      if (opts?.releaseHold) {
+        if (opts.releaseHold.kind === "cash") {
+          await ledgerService.post(
+            tx,
+            cashReleased({
+              key: opts.releaseHold.key,
+              userId,
+              chain: stock.chain,
+              amount: opts.releaseHold.amount,
+              to: "cash",
+            }),
+          );
+        } else {
+          await ledgerService.post(
+            tx,
+            stockReleased({
+              key: opts.releaseHold.key,
+              userId,
+              stockId: quote.stockId,
+              quantity: opts.releaseHold.amount,
+            }),
+          );
+        }
+      }
       // Atomic reserve: the ledger post throws INSUFFICIENT_FUNDS under row locks, so
       // two concurrent reservations of the same cash cannot both succeed.
       if (quote.side === "buy") {
@@ -437,6 +473,7 @@ class InvestmentService {
           authorizationId,
           stockId: quote.stockId,
           side: quote.side,
+          purpose: opts?.purpose ?? "deposit_buy",
           status: "reserved",
           amountIn: quote.inputRaw,
           minAmountOut: quote.minOutputRaw,

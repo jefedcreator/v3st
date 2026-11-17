@@ -22,6 +22,7 @@ import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
 import { executionAccounts } from "@/backend/services/wallets/execution-accounts";
 import { customerChainId } from "@/backend/services/app/network";
+import { customerOrderExecutor } from "@/backend/services/customer-orders/executor";
 import { treasuryService } from "@/backend/services/treasury";
 import { webhookService } from "@/backend/services/webhooks";
 import { withdrawalService } from "@/backend/services/withdrawals";
@@ -35,6 +36,12 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "wallets.prepare_execution": async (job) => {
     await executionAccounts.ensure(job.subjectId, customerChainId());
+  },
+  "orders.progress": async (job) => {
+    await customerOrderExecutor.progress(job.subjectId);
+  },
+  "orders.sweep": async () => {
+    await customerOrderExecutor.sweep();
   },
   "trade.progress": async (job) => {
     await tradeService.progress(job.subjectId);
