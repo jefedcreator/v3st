@@ -2,7 +2,6 @@ import { type Address, type Hex, encodeFunctionData, keccak256, toHex, zeroAddre
 
 import { db, withTx } from "@/server/db";
 import type { ChainTransfer, Prisma } from "@/server/prisma";
-import { policy } from "@/backend/config/policy";
 import { assertBetaStage } from "@/backend/integrations/onchain-policy";
 import { chainObject, chainTarget, publicClientOn, rpcOn, walletClientOn, relayerOn } from "@/backend/services/onchain/chains";
 import { manifestFor, settlementAssetKeyOn, verifyManifest, type NetworkManifest } from "@/backend/services/onchain/manifests";
