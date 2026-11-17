@@ -8,13 +8,13 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+        default:
+          "border-white/20 text-[11px] font-medium tracking-[0.16em] text-white/80 uppercase [a&]:hover:bg-white/5",
+        secondary: "bg-surface-raised text-ink [a&]:hover:bg-surface",
         outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+          "border-stroke text-ink [a&]:hover:bg-surface-raised [a&]:hover:text-heading",
+        ghost: "[a&]:hover:bg-surface-raised [a&]:hover:text-heading",
+        link: "text-gain underline-offset-4 [a&]:hover:underline",
       },
     },
     defaultVariants: {
