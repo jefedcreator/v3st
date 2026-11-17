@@ -1,11 +1,12 @@
-import type { Abi, Address, Hex } from "viem";
+import { encodeDeployData, type Abi, type Address, type Hex } from "viem";
 
-import type { Wallet } from "@/server/prisma";
+import { Prisma, type Wallet } from "@/server/prisma";
 import { db } from "@/server/db";
 import { TESTNET_CHAIN_ID } from "@/backend/integrations/onchain-policy";
-import { chainObject, publicClientOn, relayerOn, walletClientOn } from "@/backend/services/onchain/chains";
+import { relayerOn } from "@/backend/services/onchain/chains";
 import { manifestFor, verifyManifest } from "@/backend/services/onchain/manifests";
 import { loadArtifact } from "@/backend/services/onchain/testnet";
+import { sendRelayerTransaction } from "@/backend/services/wallets/relayer-transactions";
 import { NotFoundException } from "@/utils/exceptions";
 
 export type ExecutionAccountRef = {
@@ -49,19 +50,22 @@ export const executionAccounts = {
       throw new NotFoundException(`Network unavailable: ${verified.reason}`, "NETWORK_UNHEALTHY");
     }
     const relayer = relayerOn(chainId);
-    const walletClient = walletClientOn(chainId);
-    const publicClient = publicClientOn(chainId);
     const artifact = loadArtifact("TestExecutionAccount");
-    const hash = await walletClient.deployContract({
-      account: relayer,
-      chain: chainObject(chainId),
-      abi: artifact.abi as Abi,
-      bytecode: artifact.bytecode as Hex,
-      args: [wallet.address as Address, relayer.address],
+    // The deployment is a stored, allocator-nonced relayer transaction keyed by
+    // wallet and deployment: concurrent callers (the onboarding prepare job, a
+    // deposit, a quote) converge on the same signed bytes and the same address.
+    const receipt = await sendRelayerTransaction(chainId, `exec-account:${wallet.id}:${manifest.deploymentId}`, {
+      to: null,
+      data: encodeDeployData({
+        abi: artifact.abi as Abi,
+        bytecode: artifact.bytecode as Hex,
+        args: [wallet.address as Address, relayer.address],
+      }),
     });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
     const accountAddress = receipt.contractAddress;
-    if (!accountAddress) throw new NotFoundException("Execution account deployment failed", "NETWORK_UNHEALTHY");
+    if (receipt.status !== "success" || !accountAddress) {
+      throw new NotFoundException("Execution account deployment failed", "NETWORK_UNHEALTHY");
+    }
 
     const profile = await db.custodyProfile.upsert({
       where: { kind_walletId: { kind: "application_account", walletId: wallet.id } },
@@ -73,15 +77,19 @@ export const executionAccounts = {
       },
       update: {},
     });
-    await db.executionAccount.create({
-      data: {
-        walletId: wallet.id,
-        chainId,
-        deploymentId: manifest.deploymentId,
-        address: accountAddress,
-        custodyProfileId: profile.id,
-      },
-    });
+    const accountData: Prisma.ExecutionAccountUncheckedCreateInput = {
+      walletId: wallet.id,
+      chainId,
+      deploymentId: manifest.deploymentId,
+      address: accountAddress,
+      custodyProfileId: profile.id,
+    };
+    try {
+      await db.executionAccount.create({ data: accountData });
+    } catch (error) {
+      // A concurrent caller recorded the same deployment first.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+    }
     if (chainId === TESTNET_CHAIN_ID) {
       const updated = await db.wallet.update({
         where: { id: wallet.id },

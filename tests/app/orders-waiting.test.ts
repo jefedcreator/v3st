@@ -13,6 +13,8 @@ import { policy } from "@/backend/config/policy";
 import { now } from "@/backend/clock";
 import { customerOrderService } from "@/backend/services/customer-orders";
 import { customerOrderExecutor, withinLimit } from "@/backend/services/customer-orders/executor";
+import { investmentService } from "@/backend/services/investments";
+import { effectiveSharePriceMicroUsd, worstFillSharePriceMicroUsd } from "@/backend/services/stocks/reference";
 import { ledgerService } from "@/backend/services/ledger";
 import { acct } from "@/backend/services/ledger/accounts";
 import { publicClientFor } from "@/backend/services/onchain/testnet";
@@ -228,6 +230,43 @@ describe("customer waiting orders", () => {
     expect(view.status).toBe("expired");
     expect(view.title).toBe("Order expired");
     expect(view.detail).toContain("Your money is in your cash.");
+  });
+
+  it("judges the price limit on the worst fill a quote allows, not the expected one", async () => {
+    const { cookie, userId, stock } = await setupWorld("wait-worst@v3st.test");
+    await addMoneyAndComplete(cookie, "10000000", "w-dep-worst-1");
+    await staleReference(stock.id);
+    const preview = await previewRaw(cookie, stock.id, { side: "buy", amount_kobo: "2000000", pay_with: "cash" });
+    const placed = await placeWith(cookie, dataOf<AppOrderPreviewDto>(preview.json).preview_id, "w-key-worst-1");
+    expect(dataOf<AppOrderDto>(placed.json).status).toBe("waiting_for_price");
+    const orderRow = await db.customerOrder.findUniqueOrThrow({ where: { key: `app-order:${userId}:w-key-worst-1` } });
+    await touchReference(stock.id);
+
+    // Price the order's budget the way the executor will.
+    const fresh = await db.stock.findUniqueOrThrow({ where: { id: stock.id } });
+    const q = await investmentService.quote(userId, { stockId: stock.id, side: "buy", inputRaw: orderRow.budgetMicroUsd! });
+    const expected = effectiveSharePriceMicroUsd(fresh, "buy", BigInt(q.input_raw), BigInt(q.expected_output_raw))!;
+    const worst = worstFillSharePriceMicroUsd(fresh, "buy", BigInt(q.input_raw), BigInt(q.min_output_raw))!;
+    expect(worst > expected).toBe(true);
+
+    // A limit at the expected price is not enough: slippage could fill past it.
+    // drainJobs moves the clock to each job's run time, so the price is refreshed
+    // before every sweep; only the limit can keep this order waiting.
+    await db.customerOrder.update({ where: { id: orderRow.id }, data: { limitPriceMicroUsd: expected } });
+    for (let i = 0; i < 2; i += 1) {
+      await touchReference(stock.id);
+      await customerOrderExecutor.sweep();
+      await drainJobs();
+    }
+    expect(await db.investment.count({ where: { key: `${orderRow.key}:investment` } })).toBe(0);
+    expect((await db.customerOrder.findUniqueOrThrow({ where: { id: orderRow.id } })).status).toBe("waiting_for_price");
+
+    // A limit that covers the worst allowed fill executes.
+    await db.customerOrder.update({ where: { id: orderRow.id }, data: { limitPriceMicroUsd: worst } });
+    await touchReference(stock.id);
+    await customerOrderExecutor.sweep();
+    await drainJobs();
+    expect(await db.investment.count({ where: { key: `${orderRow.key}:investment` } })).toBe(1);
   });
 
   it("buys after a bank transfer, with the cash held as it lands", async () => {

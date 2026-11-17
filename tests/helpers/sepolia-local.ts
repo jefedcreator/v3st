@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
+import net from "node:net";
 import path from "node:path";
 
 import { type Address, type Hex } from "viem";
@@ -52,8 +53,26 @@ function rawRpc(url: string, method: string, params: unknown[]): Promise<unknown
   });
 }
 
-async function waitForNode(url: string): Promise<void> {
-  for (let attempt = 0; attempt < 80; attempt++) {
+// Asks the OS for a free loopback port. A random port in a fixed range can collide
+// with an ephemeral port already in use, and Anvil then exits instead of listening.
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close(() => (port > 0 ? resolve(port) : reject(new Error("No free port"))));
+    });
+  });
+}
+
+async function waitForNode(url: string, child: ChildProcess): Promise<void> {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (child.exitCode !== null) {
+      throw new Error(`Sepolia-shaped node at ${url} exited with code ${child.exitCode} before it was ready`);
+    }
     try {
       await rawRpc(url, "eth_chainId", []);
       return;
@@ -64,21 +83,37 @@ async function waitForNode(url: string): Promise<void> {
   throw new Error(`Sepolia-shaped node at ${url} did not become ready`);
 }
 
+// Starts Anvil on a free port, retrying with a fresh port if it exits or never
+// answers (another process can take the port between the check and the bind).
+async function startNode(): Promise<{ child: ChildProcess; loopbackUrl: string }> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const port = await freePort();
+    const loopbackUrl = `http://127.0.0.1:${port}`;
+    const child: ChildProcess = spawn(
+      "anvil",
+      ["--host", "127.0.0.1", "--port", String(port), "--chain-id", "84532", "--block-time", "1", "--silent"],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    child.stdout?.resume();
+    child.stderr?.resume();
+    try {
+      await waitForNode(loopbackUrl, child);
+      return { child, loopbackUrl };
+    } catch (error) {
+      lastError = error;
+      child.kill("SIGKILL");
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Sepolia-shaped node did not start");
+}
+
 // Starts a loopback Anvil with chain ID 84532 and wires the shared RPC test
 // transport so every chain-84532 call is forwarded to it as raw JSON-RPC while
 // the configured Base Sepolia URL (https://sepolia.v3st.test) stays the target
 // of record. Deploys TestSettlementToken and writes the Base Sepolia manifest.
 export async function startSepoliaShapedNode(): Promise<SepoliaShapedNode> {
-  const port = 30_000 + Math.floor(Math.random() * 20_000);
-  const loopbackUrl = `http://127.0.0.1:${port}`;
-  const child: ChildProcess = spawn(
-    "anvil",
-    ["--host", "127.0.0.1", "--port", String(port), "--chain-id", "84532", "--block-time", "1", "--silent"],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
-  child.stdout?.resume();
-  child.stderr?.resume();
-  await waitForNode(loopbackUrl);
+  const { child, loopbackUrl } = await startNode();
 
   const previousRpcUrl = process.env.BASE_SEPOLIA_RPC_URL;
   const previousRelayerKey = process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY;

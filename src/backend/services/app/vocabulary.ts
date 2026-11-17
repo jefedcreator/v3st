@@ -36,8 +36,13 @@ const LEAK_VALUE_PATTERNS = [
 const TOKENIZED_PATTERN = /\btokeni[sz](ed|ation)\b/i;
 const INTERNAL_CODE_PATTERN = /\b[A-Z]+(?:_[A-Z]+)+\b/;
 
+// Splits snake_case and camelCase alike, so a raw database row that slipped into a
+// response (txHash, tokenAddress, providerId) is caught as well as a wire field.
 function keyLeaks(key: string): boolean {
-  const segments = key.toLowerCase().split("_");
+  const segments = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[_-]/);
   return segments.some((segment) => LEAK_KEY_SEGMENTS.has(segment));
 }
 

@@ -2,7 +2,8 @@ import { hydrexSwapRouterABI } from "@hydrexfi/hydrex-sdk";
 import { zeroAddress, type Address } from "viem";
 
 import type { Prisma, Stock } from "@/server/prisma";
-import { db, withTx } from "@/server/db";
+import { db } from "@/server/db";
+import { withLease } from "@/backend/services/jobs/lease";
 import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { BASE_SEPOLIA_CHAIN_ID } from "@/backend/integrations/onchain-policy";
@@ -13,9 +14,10 @@ import { referenceUsable, tokenPriceMicroUsd } from "@/backend/services/stocks/r
 import { settlementTokenAbi, stockTokenAbi } from "@/backend/services/onchain/abis";
 
 const Q192 = 2n ** 192n;
-const KEEPER_ADVISORY_LOCK = 72_099n;
+const KEEPER_LEASE = "stocks.align_test_pools";
 // A run holds its lock for at most this long (approvals, swaps and receipts).
-const KEEPER_RUN_TIMEOUT_MS = 600_000;
+// Longer than any run: up to 8 stand-ins, each an approval and a swap confirmed on Base Sepolia.
+const KEEPER_LEASE_TTL_SECONDS = 900;
 
 // Integer square root by Newton's method (floor).
 export function isqrt(n: bigint): bigint {
@@ -138,18 +140,11 @@ class TestPoolAligner {
   // One alignment run: for every enabled Base Sepolia stand-in with a pool and a
   // usable reference, trade the pool back within the band of the reference.
   async run(): Promise<AlignmentResult[]> {
-    // A transaction-scoped advisory lock: a session lock taken through the pool
-    // could be released on a different connection (or never) and stall the keeper.
-    return withTx(
-      async (tx) => {
-        const lockRows = await tx.$queryRawUnsafe<Array<{ locked: boolean }>>(
-          `SELECT pg_try_advisory_xact_lock(${KEEPER_ADVISORY_LOCK}::bigint) AS locked`,
-        );
-        if (!lockRows[0]?.locked) return [];
-        return this.alignAll();
-      },
-      { timeoutMs: KEEPER_RUN_TIMEOUT_MS },
-    );
+    // One run at a time, held by a lease row rather than an open transaction: the
+    // run waits on approvals, swaps and confirmations, and no transaction may stay
+    // open across chain calls. A crashed run's lease expires after the TTL.
+    const results = await withLease(KEEPER_LEASE, KEEPER_LEASE_TTL_SECONDS, () => this.alignAll());
+    return results ?? [];
   }
 
   private async alignAll(): Promise<AlignmentResult[]> {

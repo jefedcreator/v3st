@@ -15,7 +15,7 @@ import { onchainRegistry } from "@/backend/services/onchain/registry";
 import { positionService } from "@/backend/services/positions";
 import { testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
-import { assertVenueWithinBand, effectiveSharePriceMicroUsd, referenceUsable } from "@/backend/services/stocks/reference";
+import { assertVenueWithinBand, referenceUsable, worstFillSharePriceMicroUsd } from "@/backend/services/stocks/reference";
 import { stockService } from "@/backend/services/stocks";
 import { ratesService } from "@/backend/services/rates";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
@@ -365,11 +365,12 @@ class InvestmentService {
           budgetNgnKobo: quote.budgetNgn === null ? null : BigInt(quote.budgetNgn),
           slippageBps: quote.slippageBps,
           feeMicroUsd: fromDbRaw(quote.feeUsdc) + fromDbRaw(quote.fxFeeUsdc) + fromDbRaw(quote.venueFeeUsdc),
-          effectivePriceMicroUsd: effectiveSharePriceMicroUsd(
+          // Order consents bound the worst fill this quote allows (minimum output).
+          effectivePriceMicroUsd: worstFillSharePriceMicroUsd(
             stock,
             quote.side,
             fromDbRaw(quote.inputRaw),
-            fromDbRaw(quote.expectedOutputRaw),
+            fromDbRaw(quote.minOutputRaw),
           ) ?? undefined,
         },
       });

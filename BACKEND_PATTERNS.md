@@ -435,6 +435,8 @@ contracts/test/           # forge behavioral tests
 - Provider replicas are labelled `local_testnet_replica` with `mode: simulated`; a replica never reports itself as a verified provider connection
 - Persist the intent (immutable quote/consent/operation snapshot) before any external effect; external calls never run inside `withTx` — enqueue a durable job and finalize from observed receipts
 - The restricted test signer/relayer pays gas from a sponsor budget; customers never sign or top up gas
+- Every relayer transaction takes its nonce from `allocateRelayerNonce` and stores its signed bytes before broadcast: operations through the execution pipeline, managed transfers through `wallets/managed-transfers.ts`, and anything else (execution-account deploys, authorization-epoch bumps) through `sendRelayerTransaction` in `wallets/relayer-transactions.ts`. Never call `deployContract`/`writeContract` with the relayer key directly — viem's automatic nonce can take a nonce an operation has signed but not yet sent
+- A long-running job that waits on chain calls (the Base Sepolia keeper) holds a lease (`withLease` in `jobs/lease.ts`), not an open transaction or a session advisory lock
 
 ### Session creation pattern
 

@@ -7,7 +7,7 @@ import { eventService } from "@/backend/services/events";
 import { investmentService } from "@/backend/services/investments";
 import { jobService } from "@/backend/services/jobs";
 import { ratesService } from "@/backend/services/rates";
-import { effectiveSharePriceMicroUsd, referenceUsable } from "@/backend/services/stocks/reference";
+import { referenceUsable, worstFillSharePriceMicroUsd } from "@/backend/services/stocks/reference";
 import { fromDbRaw, fromDbRawNullable, toDbRaw } from "@/utils/asset-units";
 import { HttpException } from "@/utils/exceptions";
 
@@ -192,11 +192,13 @@ class CustomerOrderExecutor {
       }
       throw error;
     }
-    const effective = effectiveSharePriceMicroUsd(
+    // Judge the limit on the worst fill the quote still allows (its minimum output),
+    // not the expected one, so slippage can never carry a fill past the limit.
+    const effective = worstFillSharePriceMicroUsd(
       stock,
       order.side,
       BigInt(quote.input_raw),
-      BigInt(quote.expected_output_raw),
+      BigInt(quote.min_output_raw),
     );
     if (effective === null || !withinLimit(order.side, effective, order.limitPriceMicroUsd)) {
       return;

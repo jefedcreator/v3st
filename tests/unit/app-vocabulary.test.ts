@@ -26,6 +26,14 @@ describe("findCustomerLeaks", () => {
     ).toEqual([]);
   });
 
+  it("flags camelCase keys from a raw database row", () => {
+    const leaks = findCustomerLeaks({ row: { txHash: "x", tokenAddress: "y", providerId: "o1", createdAt: "2026-11-17" } });
+    for (const path of ["row.txHash", "row.tokenAddress", "row.providerId"]) {
+      expect(leaks.some((leak) => leak.startsWith(path))).toBe(true);
+    }
+    expect(leaks.some((leak) => leak.startsWith("row.createdAt"))).toBe(false);
+  });
+
   it("allows tokenized only in documents", () => {
     expect(findCustomerLeaks({ body: "tokenized stock exposure" })).not.toEqual([]);
     expect(findCustomerLeaks({ body: "tokenized stock exposure" }, { documents: true })).toEqual([]);

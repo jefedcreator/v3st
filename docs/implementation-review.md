@@ -247,3 +247,48 @@ Gate in the follow-up environment: `yarn prisma validate` passed; `yarn typechec
 (`binaries.prisma.sh`), the Solidity compiler download (`binaries.soliditylang.org`) and Google
 Fonts. The follow-up's new and changed tests (orders-now, orders-waiting, earn, catalog, onboarding,
 onchain-reinvest) are written but **not yet run**; run the full gate before merging.
+
+### Independent cross-check before merge (2026-11-17)
+
+A separate pass compared `feat/customer-app-backend` with the plan: every planned route (52, plus the two
+activity routes the plan lists as files), service, migration and test file exists, every customer route uses
+`audience: "customer"`, and each Review Focus case has a test. It fixed these shortfalls:
+
+- **Relayer nonces.** `executionAccounts.ensure` deployed the account contract with viem's automatic nonce,
+  outside `allocateRelayerNonce`. The background `wallets.prepare_execution` job (Task 5) runs that deploy
+  alongside deposits and orders, so it could take a nonce another relayer transaction had signed but not yet
+  sent; two concurrent calls for one customer could also deploy twice and fail on the unique row. Deploys now
+  go through `sendRelayerTransaction` (`wallets/relayer-transactions.ts`): signed once under the network's
+  relayer lock, stored in `local_chain_transfers` before broadcast, keyed per wallet and deployment, so
+  concurrent callers converge on one deployment.
+- **Price limit.** Waiting orders and the order-consent check judged the 3% limit on the quote's expected
+  fill; a fill could still land up to the 1% slippage allowance past it. Both now use the worst fill the
+  quote allows (`worstFillSharePriceMicroUsd`, its minimum output, rounded against the customer).
+- **Keeper lock.** The keeper held one database transaction open (up to 10 minutes) across approvals, swaps
+  and confirmations. It now holds a `worker_leases` row (`jobs/lease.ts`) that expires on its own after a
+  crash; no transaction spans chain calls. New migration `20261118000000_worker_lease`.
+- **Leak checker.** Keys were split on underscores only; a raw row with `txHash` or `tokenAddress` would
+  have passed. camelCase keys are split too.
+- **Test helper.** The chain-84532 test node picked a random port in a range that overlaps macOS ephemeral
+  ports; it now takes a free port from the OS, fails fast if Anvil exits, and retries.
+
+Found, not changed (pre-existing): `TestExecutionAccount.bumpAuthorizationEpoch` is `onlyOwner` (the
+customer's key, which the backend never holds), so the relayer bump on revocation always reverts at gas
+estimation and is swallowed. It never consumes a nonce. Revocation is enforced in the database (revoked
+consents can't sign new operations); the onchain epoch only moves if the owner calls it.
+
+Final gate (this machine: Node 24.15.0, Yarn 1.22.22, Foundry 1.9.0 commit `6056c58`, disposable
+PostgreSQL 14.11 on 127.0.0.1:55432 — the remote database in the local `.env` was not used):
+
+| Command | Result |
+| --- | --- |
+| `yarn install --frozen-lockfile` | Done |
+| `yarn prisma validate` / `generate` | Valid / generated |
+| `yarn test:contracts` | 17 passed, 0 failed (4 suites) |
+| `yarn test` | 95 files, 516 passed, 0 failed (432 s). The first run had 3 failures, all fixed above or in the tests themselves |
+| `yarn typecheck` | 0 errors |
+| `yarn lint` | 0 errors, 9 pre-existing warnings |
+| `yarn build` | Passes with `NEXT_PUBLIC_APP_URL=http://localhost:3000`. With the local `.env` value `'localhost:3000'` (no scheme) the root layout's `metadataBase` breaks prerendering of `/` and `/_not-found` — a local configuration issue, the same on `main` |
+
+Still pending (operator, needs keys or a browser): the Privy live sign-in check, the Base Sepolia keeper run
+and the customer smoke script listed above.

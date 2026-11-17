@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Stock } from "@/server/prisma";
-import { assertVenueWithinBand } from "@/backend/services/stocks/reference";
+import { assertVenueWithinBand, worstFillSharePriceMicroUsd } from "@/backend/services/stocks/reference";
 
 const stock = {
   chain: "basesepolia",
@@ -11,6 +11,16 @@ const stock = {
   referenceAsOf: new Date(),
   multiplierWad: "1000000000000000000",
 } as unknown as Stock;
+
+describe("worst fill price", () => {
+  it("rounds against the customer on both sides", () => {
+    // Buy: 1,000 USD for at least 3.9 tokens → 256.410256…, rounded up.
+    expect(worstFillSharePriceMicroUsd(stock, "buy", 1_000_000_000n, 3_900_000_000_000_000_000n)).toBe(256_410_257n);
+    // Sell: 4 tokens for at least 975 USD → 243.75, exact.
+    expect(worstFillSharePriceMicroUsd(stock, "sell", 4_000_000_000_000_000_000n, 975_000_000n)).toBe(243_750_000n);
+    expect(worstFillSharePriceMicroUsd(stock, "buy", 0n, 1n)).toBeNull();
+  });
+});
 
 describe("venue band", () => {
   it("accepts quotes inside the band and refuses wider ones", () => {

@@ -699,6 +699,16 @@ model Notification {
     @@map("notifications")
 }
 
+// A short-lived lease for a long worker job, so it never holds a transaction open
+// across external calls. Expired leases may be taken over.
+model WorkerLease {
+    name      String   @id
+    holder    String
+    expiresAt DateTime
+
+    @@map("worker_leases")
+}
+
 model ProjectionCursor {
     name     String @id
     position BigInt

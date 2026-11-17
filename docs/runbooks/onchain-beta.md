@@ -11,7 +11,7 @@ No setting or operator endpoint activates live providers or mainnet chains.
 
 ## Setup and evidence
 
-Keeper and treasury (Base Sepolia beta): fund the keeper with test ETH and test USDC from the Base Sepolia faucets and set `BASE_SEPOLIA_KEEPER_PRIVATE_KEY` (testnet-only key). The keeper runs every 300 s (`policy.app.keeper.slotSeconds`) and trades the labelled test pools to keep stand-in prices aligned with their reference — on testnet, those keeper trades are also what generate most of the Earn fees customers see. Top up the USDC treasury with `yarn sepolia:treasury --micro <amount>` (operator-only, mints into the basesepolia treasury with the relayer's `managedMint`).
+Keeper and treasury (Base Sepolia beta): fund the keeper with test ETH and test USDC from the Base Sepolia faucets and set `BASE_SEPOLIA_KEEPER_PRIVATE_KEY` (testnet-only key). The keeper runs every 300 s (`policy.app.keeper.slotSeconds`), one run at a time under the `stocks.align_test_pools` row in `worker_leases` (a crashed run's lease expires after 15 minutes), and trades the labelled test pools to keep stand-in prices aligned with their reference — on testnet, those keeper trades are also what generate most of the Earn fees customers see. Top up the USDC treasury with `yarn sepolia:treasury --micro <amount>` (operator-only, mints into the basesepolia treasury with the relayer's `managedMint`).
 
 Freshness: on Base Sepolia a reference price must be younger than **2 hours** to trade (`referenceUsable`); the trading and display windows are tracked separately, so a stale reference pauses new orders (customers see "Prices are updating") without hiding the last known price.
 

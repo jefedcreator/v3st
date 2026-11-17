@@ -266,6 +266,32 @@ export function effectiveSharePriceMicroUsd(
   return (pricePerToken * WAD) / fromDbRaw(stock.multiplierWad);
 }
 
+// The worst price per share a quote can still fill at, rounded against the
+// customer: input per minimum output for a buy (rounded up), minimum output per
+// input for a sell (rounded down). A waiting order's price limit is checked against
+// this, so no allowed fill can land past the limit the customer accepted.
+export function worstFillSharePriceMicroUsd(
+  stock: Stock,
+  side: "buy" | "sell",
+  inputRaw: bigint,
+  minOutputRaw: bigint,
+): bigint | null {
+  if (inputRaw <= 0n || minOutputRaw <= 0n) return null;
+  const scale = 10n ** BigInt(stock.decimals);
+  const multiplier = fromDbRaw(stock.multiplierWad);
+  if (multiplier <= 0n) return null;
+  if (side === "buy") {
+    const perToken = ceilDiv(inputRaw * scale, minOutputRaw);
+    return ceilDiv(perToken * WAD, multiplier);
+  }
+  const perToken = (minOutputRaw * scale) / inputRaw;
+  return (perToken * WAD) / multiplier;
+}
+
+function ceilDiv(a: bigint, b: bigint): bigint {
+  return (a + b - 1n) / b;
+}
+
 // On chains with a fill-versus-reference band, a venue quote whose effective price
 // per whole token is further than the band from the reference is refused.
 export function assertVenueWithinBand(
