@@ -1258,3 +1258,13 @@ model TestPoolAlignment {
     @@index([stockId, createdAt])
     @@map("test_pool_alignments")
 }
+
+// Per-customer watchlist of catalog stocks.
+model WatchlistEntry {
+    userId    String
+    stockId   String
+    createdAt DateTime @default(now())
+
+    @@id([userId, stockId])
+    @@map("watchlist_entries")
+}

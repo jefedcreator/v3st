@@ -1,5 +1,6 @@
 import type { Prisma } from "@/server/prisma";
 import { db, type Tx } from "@/server/db";
+import { fromDbRaw } from "@/utils/asset-units";
 import type { Rate } from "@/utils/money";
 
 export type ChartRange = "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL";
@@ -22,7 +23,13 @@ export type SnapshotRef = {
   multiplierWad: bigint;
 };
 
-export type HistoryPoint = { t: Date; priceMicroUsd: bigint; rate: Rate | null };
+export type HistoryPoint = {
+  t: Date;
+  priceMicroUsd: bigint;
+  basis: string;
+  multiplierWad: bigint;
+  rate: Rate | null;
+};
 
 class StockHistoryService {
   // One row per (stock, reference time); a repeated asOf updates in place.
@@ -78,6 +85,8 @@ class StockHistoryService {
       .map((row) => ({
         t: row.asOf,
         priceMicroUsd: row.priceMicroUsd,
+        basis: row.basis,
+        multiplierWad: fromDbRaw(row.multiplierWad),
         rate:
           row.rateKobo !== null && row.rateMicroUsd !== null
             ? { kobo: row.rateKobo, microUsd: row.rateMicroUsd }
@@ -89,7 +98,13 @@ class StockHistoryService {
   async priceBefore(
     stockId: string,
     at: Date,
-  ): Promise<{ priceMicroUsd: bigint; rate: Rate | null; asOf: Date } | null> {
+  ): Promise<{
+    priceMicroUsd: bigint;
+    basis: string;
+    multiplierWad: bigint;
+    rate: Rate | null;
+    asOf: Date;
+  } | null> {
     const row = await db.stockPriceSnapshot.findFirst({
       where: { stockId, asOf: { lte: at } },
       orderBy: { asOf: "desc" },
@@ -97,6 +112,8 @@ class StockHistoryService {
     if (!row) return null;
     return {
       priceMicroUsd: row.priceMicroUsd,
+      basis: row.basis,
+      multiplierWad: fromDbRaw(row.multiplierWad),
       rate:
         row.rateKobo !== null && row.rateMicroUsd !== null
           ? { kobo: row.rateKobo, microUsd: row.rateMicroUsd }
