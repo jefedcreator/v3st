@@ -66,6 +66,31 @@ export function relayerOn(chainId: number): PrivateKeyAccount {
   throw new OnchainPolicyError(`Chain ${chainId} has no relayer policy`);
 }
 
+// The test-pool keeper signs with its own key on Base Sepolia only. It must be a
+// fresh testnet-only key: never the relayer, the local test signer or a public
+// Anvil development key.
+export function keeperOn(chainId: number): PrivateKeyAccount {
+  if (chainId !== BASE_SEPOLIA_CHAIN_ID) {
+    throw new OnchainPolicyError("The test-pool keeper runs on Base Sepolia only");
+  }
+  const key = process.env.BASE_SEPOLIA_KEEPER_PRIVATE_KEY;
+  if (!key) {
+    throw new OnchainPolicyError("BASE_SEPOLIA_KEEPER_PRIVATE_KEY is not configured");
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) {
+    throw new OnchainPolicyError("BASE_SEPOLIA_KEEPER_PRIVATE_KEY must be 0x followed by 64 hex characters");
+  }
+  const normalized = key.toLowerCase();
+  const relayerKey = process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY?.toLowerCase();
+  const localKey = process.env.TESTNET_SIGNER_PRIVATE_KEY?.toLowerCase();
+  if ((relayerKey && normalized === relayerKey) || (localKey && normalized === localKey) || ANVIL_DEV_KEYS.has(normalized)) {
+    throw new OnchainPolicyError(
+      "BASE_SEPOLIA_KEEPER_PRIVATE_KEY must differ from the relayer key, the local test key and Anvil development keys",
+    );
+  }
+  return privateKeyToAccount(key as Hex);
+}
+
 type RpcTransport = (url: string, chainId: number, method: string, params: unknown[]) => Promise<unknown>;
 
 let transportOverride: RpcTransport | null = null;

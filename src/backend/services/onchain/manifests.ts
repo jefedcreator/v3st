@@ -16,6 +16,8 @@ export type NetworkManifest = Omit<TestnetManifest, "integrationKind" | "mode"> 
   integrationKind: IntegrationKind;
   mode: "sandbox" | "simulated";
   external: Record<string, { address: Address; codeHash: string }>;
+  // Catalog revision of the deployment (2 = multi-ticker stand-ins).
+  catalogVersion?: number;
 };
 
 export function manifestPathFor(chainId: number): string {

@@ -96,6 +96,17 @@ export function dueSchedules(at: Date): DueSchedule[] {
     });
   }
 
+  // The test-pool keeper runs in fixed slots, only when Base Sepolia and its own
+  // keeper key are configured.
+  if (process.env.BASE_SEPOLIA_RPC_URL && process.env.BASE_SEPOLIA_KEEPER_PRIVATE_KEY) {
+    const keeperBucket = Math.floor(at.getTime() / 1000 / policy.app.keeper.slotSeconds);
+    out.push({
+      name: "stocks.align_test_pools",
+      slot: `bucket-${keeperBucket}`,
+      job: { kind: "stocks.align_test_pools", subjectId: "global" },
+    });
+  }
+
   if (parts.minute === policy.schedule.rebalanceMinuteOfHour) {
     out.push({
       name: "treasury.rebalance",

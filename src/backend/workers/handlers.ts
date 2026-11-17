@@ -16,6 +16,7 @@ import { PermanentJobError, type JobKind } from "@/backend/services/jobs/types";
 import { pollOpenWork } from "@/backend/services/orders/poller";
 import { reconciliationService } from "@/backend/services/reconciliation";
 import { stockService } from "@/backend/services/stocks";
+import { testPoolAligner } from "@/backend/services/stocks/test-pools";
 import { strategyService } from "@/backend/services/strategies";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
@@ -58,6 +59,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
     // local replica path keep the seeded reference data.
     if (!process.env.BASE_SEPOLIA_RPC_URL) return;
     await stockService.syncReference();
+  },
+  "stocks.align_test_pools": async () => {
+    await testPoolAligner.run();
   },
   "payout.progress": async (job) => {
     await withdrawalService.progress(job.subjectId);

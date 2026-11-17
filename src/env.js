@@ -31,6 +31,12 @@ export const env = createEnv({
       .string()
       .regex(/^0x[0-9a-fA-F]{64}$/)
       .optional(),
+    // Optional dedicated key for the Base Sepolia test-pool keeper. Must differ
+    // from the relayer, the local test key and the public Anvil development keys.
+    BASE_SEPOLIA_KEEPER_PRIVATE_KEY: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
     // Customer sign-in provider. "sandbox" is a Privy development app whose
     // app ID and SPKI verification key are required below; "simulated" is a
     // local issuer used in CI and local development. No Privy app secret is
@@ -72,6 +78,7 @@ export const env = createEnv({
     TESTNET_SIGNER_PRIVATE_KEY: process.env.TESTNET_SIGNER_PRIVATE_KEY,
     BASE_SEPOLIA_RPC_URL: process.env.BASE_SEPOLIA_RPC_URL,
     BASE_SEPOLIA_RELAYER_PRIVATE_KEY: process.env.BASE_SEPOLIA_RELAYER_PRIVATE_KEY,
+    BASE_SEPOLIA_KEEPER_PRIVATE_KEY: process.env.BASE_SEPOLIA_KEEPER_PRIVATE_KEY,
     PRIVY_MODE: process.env.PRIVY_MODE,
     PRIVY_APP_ID: process.env.PRIVY_APP_ID,
     PRIVY_VERIFICATION_KEY: process.env.PRIVY_VERIFICATION_KEY,

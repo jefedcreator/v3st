@@ -34,6 +34,7 @@ async function main(): Promise<void> {
   await stockService.upsertCatalog([
     {
       symbol: "TSTA",
+      displayTicker: "TSTA",
       assetKey: `sim:base:${seedTokenAddress("TSTA").toLowerCase()}`,
       name: "Test Stock A (simulated)",
       chain: "base",
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
     },
     {
       symbol: "TSTB",
+      displayTicker: "TSTB",
       assetKey: `sim:base:${seedTokenAddress("TSTB").toLowerCase()}`,
       name: "Test Stock B (simulated)",
       chain: "base",
@@ -108,93 +110,121 @@ async function main(): Promise<void> {
       },
       update: { networkId: manifest.networkId, genesisHash: manifest.genesisHash },
     });
-    const stockToken = manifest.contracts.StockTokenAAPL;
-    const pool = manifest.external.HydrexPoolAAPL;
-    const positionManager = manifest.external.HydrexPositionManager;
-    if (!stockToken || !pool || !positionManager) {
-      throw new Error("Base Sepolia manifest is missing StockTokenAAPL or the Hydrex entries");
-    }
-    // The stand-in maps to the real AAPL token in the synced live feed; without that
-    // row the seed aborts rather than inventing a reference.
-    let aaplAssetKey: string | null = null;
+    // Live asset key per ticker from the tokenized-stocks feed (`${T}c` rows).
+    const liveByTicker = new Map<string, string>();
     let next: string | null = null;
     do {
       const page = stockReference.parseLive(await fetchStocksPage(next));
-      const aapl = page.stocks.find((s) => s.symbol === "AAPLc" || s.symbol.startsWith("AAPL"));
-      if (aapl) aaplAssetKey = aapl.assetKey;
+      for (const token of page.stocks) {
+        const base = token.symbol.replace(/c$/, "");
+        if (!liveByTicker.has(base)) liveByTicker.set(base, token.assetKey);
+      }
       next = page.next;
-    } while (next !== null && aaplAssetKey === null);
-    if (!aaplAssetKey) {
-      throw new Error("The tokenized stocks feed has no AAPL row; refusing to seed the Base Sepolia stand-in");
+    } while (next !== null);
+
+    const stockTokenEntries = Object.entries(manifest.contracts).filter(([name]) =>
+      name.startsWith("StockToken_"),
+    );
+    if (stockTokenEntries.length === 0) {
+      throw new Error("Base Sepolia manifest has no StockToken_* entries");
     }
-    const stock = await db.stock.upsert({
-      where: { assetKey: `basesepolia:${manifest.chainId}:${stockToken.address.toLowerCase()}` },
-      create: {
-        symbol: "tAAPL",
-        assetKey: `basesepolia:${manifest.chainId}:${stockToken.address.toLowerCase()}`,
-        name: "Apple Inc. (test token)",
-        chain: "basesepolia",
-        networkId: network.id,
-        tokenAddress: stockToken.address,
-        decimals: 18,
-        enabled: true,
-        simPriceMicroUsdc: 0n,
-        simWeeklyEarningMicroPerShare: 0n,
-        provenance: {
-          integration_kind: "verified_provider_testnet",
-          network_id: manifest.networkId,
-          deployment_id: manifest.deploymentId,
-          standInFor: aaplAssetKey,
-          hydrexPool: pool.address,
+    const positionManager = manifest.external.HydrexPositionManager;
+    if (!positionManager) {
+      throw new Error("Base Sepolia manifest is missing the Hydrex position manager");
+    }
+    for (const [entryName, stockToken] of stockTokenEntries) {
+      const ticker = entryName.slice("StockToken_".length);
+      const pool = manifest.external[`HydrexPool_${ticker}`];
+      if (!pool) {
+        throw new Error(`Base Sepolia manifest is missing HydrexPool_${ticker}`);
+      }
+      const liveAssetKey = liveByTicker.get(ticker);
+      if (!liveAssetKey) {
+        throw new Error(`The tokenized stocks feed has no ${ticker}c row; refusing to seed the stand-in`);
+      }
+      const stock = await db.stock.upsert({
+        where: { assetKey: `basesepolia:${manifest.chainId}:${stockToken.address.toLowerCase()}` },
+        create: {
+          symbol: `t${ticker}`,
+          displayTicker: ticker,
+          assetKey: `basesepolia:${manifest.chainId}:${stockToken.address.toLowerCase()}`,
+          name: `${ticker} (test token)`,
+          chain: "basesepolia",
+          networkId: network.id,
+          tokenAddress: stockToken.address,
+          decimals: 18,
+          enabled: true,
+          simPriceMicroUsdc: 0n,
+          simWeeklyEarningMicroPerShare: 0n,
+          provenance: {
+            integration_kind: "verified_provider_testnet",
+            network_id: manifest.networkId,
+            deployment_id: manifest.deploymentId,
+            standInFor: liveAssetKey,
+            hydrexPool: pool.address,
+          },
         },
-      },
-      update: {
-        name: "Apple Inc. (test token)",
-        networkId: network.id,
-        provenance: {
-          integration_kind: "verified_provider_testnet",
-          network_id: manifest.networkId,
-          deployment_id: manifest.deploymentId,
-          standInFor: aaplAssetKey,
-          hydrexPool: pool.address,
+        update: {
+          displayTicker: ticker,
+          networkId: network.id,
+          provenance: {
+            integration_kind: "verified_provider_testnet",
+            network_id: manifest.networkId,
+            deployment_id: manifest.deploymentId,
+            standInFor: liveAssetKey,
+            hydrexPool: pool.address,
+          },
         },
-      },
-    });
-    await db.strategy.upsert({
-      where: { key: "hydrex-aapl-usdc-basesepolia" },
-      create: {
-        providerId: "hydrex",
-        key: "hydrex-aapl-usdc-basesepolia",
-        name: "Hydrex tAAPL/USDC liquidity (Base Sepolia)",
-        version: "1.0.0",
-        disclosureVersion: "1.0.0",
-        inputAssets: [
-          `basesepolia:${manifest.chainId}:${manifest.contracts.TestSettlementToken!.address.toLowerCase()}`,
-          stock.assetKey!,
-        ],
-        receiptAsset: "receipt",
-        rewardAssets: [],
-        separateClaim: true,
-        maxUsdEquivalent: "1000000000000",
-        provenance: {
-          kind: "hydrex_nft",
-          chainId: manifest.chainId,
-          pool: pool.address,
-          positionManager: positionManager.address,
-          stockId: stock.id,
+      });
+      await db.strategy.upsert({
+        where: { key: `hydrex-t${ticker.toLowerCase()}-usdc-basesepolia-v2` },
+        create: {
+          providerId: "hydrex",
+          key: `hydrex-t${ticker.toLowerCase()}-usdc-basesepolia-v2`,
+          name: `Hydrex t${ticker}/USDC liquidity (Base Sepolia)`,
+          version: "2.0.0",
+          disclosureVersion: "1.0.0",
+          inputAssets: [
+            `basesepolia:${manifest.chainId}:${manifest.contracts.TestSettlementToken!.address.toLowerCase()}`,
+            stock.assetKey!,
+          ],
+          receiptAsset: "receipt",
+          rewardAssets: [],
+          separateClaim: true,
+          maxUsdEquivalent: "1000000000000",
+          provenance: {
+            kind: "hydrex_nft",
+            chainId: manifest.chainId,
+            pool: pool.address,
+            positionManager: positionManager.address,
+            stockId: stock.id,
+          },
         },
-      },
-      update: {
-        provenance: {
-          kind: "hydrex_nft",
-          chainId: manifest.chainId,
-          pool: pool.address,
-          positionManager: positionManager.address,
-          stockId: stock.id,
+        update: {
+          provenance: {
+            kind: "hydrex_nft",
+            chainId: manifest.chainId,
+            pool: pool.address,
+            positionManager: positionManager.address,
+            stockId: stock.id,
+          },
         },
-      },
-    });
-    console.log(`seeded Base Sepolia rows: network ${manifest.networkId}, stock tAAPL, strategy hydrex-aapl-usdc-basesepolia`);
+      });
+      console.log(`seeded Base Sepolia stand-in ${ticker}: stock ${stock.assetKey} pool ${pool.address}`);
+    }
+    // The v1 single-stock rows stay visible to existing holders but are no longer
+    // offered: the v2 catalog replaces them.
+    const legacyToken = manifest.contracts.StockTokenAAPL;
+    if (legacyToken) {
+      await db.stock.updateMany({
+        where: { assetKey: `basesepolia:${manifest.chainId}:${legacyToken.address.toLowerCase()}` },
+        data: { enabled: false },
+      });
+      await db.strategy.updateMany({
+        where: { key: "hydrex-aapl-usdc-basesepolia" },
+        data: { enabled: false },
+      });
+    }
   }
   console.log(
     "beta seed complete: treasury wallets, opening balances (base treasury 100000 USDC, yellowcard float 10000 USDC) and the TSTA/TSTB simulated catalog",

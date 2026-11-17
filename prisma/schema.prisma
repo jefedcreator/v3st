@@ -560,6 +560,8 @@ model Stock {
     enabled                       Boolean
     paused                        Boolean  @default(false)
     delisted                      Boolean  @default(false)
+    // Customer-facing ticker (e.g. "AAPL") for stand-in rows; null on fixtures.
+    displayTicker                 String?
     simPriceMicroUsdc             BigInt
     simWeeklyEarningMicroPerShare BigInt
     multiplierWad                 Decimal  @db.Decimal(78, 0) @default(1000000000000000000)
@@ -1240,4 +1242,19 @@ model StockPriceSnapshot {
 
     @@unique([stockId, asOf])
     @@map("stock_price_snapshots")
+}
+
+// One keeper alignment trade per run, kept for audit and smoke checks.
+model TestPoolAlignment {
+    id                String   @id @default(cuid())
+    stockId           String
+    pool              String
+    beforeMicroUsd    BigInt
+    afterMicroUsd     BigInt
+    referenceMicroUsd BigInt
+    txHash            String
+    createdAt         DateTime @default(now())
+
+    @@index([stockId, createdAt])
+    @@map("test_pool_alignments")
 }
