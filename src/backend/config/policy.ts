@@ -31,6 +31,14 @@ export const policy = {
     quoteTtlSeconds: 30,
     executionWindowSeconds: 120,
     referenceMaxAgeSeconds: 60,
+    // Per-network reference freshness: trading window, display window and the
+    // fill-versus-reference band. Chains not listed keep referenceMaxAgeSeconds
+    // and have no band check.
+    reference: {
+      tradeMaxAgeSeconds: { testnet: 60, basesepolia: 7_200 } as Record<string, number>,
+      displayMaxAgeSeconds: 604_800,
+      venueBandBps: { basesepolia: 300 } as Record<string, number>,
+    },
     maxPriceImpactBps: 100,
     authorizationMaxDays: 30,
     strategy: {

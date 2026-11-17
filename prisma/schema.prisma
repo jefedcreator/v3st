@@ -1224,3 +1224,20 @@ model AgreementAcceptance {
     @@unique([userId, document, version])
     @@map("agreement_acceptances")
 }
+
+// One snapshot per reference time; drives charts, 24-hour change and the
+// delayed-price display label.
+model StockPriceSnapshot {
+    id            String   @id @default(cuid())
+    stockId       String
+    asOf          DateTime
+    priceMicroUsd BigInt
+    basis         String
+    multiplierWad Decimal  @db.Decimal(78, 0)
+    rateKobo      BigInt?
+    rateMicroUsd  BigInt?
+    createdAt     DateTime @default(now())
+
+    @@unique([stockId, asOf])
+    @@map("stock_price_snapshots")
+}

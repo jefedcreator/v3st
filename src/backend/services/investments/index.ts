@@ -15,7 +15,7 @@ import { onchainRegistry } from "@/backend/services/onchain/registry";
 import { positionService } from "@/backend/services/positions";
 import { testnetService } from "@/backend/services/onchain/testnet";
 import type { AssetAmount, BetaContext, ExecutionQuote, StockProviderId } from "@/backend/services/onchain/types";
-import { referenceUsable } from "@/backend/services/stocks/reference";
+import { assertVenueWithinBand, referenceUsable } from "@/backend/services/stocks/reference";
 import { stockService } from "@/backend/services/stocks";
 import { ratesService } from "@/backend/services/rates";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
@@ -174,7 +174,7 @@ class InvestmentService {
       throw new UnprocessableEntityException("Stock is not tradable", "CAPABILITY_UNAVAILABLE");
     }
     if (!referenceUsable(stock, now())) {
-      throw new UnprocessableEntityException("Reference price is missing or stale", "STOCK_UNAVAILABLE");
+      throw new UnprocessableEntityException("Reference price is missing or stale", "REFERENCE_STALE");
     }
     const network = await db.onchainNetwork.findUniqueOrThrow({ where: { id: stock.networkId } });
     const chainId = network.chainId;
@@ -249,6 +249,8 @@ class InvestmentService {
       return a.providerId < b.providerId ? -1 : 1;
     });
     const best = viable[0]!;
+    // On banded chains, refuse a venue quote that is too far from the reference.
+    assertVenueWithinBand(stock, input.side, acceptedInputRaw, best.quote.expectedOutput.raw);
     const { onchainExpiryMs } = await import("@/backend/services/onchain/testnet");
     // The contract deadline is copied from this expiry and enforced onchain, so
     // the bound must hold on both the app and chain clocks.
