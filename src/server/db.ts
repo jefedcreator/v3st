@@ -40,6 +40,8 @@ type LockableTable =
   | "investment_authorizations"
   | "investment_quotes"
   | "investments"
+  | "customer_order_previews"
+  | "customer_orders"
   | "strategy_quotes"
   | "strategy_positions"
   | "sponsor_budgets"

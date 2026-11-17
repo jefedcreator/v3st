@@ -1268,3 +1268,85 @@ model WatchlistEntry {
     @@id([userId, stockId])
     @@map("watchlist_entries")
 }
+
+enum CustomerOrderSide {
+    buy
+    sell
+}
+
+enum CustomerOrderFunding {
+    cash
+    bank_transfer
+}
+
+enum CustomerOrderStatus {
+    waiting_for_payment
+    waiting_for_price
+    executing
+    completed
+    failed
+    cancelled
+    expired
+}
+
+enum CustomerPreviewMode {
+    now
+    waiting
+}
+
+// A priced order preview the customer reviewed before confirming with their PIN.
+model CustomerOrderPreview {
+    id                     String              @id @default(cuid())
+    userId                 String
+    stockId                String
+    side                   CustomerOrderSide
+    funding                CustomerOrderFunding?
+    mode                   CustomerPreviewMode
+    amountKobo             BigInt
+    quantityRaw            Decimal?            @db.Decimal(78, 0)
+    budgetMicroUsd         BigInt?
+    investmentQuoteId      String?             @unique
+    referencePriceMicroUsd BigInt
+    limitPriceMicroUsd     BigInt
+    rateKobo               BigInt
+    rateMicroUsd           BigInt
+    terms                  Json
+    expiresAt              DateTime
+    consumedAt             DateTime?
+    createdAt              DateTime            @default(now())
+
+    @@index([userId, createdAt])
+    @@map("customer_order_previews")
+}
+
+model CustomerOrder {
+    id                 String                @id @default(cuid())
+    userId             String
+    key                String                @unique
+    requestHash        String
+    previewId          String                @unique
+    stockId            String
+    side               CustomerOrderSide
+    funding            CustomerOrderFunding?
+    status             CustomerOrderStatus
+    amountKobo         BigInt
+    budgetMicroUsd     BigInt?
+    quantityRaw        Decimal?              @db.Decimal(78, 0)
+    limitPriceMicroUsd BigInt
+    rateKobo           BigInt
+    rateMicroUsd       BigInt
+    authorizationId    String?
+    depositOrderId     String?               @unique
+    investmentId       String?               @unique
+    holdKey            String?
+    holdReleasedAt     DateTime?
+    settledKobo        BigInt?
+    expiresAt          DateTime
+    completedAt        DateTime?
+    createdAt          DateTime              @default(now())
+    updatedAt          DateTime              @updatedAt
+
+    @@index([userId, createdAt])
+    @@index([status])
+    @@map("customer_orders")
+}
