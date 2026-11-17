@@ -159,13 +159,12 @@ Outside the landing directory:
   - `src/app/icon.svg` and `src/app/opengraph-image.png`;
   - every file in `public/brands/`.
 - **Modify:**
-  - `.gitignore`;
   - `src/styles/globals.css` (rewrite);
   - `src/app/layout.tsx`;
   - `src/app/(marketing)/page.tsx` (a temporary shell);
-  - `src/primitives/{button,badge,sheet}.tsx`;
-  - `DESIGN_SYSTEM.md` (interim) and `PRODUCT.md`.
-- **Test:** `tests/landing/tokens.test.ts`.
+  - `src/primitives/{button,badge,sheet}.tsx`.
+- **Verify only** (updated at planning time): `.gitignore`, `DESIGN_SYSTEM.md` (interim) and `PRODUCT.md`.
+- **Test:** `tests/landing/tokens.test.ts` and `tests/landing/repo-guards.test.ts`.
 
 **Interfaces:**
 
@@ -231,6 +230,17 @@ it("themes the browser's own surfaces", () => {
 });
 ```
 
+- [ ] **Step 2b: Write `tests/landing/repo-guards.test.ts`.** It must fail on a case-sensitive filesystem if anyone creates `DESIGN.md`.
+
+```ts
+it("never ships a DESIGN.md beside the product document Design.md", () => {
+  const names = readdirSync(process.cwd());
+  expect(names).toContain("Design.md");
+  expect(names).toContain("DESIGN_SYSTEM.md");
+  expect(names.filter((name) => name === "DESIGN.md")).toEqual([]);
+});
+```
+
 - [ ] **Step 3: Delete the old landing files.** Delete the files listed above. Keep `src/primitives/*`, `src/utils/cn.ts`, `playwright.config.ts`, `e2e/test.ts` and `scripts/landing-beta.mjs`.
 
 - [ ] **Step 4: Rewrite `src/styles/globals.css`.**
@@ -264,11 +274,15 @@ it("themes the browser's own surfaces", () => {
   - **Badge `default`:** a chip with 11px uppercase text, tracking 0.16em, a white border at 20% opacity, and white text at 80%.
   - **Sheet `left`:** width `min(86vw, 340px)` and height `100dvh`. It opens in 260ms and closes in 170ms with `ease-out`, and the overlay (`void` at 70%) uses the same durations.
 
-- [ ] **Step 8: Update `.gitignore`.** Add `.superpowers/`, `.impeccable/review/`, `.impeccable/mocks/` and `.impeccable/build/`. Do not ignore `.impeccable/surfaces/` or `.impeccable/design.json`.
+- [ ] **Step 8: Verify `.gitignore`.** It already ignores `.superpowers/`, `.gemini/`, `/.impeccable/review/`, `/.impeccable/mocks/` and `/.impeccable/build/`. It must not ignore `.impeccable/surfaces/` or `.impeccable/design.json`.
 
-- [ ] **Step 9: Update the two documents.**
-  - Replace the body of `DESIGN_SYSTEM.md` with a short interim note: the visual system is being rebuilt, spec §Visual system, §Katana behaviour contract and §Accessibility are the authority until Task 13, and Task 13 writes the final file.
-  - In `PRODUCT.md`, change only the lines whose facts changed: the audience, the landing action (join the beta waitlist) and the brand (dark, flag green `#00804D`, Bricolage Grotesque). Keep the product-truth paragraphs and don't restructure the file.
+- [ ] **Step 9: Verify the planning-time document updates.**
+  - `DESIGN_SYSTEM.md` holds the interim note pointing at the spec.
+  - `PRODUCT.md` states the new audience, the waitlist action and the dark flag-green Bricolage brand.
+  - `FRONTEND_PATTERNS_GUIDE.md` carries the "Landing redesign in progress" precedence note.
+  - `AGENTS.md` names this plan.
+
+  Change nothing unless one of them contradicts the spec.
 
 - [ ] **Step 10: Review the diff.**
   - `rg "components/landing" src` finds nothing.
@@ -279,7 +293,7 @@ it("themes the browser's own surfaces", () => {
 - [ ] **Step 11: Commit.**
 
 ```bash
-git add -A .gitignore src/styles/globals.css src/app/layout.tsx "src/app/(marketing)/page.tsx" src/primitives DESIGN_SYSTEM.md PRODUCT.md tests/landing e2e public/brands src/components src/app/icon.svg src/app/opengraph-image.png
+git add -A src/styles/globals.css src/app/layout.tsx "src/app/(marketing)/page.tsx" src/primitives tests/landing e2e public/brands src/components src/app/icon.svg src/app/opengraph-image.png
 git commit -m "feat: start the dark flag-green landing foundation"
 ```
 
@@ -1531,6 +1545,7 @@ yarn test:e2e
     - the artifact path;
     - the screenshots;
     - the surface brief;
+    - the approved mock `docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-mock.png`, named as the critique reference for this code-led build (the spec wins where they differ);
     - the craft-floor reference path;
     - the detector findings.
   - If it isn't installed, run a fresh-context review against the spec and the surface brief, and record that the substitution happened.
@@ -1560,3 +1575,29 @@ The work is complete only when all of the following hold:
 - The review record states what changed, how to preview it, what passed, every deviation from Katana and its reason, and anything still open.
 
 Don't claim provider verification, production readiness or deployment.
+
+## Planning record
+
+- **How this plan was made.** It was planned on 2026-11-17 and 2026-11-18 with Superpowers 7.0.2 (brainstorming, a fresh builder check of the spec, writing-plans) and Impeccable 4.8.1, updated to 4.9.1 before handoff.
+  - The operator picked the colour and typeface from rendered mocks.
+  - The operator answered every open question recorded in the spec: audience, main action, the logo row's contents and logo rights.
+- **Katana facts verified on 2026-11-17.** The live bundles were `main-C7AqIgiI.js`, `routes-CQk4yUTO.js` and `routes-CE6bdBRK.css`, captured in Chromium at 1440×1000 and 390×844. They confirm:
+  - 160vh track, 0.18 scroll smoothing, the intro and handover intervals;
+  - LiquidEther parameters;
+  - a 4.5s-per-row marquee;
+  - 800ms easeOutCubic counters at threshold 0.35;
+  - diagram constants 3600ms, 120ms, 140ms and 1080ms;
+  - sheet timings 260ms and 170ms;
+  - the "Trusted by" layout.
+- **Other facts verified then.**
+  - React Bits commit `1eeb6f105c68…` is the last three.js LiquidEther revision with Katana's parameter set. The next commit rewrote it.
+  - Aspekta and Geist have no ₦ glyph. Bricolage Grotesque has ₦ and tabular figures, and Next 15.5 ships it with the `opsz` axis.
+  - Apple's published terms restrict logo use (decision 11).
+  - The code confirms the beta status of each provider in the logo row.
+- **Changes at planning time, already on `main` before Task 1:**
+  - the spec, this plan and the surface brief;
+  - the approved mock;
+  - `AGENTS.md`, the README's agent entry point;
+  - the interim `DESIGN_SYSTEM.md`, the `PRODUCT.md` facts, the precedence note in `FRONTEND_PATTERNS_GUIDE.md`, and the `.gitignore` entries.
+
+  No application code, dependency or migration was changed.

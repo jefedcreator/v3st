@@ -6,9 +6,9 @@ The entire application must remain in beta. Every provider must use a verified s
 
 ## Cloud agent entry point
 
-Read [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [Design.md](Design.md), [BACKEND_PATTERNS.md](BACKEND_PATTERNS.md), [FRONTEND_PATTERNS_GUIDE.md](FRONTEND_PATTERNS_GUIDE.md), the [ramps and payouts plan](docs/superpowers/plans/2026-11-13-v3st-naira-ramps-and-payouts.md), and the [onchain stocks and income plan](docs/superpowers/plans/2026-11-14-v3st-onchain-stocks-and-income.md).
+Start with [AGENTS.md](AGENTS.md). The current assignment is the landing page redesign: implement the [redesign plan](docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md) against the [approved design](docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md), the [direction contract](.impeccable/surfaces/src-app-marketing-page-tsx.md) and the [approved mock](docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-mock.png). Also read [CLAUDE.md](CLAUDE.md), [Design.md](Design.md), [BACKEND_PATTERNS.md](BACKEND_PATTERNS.md) and [FRONTEND_PATTERNS_GUIDE.md](FRONTEND_PATTERNS_GUIDE.md).
 
-The onchain plan is backend/API only: it extends the existing backend with testnet stock execution and receipt-backed income and does not require frontend packages or `DESIGN_SYSTEM.md`. Do not interpret copied starter authentication, documentation examples, or missing provider access as permission to use real services.
+The earlier plans (ramps and payouts, onchain stocks and income, real provider integration, customer app backend) are implemented and remain the backend's record. Do not interpret copied starter authentication, documentation examples, or missing provider access as permission to use real services.
 
 ## Setup
 
@@ -82,6 +82,8 @@ Implementation review and verification evidence: [docs/implementation-review.md]
 Use a separate disposable local `_test` database for verification; the review never uses the configured remote application database.
 
 ## Landing verification
+
+This section describes the 2026-11-15 light ivory landing. The [redesign plan](docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md) replaces that page, and its Task 13 rewrites this section, adding the new `RATE_LIMIT_SECRET` setting and the waitlist export.
 
 The landing work is separate from the prior backend-only onchain release. Read [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), [PRODUCT.md](PRODUCT.md) and the [landing review](docs/superpowers/reviews/2026-11-15-v3st-landing.md). Preview locally with `yarn dev`; no worker or database is needed to view `/`, but required beta environment values must be configured. Use nonfunctional local database settings for this preview; never reuse real provider credentials.
 

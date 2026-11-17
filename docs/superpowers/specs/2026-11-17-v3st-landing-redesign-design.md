@@ -114,7 +114,9 @@ On this repository, "DESIGN.md" in the FINISH line means `DESIGN_SYSTEM.md`. A f
 Build path: **code-led.** The operator approved the direction from rendered mocks and the cloud run is unattended, so there is no comp round. The approved references are:
 
 - the Katana captures, which the builder re-captures (see [Verification](#verification));
-- mock A (flag green) and the Bricolage specimen from the 2026-11-17 brainstorm. These are local to the planning machine and not committed. This document's tokens and copy are their authoritative description.
+- the approved mock, option A (flag green in Bricolage Grotesque) from the 2026-11-17 brainstorm, committed as [`assets/2026-11-17-v3st-landing-approved-mock.png`](assets/2026-11-17-v3st-landing-approved-mock.png) with its source page [`assets/2026-11-17-v3st-landing-approved-mock.html`](assets/2026-11-17-v3st-landing-approved-mock.html).
+  - It sets the look and finish bar, and is the finish review's critique reference.
+  - Where it differs from this document, this document wins. The mock shows two hero buttons, a "Payouts" nav item, an earlier subline, and community-icon stand-ins for the company marks.
 
 **Light or dark, from the use scene:** evening phone browsing in Lagos, Abuja and Port Harcourt, after work on a commute or at home, mostly on mid-range Android phones with OLED screens. There a near-black page is comfortable and the green glow carries. In daytime the white, high-contrast type keeps it readable.
 

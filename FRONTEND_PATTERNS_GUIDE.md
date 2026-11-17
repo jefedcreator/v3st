@@ -2,7 +2,17 @@
 
 This guide defines V3ST's Next.js App Router frontend conventions. Read `CLAUDE.md`, `DESIGN_SYSTEM.md`, `PRODUCT.md` and the active feature specification before implementation. `Design.md` remains product architecture; do not overwrite it with a visual-design document. `BACKEND_PATTERNS.md` governs the existing HTTP, service, validator and database layers.
 
-The public landing assignment follows [the landing specification](docs/superpowers/specs/2026-11-15-v3st-landing-design.md) and [its plan](docs/superpowers/plans/2026-11-15-v3st-landing.md). It adds an anonymous marketing page and browser-local illustrative demo, without financial API changes or authenticated dashboards.
+**Landing redesign in progress (2026-11-18).** The public landing page is being rebuilt from [the redesign specification](docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md) and [its plan](docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md). For the marketing routes, that specification takes precedence over this guide's landing-specific rules. Those rules are:
+
+- one light theme;
+- Geist;
+- the browser-local demo and its fixtures;
+- "zero calls" from `/`;
+- the 2026-11-15 motion and asset details.
+
+The redesign uses one dark theme, Bricolage Grotesque, a statically regenerated page with a service-backed beta-price read, a progressive waitlist form posting to `POST /api/v1/waitlist`, and `/legal/*` reading pages. Task 11 of the plan rewrites the affected sections. Everything else here (structure, naming, imports, primitives, backend contracts) still applies.
+
+The superseded landing followed [the 2026-11-15 specification](docs/superpowers/specs/2026-11-15-v3st-landing-design.md) and [its plan](docs/superpowers/plans/2026-11-15-v3st-landing.md).
 
 All V3ST operation remains beta. Every external integration uses a verified sandbox/test environment or simulation; Paycrest is simulated-only. `NODE_ENV=production` selects an optimized build and secure cookies, never real providers. A local replica does not establish verified access to an external provider.
 

@@ -47,6 +47,8 @@ yarn-error.log*
 .aws/
 .codex/
 .agents/
+.gemini/
+.superpowers/
 .npmrc
 *.key
 *.p12
@@ -72,3 +74,8 @@ yarn-error.log*
 # Browser verification artifacts
 /playwright-report/
 /test-results/
+
+# Impeccable review captures and build scratch (the surfaces/ brief and design.json are committed)
+/.impeccable/review/
+/.impeccable/mocks/
+/.impeccable/build/

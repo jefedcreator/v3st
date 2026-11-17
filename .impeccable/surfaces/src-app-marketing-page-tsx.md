@@ -19,6 +19,8 @@ Mode: Persuade. Scope: the anonymous route `/` (`src/app/(marketing)/page.tsx`) 
 
 Authoritative design: `docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md`. Plan: `docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md`.
 
+Approved mock: `docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-mock.png`. Its source is the `.html` beside it. It sets the finish bar and is the finish review's critique reference. Where it differs from the spec, the spec wins.
+
 ## Direction contract
 
 THESIS: A naira-first investing beta that looks and moves like Katana: one near-black field, one green signal, a pinned hero that hands over to living proof. It refuses the category default of a bright fintech page full of phone mockups, invented user counts and stock-photo smiles.

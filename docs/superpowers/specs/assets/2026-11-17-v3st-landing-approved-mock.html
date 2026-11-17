@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<!--
+  V3ST landing: approved direction mock (operator-approved 2026-11-17).
+  Option A "Flag green" + Bricolage Grotesque, from the planning brainstorm.
+  REFERENCE ONLY. Not shipped, not part of the build.
+  - Company marks here are community-icon stand-ins loaded from a CDN for the mock;
+    the build must use official files with provenance (spec, Logos and assets).
+  - Prices are examples. The moving glow is a CSS sketch of the fluid background,
+    which the build reproduces with the pinned LiquidEther (spec, Katana behaviour contract).
+  - The build's copy and tokens come from the spec, which supersedes any wording here
+    (for example the hero form replaces the two buttons, and the subline was refined).
+  Spec: docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3ST approved mock (reference)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&display=swap">
+<style>
+  @font-face {
+    font-family: "Aspekta";
+    src: url("https://cdn.jsdelivr.net/gh/ivodolenc/aspekta@main/packages/fonts/variable/AspektaVF.woff2") format("woff2");
+    font-weight: 50 1000;
+    font-display: swap;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #020604; }
+  /* ---------- The mock: everything scales with its own width (designed at 1440) ---------- */
+  .mock { container-type: inline-size; position: relative; overflow: hidden; border-radius: 12px; background: var(--void); color: var(--ink); font-family: "Bricolage Grotesque", system-ui, sans-serif; isolation: isolate; }
+  .m-hero { position: relative; height: 62.5cqw; }
+  .m-fluid { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+  .m-fluid span { position: absolute; border-radius: 50%; filter: blur(4.5cqw); will-change: transform; }
+  .m-fluid .b1 { width: 78cqw; height: 40cqw; left: -24cqw; top: -10cqw; background: radial-gradient(closest-side, var(--glow-1), transparent 74%); opacity: .95; transform: rotate(-28deg); animation: drift1 15s ease-in-out infinite alternate; }
+  .m-fluid .b2 { width: 60cqw; height: 24cqw; left: 20cqw; top: 15cqw; background: radial-gradient(closest-side, var(--glow-2), transparent 70%); opacity: .28; transform: rotate(-14deg); animation: drift2 19s ease-in-out infinite alternate; }
+  .m-fluid .b3 { width: 30cqw; height: 30cqw; right: -12cqw; top: -14cqw; background: radial-gradient(closest-side, var(--glow-2), transparent 70%); opacity: .6; animation: drift3 12s ease-in-out infinite alternate; }
+  .m-fluid .b4 { width: 50cqw; height: 22cqw; right: -16cqw; bottom: 4cqw; background: radial-gradient(closest-side, var(--glow-3), transparent 70%); opacity: .8; animation: drift2 23s ease-in-out infinite alternate-reverse; }
+  .m-fluid::after { content: ""; position: absolute; inset: 0; background: radial-gradient(130% 70% at 50% 112%, var(--void) 40%, transparent 78%); }
+  @keyframes drift1 { to { transform: translate(7cqw, 4cqw) rotate(-20deg) scale(1.06); } }
+  @keyframes drift2 { to { transform: translate(-6cqw, 3cqw) rotate(-6deg) scale(1.12); } }
+  @keyframes drift3 { to { transform: translate(-4cqw, 5cqw) scale(.88); } }
+
+  .m-header { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 7.6cqw; display: flex; align-items: center; justify-content: space-between; padding: 0 3.9cqw; }
+  .m-logo { display: flex; align-items: center; gap: .9cqw; color: #fff; }
+  .m-logo b { font-weight: 800; font-size: 2.05cqw; letter-spacing: .01em; font-variation-settings: "opsz" 96; }
+  .m-beta { font-weight: 600; font-size: .72cqw; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.8); border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: .26cqw .7cqw; }
+  .m-nav { display: flex; align-items: center; gap: 1.75cqw; font-size: .98cqw; font-weight: 450; color: #fff; background: color-mix(in oklab, var(--void) 80%, transparent); border: 1px solid var(--stroke); border-radius: 999px; padding: .95cqw 2cqw; backdrop-filter: blur(10px); }
+  .m-spacer { width: 13cqw; }
+
+  .m-center { position: absolute; z-index: 1; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 9cqw; transform: translateY(-2.6cqw); }
+  .m-h1 { margin: 0; font-weight: 300; font-size: 6.67cqw; line-height: 1.04; letter-spacing: -0.024em; color: #fff; }
+  .m-sub { margin: 2.1cqw 0 0; max-width: 54cqw; font-size: 1.27cqw; line-height: 1.55; color: rgba(255,255,255,.78); font-weight: 400; }
+  .m-ctas { margin-top: 3.1cqw; display: flex; gap: .85cqw; }
+  .m-btn { display: inline-flex; align-items: center; height: 3.25cqw; padding: 0 2cqw; border-radius: 999px; font-size: 1.05cqw; font-weight: 600; }
+  .m-btn-primary { background: var(--signal); color: var(--on-signal); }
+  .m-btn-outline { border: 1px solid rgba(255,255,255,.28); color: #fff; }
+
+  .m-stats { position: absolute; z-index: 1; left: 0; right: 0; bottom: 6cqw; display: flex; justify-content: center; gap: 9.5cqw; text-align: center; }
+  .m-stats b { display: block; font-weight: 300; font-size: 2.15cqw; color: #fff; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .m-stats span { display: block; margin-top: .55cqw; font-size: .74cqw; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: rgba(255,255,255,.5); }
+  .m-betaline { position: absolute; z-index: 1; left: 0; right: 0; bottom: 2.3cqw; text-align: center; font-size: .82cqw; color: rgba(255,255,255,.45); }
+
+  .m-section { position: relative; display: grid; grid-template-columns: 1fr 1.05fr; gap: 5cqw; align-items: center; padding: 4cqw 10cqw 6cqw; }
+  .m-section h4 { margin: 0; font-weight: 300; font-size: 3.85cqw; line-height: 1.16; letter-spacing: -0.024em; color: #fff; }
+  .m-section p { margin: 1.7cqw 0 0; font-size: 1.22cqw; line-height: 1.6; color: rgba(255,255,255,.62); max-width: 34cqw; }
+  .m-link { display: inline-block; margin-top: 2cqw; font-size: 1.05cqw; color: rgba(255,255,255,.7); }
+  .m-ticker { position: relative; height: 28cqw; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent); }
+  .m-track { display: flex; flex-direction: column; gap: 1.15cqw; animation: tick 31.5s linear infinite; }
+  .mock:hover .m-track { animation-play-state: paused; }
+  @keyframes tick { to { transform: translateY(-50%); } }
+  .m-row { display: grid; grid-template-columns: auto 1fr 9cqw 9cqw; align-items: center; gap: 1.25cqw; padding: 1.15cqw 1.45cqw; border-radius: 1.15cqw; background: var(--surface); border: 1px solid color-mix(in oklab, var(--signal) 70%, transparent); box-shadow: 0 0 1.5cqw color-mix(in oklab, var(--signal) 26%, transparent); }
+  .m-badge { width: 2.9cqw; height: 2.9cqw; border-radius: 50%; display: grid; place-items: center; overflow: hidden; }
+  .m-badge img { width: 52%; height: 52%; }
+  .m-id b { display: flex; align-items: center; gap: .6cqw; font-weight: 600; font-size: 1.17cqw; color: #fff; }
+  .m-id i { font-style: normal; font-weight: 500; font-size: .72cqw; color: rgba(255,255,255,.62); border: 1px solid rgba(255,255,255,.16); border-radius: .4cqw; padding: .08cqw .42cqw; }
+  .m-id span { display: block; font-size: .92cqw; color: rgba(255,255,255,.5); margin-top: .2cqw; }
+  .m-spark { width: 9cqw; height: 2.6cqw; display: block; }
+  .m-px { text-align: right; font-variant-numeric: tabular-nums; }
+  .m-px b { display: block; font-weight: 600; font-size: 1.12cqw; color: #fff; }
+  .m-px span { display: block; font-size: .92cqw; margin-top: .15cqw; }
+  .up { color: var(--gain); }
+  .down { color: var(--loss); }
+  .m-caption { position: absolute; right: 10cqw; bottom: 2.6cqw; font-size: .8cqw; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.38); }
+
+  
+</style>
+</head>
+<body>
+<div class="mock" style="border-radius:0;--void:#020604;--surface:#08100C;--stroke:#15211B;--ink:#E3EBE6;--signal:#00804D;--on-signal:#FFFFFF;--glow-1:#00804D;--glow-2:#12B76A;--glow-3:#063B24;--gain:#3DDC97;--loss:#FF6B5A;"></div>
+<template id="mock-template">
+  <div class="m-hero">
+    <div class="m-fluid" aria-hidden="true"><span class="b1"></span><span class="b2"></span><span class="b3"></span><span class="b4"></span></div>
+    <div class="m-header">
+      <div class="m-logo"><b>V3ST</b><span class="m-beta">Beta</span></div>
+      <nav class="m-nav"><span>How it works</span><span>Stocks</span><span>Earn</span><span>Payouts</span><span>FAQ</span></nav>
+      <div class="m-spacer"></div>
+    </div>
+    <div class="m-center">
+      <div class="m-h1">Invest. Earn. Harvest.</div>
+      <p class="m-sub">Start with ₦1,000 in Apple, NVIDIA and other US companies. Put your shares to work if you choose, and collect any earnings in your bank on Fridays.</p>
+      <div class="m-ctas"><span class="m-btn m-btn-primary">Join the waitlist</span><span class="m-btn m-btn-outline">How it works</span></div>
+    </div>
+    <div class="m-stats">
+      <div><b>₦1,000</b><span>Minimum to start</span></div>
+      <div><b>8</b><span>US stocks in the beta</span></div>
+      <div><b>₦2,000</b><span>Minimum Friday payout</span></div>
+    </div>
+    <div class="m-betaline">Beta · test money only</div>
+  </div>
+  <div class="m-section">
+    <div>
+      <h4>Invest in companies you already know.</h4>
+      <p>Prices follow the real shares and show in naira. Buy any amount from ₦1,000, and sell in the app at the price shown at the time.</p>
+      <span class="m-link">See all eight stocks →</span>
+    </div>
+    <div class="m-ticker"><div class="m-track"></div></div>
+    <div class="m-caption">Example prices</div>
+  </div>
+</template>
+<script>
+  (function () {
+    var rows = [
+      { t: "AAPL", n: "Apple", s: "Tech", icon: "apple", bg: "#0b0b0b", inv: true, p: "₦342,150", c: 1.24 },
+      { t: "NVDA", n: "NVIDIA", s: "Tech", icon: "nvidia", bg: "#76B900", inv: true, p: "₦273,480", c: -0.86 },
+      { t: "TSLA", n: "Tesla", s: "Cars", icon: "tesla", bg: "#E31937", inv: true, p: "₦615,900", c: 2.31 },
+      { t: "AMZN", n: "Amazon", s: "Retail", icon: "amazon", bg: "#ffffff", inv: false, p: "₦336,270", c: 0.42 },
+      { t: "META", n: "Meta", s: "Tech", icon: "meta", bg: "#0866FF", inv: true, p: "₦1,057,800", c: -1.18 },
+      { t: "GOOGL", n: "Alphabet", s: "Tech", icon: "google", bg: "#ffffff", inv: false, p: "₦378,450", c: 0.73 },
+      { t: "SPCX", n: "SpaceX", s: "Space", icon: "spacex", bg: "#0b0b0b", inv: true, p: "₦318,000", c: 3.05 }
+    ];
+    function spark(seed, up) {
+      var r = seed, v = up ? 22 : 10, pts = [];
+      for (var i = 0; i <= 24; i++) {
+        r = (r * 9301 + 49297) % 233280;
+        v += (r / 233280 - 0.5) * 6 + (up ? -0.5 : 0.5);
+        v = Math.max(4, Math.min(28, v));
+        pts.push((i * 5).toFixed(1) + "," + v.toFixed(1));
+      }
+      return pts.join(" ");
+    }
+    var uid = 0;
+    function rowHtml(d) {
+      var up = d.c >= 0, pts = spark(d.t.charCodeAt(0) * 131 + d.t.length * 17, up), id = "g" + (uid++);
+      return '<div class="m-row">' +
+        '<span class="m-badge" style="background:' + d.bg + '"><img alt="" src="https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/' + d.icon + '.svg" style="' + (d.inv ? "filter:invert(1)" : "") + '"></span>' +
+        '<div class="m-id"><b>' + d.t + '<i>' + d.s + '</i></b><span>' + d.n + '</span></div>' +
+        '<svg class="m-spark ' + (up ? "up" : "down") + '" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="' + id + '" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".28"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><polygon points="' + pts + ' 120,32 0,32" fill="url(#' + id + ')"/><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>' +
+        '<div class="m-px"><b>' + d.p + '</b><span class="' + (up ? "up" : "down") + '">' + (up ? "+" : "−") + Math.abs(d.c).toFixed(2) + '%</span></div>' +
+        '</div>';
+    }
+    var tpl = document.getElementById("mock-template");
+    document.querySelectorAll(".mock").forEach(function (mock) {
+      mock.appendChild(tpl.content.cloneNode(true));
+      var track = mock.querySelector(".m-track");
+      var html = rows.map(rowHtml).join("");
+      track.innerHTML = html + html;
+    });
+  })();
+</script>
+</body>
+</html>
