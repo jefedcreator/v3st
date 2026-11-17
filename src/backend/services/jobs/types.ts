@@ -1,5 +1,6 @@
 export type JobKind =
   | "wallets.provision"
+  | "wallets.prepare_execution"
   | "chain.progress"
   | "webhook.process"
   | "deposit.progress"

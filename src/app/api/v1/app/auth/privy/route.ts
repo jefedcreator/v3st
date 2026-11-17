@@ -6,6 +6,7 @@ import {
 import { authService } from "@/backend/services/auth";
 import { deviceLabel } from "@/backend/services/app/devices";
 import { privyAuth } from "@/backend/services/privy";
+import { appOnboardingService } from "@/backend/services/app/onboarding";
 import {
   privySignInSchema,
   type PrivySignInSchema,
@@ -23,7 +24,11 @@ export const POST = withMiddleware<PrivySignInSchema, null, null>(
       login,
       deviceLabel(request.headers.get("user-agent")),
     );
-    const res = ok({ is_new_customer: result.created }, "Signed in");
+    const onboarding = await appOnboardingService.status(result.user.id);
+    const res = ok(
+      { is_new_customer: result.created, next_step: onboarding.next_step },
+      "Signed in",
+    );
     authService.setSessionCookie(res, result.sessionToken, result.expires);
     return res;
   },

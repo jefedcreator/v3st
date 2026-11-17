@@ -19,6 +19,8 @@ import { stockService } from "@/backend/services/stocks";
 import { strategyService } from "@/backend/services/strategies";
 import { tradeService } from "@/backend/services/trades";
 import { walletService } from "@/backend/services/wallets";
+import { executionAccounts } from "@/backend/services/wallets/execution-accounts";
+import { customerChainId } from "@/backend/services/app/network";
 import { treasuryService } from "@/backend/services/treasury";
 import { webhookService } from "@/backend/services/webhooks";
 import { withdrawalService } from "@/backend/services/withdrawals";
@@ -29,6 +31,9 @@ export const handlers: Partial<Record<JobKind, (job: Job) => Promise<void>>> = {
   },
   "wallets.provision": async (job) => {
     await walletService.ensureUserWallets(job.subjectId);
+  },
+  "wallets.prepare_execution": async (job) => {
+    await executionAccounts.ensure(job.subjectId, customerChainId());
   },
   "trade.progress": async (job) => {
     await tradeService.progress(job.subjectId);
