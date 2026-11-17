@@ -154,7 +154,7 @@ Use Next's static metadata API and original static social artwork. Title: **V3ST
 
 Add typed service-backed read wrappers in `src/server/` only when needed. Use request-scoped React `cache()` for repeated reads and private/no-store financial reads. Preserve redirect/not-found control flow. Failure renders unavailable/error, never fabricated empty balances or ₦0. Distinguish failure from genuine empty results and inaccessible/missing resources.
 
-Customer screens read through the customer service layer (`src/backend/services/app/*`) via server wrappers and mutate only through `/api/v1/app/*` routes (see [docs/api/customer-app.md](../docs/api/customer-app.md)). Customer screens never call `/api/v1/*` operator endpoints, never see internal event names (the app stream sends `changed` frames with screen areas), and poll or subscribe to `GET /api/v1/app/events` for live updates.
+Customer screens read through the customer service layer (`src/backend/services/app/*`) via server wrappers and mutate only through `/api/v1/app/*` routes (see [docs/api/customer-app.md](docs/api/customer-app.md)); their response types come from `src/types/app.ts`. Customer screens never call `/api/v1/*` operator endpoints, never see internal event names (the app stream sends `changed` frames with screen areas), and poll or subscribe to `GET /api/v1/app/events` for live updates.
 
 TanStack Query and Axios are optional future additions for client caching/mutations. If selected, use an SSR-safe per-user QueryClient, typed methods, query-key factories, timestamped initial data and relevant invalidation. Clear user caches/streams on logout or account changes. Axios uses canonical `baseURL: "/api/v1"` with cookie credentials. Do not add this stack to the marketing page.
 

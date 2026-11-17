@@ -174,3 +174,74 @@ Final gate results (2026-11-17, no Base Sepolia variables set):
 - Live check (operator, needs keys): `yarn sepolia:deploy && yarn seed:beta && SEPOLIA_LIVE=1
   APP_CUSTOMER_CHAIN=basesepolia yarn sepolia:customer-smoke` — NOT run in this environment; the smoke
   script `scripts/sepolia-customer-smoke.ts` is in place and guarded by `SEPOLIA_LIVE=1`.
+
+Pending operator live checks (need keys or a browser; not runnable in CI):
+
+- **Privy live sign-in (plan Task 2, step 3) — pending.** Sign in to the Privy development app with
+  the test account, pass both tokens to `privyAuth.verifyLogin`, and record that the email is
+  `test-XXXX@privy.io`, that `session_id` is non-empty, that it stays the same after
+  `getAccessToken()` refreshes and changes after signing out and in again (PIN reset relies on both).
+  Runs once the frontend sign-in screen exists.
+- **Base Sepolia keeper (plan Task 7, step 3) — pending.** `yarn sepolia:deploy && yarn seed:beta &&
+  SEPOLIA_LIVE=1 yarn sepolia:smoke`: one line per stand-in, all `aligned` or `within_band`, exit 0.
+- **Customer smoke (plan Task 17, step 6) — pending.** As above; run with `yarn worker` against the
+  same database.
+
+### Verification against the plan (2026-11-17, follow-up)
+
+A second pass compared the branch with the plan task by task and fixed these gaps:
+
+- **Customer DTOs** now live in `src/types/app.ts` as the plan's file map requires (services import
+  and re-export them), so the frontend can import them without server code.
+  `AppSessionDto.onboarding.next_step` is typed as an onboarding step.
+- **Bank-transfer buys:** the funding transaction locks the order and records the held budget with
+  the hold, so a cancel between the transfer landing and the next executor run releases exactly
+  the held cash (before, that window stranded it on hold). The preview refuses what the deposit would
+  refuse (deposits paused, over `policy.deposits.maxKobo`, no bank account); a deposit that still
+  can't be opened fails the order at once; a waiting-for-payment order with no deposit expires
+  at 72 h.
+- **Order recovery:** a confirm that is refused (4xx) fails the order instead of leaving it
+  "processing" and retrying an expired quote forever; an investment that committed before an error
+  surfaced is linked by its key; a waiting order interrupted between "executing" and its investment
+  goes back to waiting with its hold (after 5 minutes) or links the investment; linking an investment
+  marks the waiting order's hold released (confirm released it in the same transaction).
+- **Advisory locks:** the notification projector and the test-pool keeper used session-level
+  `pg_try_advisory_lock` through Prisma's pool (the keeper also unlocked on a possibly different
+  connection), so after one run they could stop running. Both now take transaction-scoped locks.
+- **Keeper:** the 5,000 USD spend cap applies per run across all stand-ins; a swap pool must be a
+  manifest `HydrexPool*` entry.
+- **Consent keys:** re-joining Earn after turning collection off, or re-choosing reinvest, reused a
+  fixed consent key and failed with `TRY_AGAIN` after the money had moved. Keys are now per join /
+  per choice; choosing reinvest or payout revokes every earlier reinvest consent; the reinvest stock
+  must be in the catalog. Earn join/withdraw replays use `app-earn:*` keys and refuse a different
+  preview under the same key.
+- **Friday batch:** an onchain reinvest that can't run (stale price, paused stock, consent cap) is
+  skipped for that customer instead of aborting everyone's payouts.
+- **Catalog and home:** a price older than the 7-day display window shows no number; chart change is
+  measured on the naira points; `earn_product_id` comes from `appEarnService.productIdForStock`
+  (no Prisma in `src/backend/content/`); home's `invested_kobo` is null when nothing could be valued
+  and `this_week_kobo` is `"0"` (not null) when nothing was earned.
+- **Copy and rules:** test identity names in display case (Adaeze Obi, Babatunde Adeyemi); `earn`
+  readiness needs the PIN; PIN reset reports any token failure as "sign in again" and checks the
+  Privy session under the user row lock; activity detail shows the price actually paid, not the 3%
+  limit, and accepts `wk_YYYY-MM-DD` ids; completed buys report the filled shares; consent caps and
+  windows read `policy.app`.
+- **Seed:** the local `testnet` fixture rows get `displayTicker` (the seeded customer catalog was
+  empty); v2 strategies are keyed `hydrex-<ticker>-usdc-basesepolia-v2`.
+- **Smoke script** adds a name-matched bank account before adding money.
+- **Docs:** `docs/api/customer-app.md` now has the exact vocabulary rule, the wire format, the error
+  copy table and field messages, the beta sign-in rule and the full Privy frontend contract.
+
+Open question for the operator: deposits need a verified bank account (the transfer comes from the
+customer's own account), but the plan's onboarding marks the bank account optional and `add_money`
+readiness doesn't require it. Today adding money without one answers `SETUP_REQUIRED` while
+onboarding reports `complete`; `tests/helpers/app.ts` `readyCustomer()` adds a bank account to cover
+this. Decide whether the bank account becomes a required step, or deposits stop requiring it.
+
+Gate in the follow-up environment: `yarn prisma validate` passed; `yarn typecheck` 0 errors;
+`yarn lint` 0 errors (9 pre-existing warnings); DB-free unit tests 19/20 files passed (the 20th,
+`tests/unit/hydrex-policy.test.ts`, needs a database). `yarn test`, `yarn test:contracts` and
+`yarn build` could not run there: its network blocks Prisma's engine download
+(`binaries.prisma.sh`), the Solidity compiler download (`binaries.soliditylang.org`) and Google
+Fonts. The follow-up's new and changed tests (orders-now, orders-waiting, earn, catalog, onboarding,
+onchain-reinvest) are written but **not yet run**; run the full gate before merging.
