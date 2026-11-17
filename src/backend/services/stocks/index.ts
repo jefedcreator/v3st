@@ -143,7 +143,7 @@ class StockService {
       await db.$transaction(async (tx) => {
         for (const id of updatedIds) {
           const row = await tx.stock.findUnique({ where: { id } });
-          if (row && row.referencePriceMicroUsd !== null && row.referenceBasis && row.referenceAsOf) {
+          if (row?.referencePriceMicroUsd != null && row.referenceBasis && row.referenceAsOf) {
             await stockHistory.record(
               tx,
               row.id,

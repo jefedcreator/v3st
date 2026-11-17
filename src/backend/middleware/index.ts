@@ -208,7 +208,7 @@ export const bodyValidatorMiddleware =
         statusCode: 422,
         next: false,
         code: "VALIDATION_FAILED",
-        field: path || undefined,
+        field: path ?? undefined,
       };
     }
     request.validatedData = result.data;
@@ -229,7 +229,7 @@ export const queryValidatorMiddleware =
         statusCode: 422,
         next: false,
         code: "VALIDATION_FAILED",
-        field: path || undefined,
+        field: path ?? undefined,
       };
     }
     request.query = result.data;
@@ -250,7 +250,7 @@ export const pathParamValidatorMiddleware =
         statusCode: 422,
         next: false,
         code: "VALIDATION_FAILED",
-        field: path || undefined,
+        field: path ?? undefined,
       };
     }
     request.params = result.data;
@@ -347,7 +347,9 @@ export const operatorMiddleware = async <B, P, Q>(
 
 // Customer sign-in and other token-exchange routes: reject any request that
 // carries an Origin header pointing somewhere other than the app itself.
-export const sameOriginMiddleware: MiddlewareFunction = async (request) => {
+export const sameOriginMiddleware = async <B, P, Q>(
+  request: AuthRequest<B, P, Q>,
+): Promise<MiddlewareResponse> => {
   const origin = request.headers.get("origin");
   if (origin !== null) {
     const expected = new URL(env.NEXT_PUBLIC_APP_URL).origin;

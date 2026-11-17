@@ -23,8 +23,11 @@ Everything is beta. No real money moves anywhere in the system today.
 | Onchain backend | Built against a local test chain. Five stock providers are labelled local replicas; Hydrex is verified on Base Sepolia (84532) behind env plus manifest evidence |
 | Ledger, jobs, reconciliation, operator controls | Built |
 | Landing page | Built, with a browser-only demo that calls no API |
-| Customer app (sign-up, fund, buy, portfolio, earnings, withdraw) | Not built. The API exists; no screens use it |
+| Customer app API (`/api/v1/app/*`, sign-in, fund, buy, portfolio, Earn, earnings, withdraw, activity, notifications, settings) | Built on the customer network below; screens are a separate frontend plan. Docs: [docs/api/customer-app.md](docs/api/customer-app.md) |
+| Customer network (`APP_CUSTOMER_CHAIN`: `testnet` locally, `basesepolia` in the beta) | Built; every customer route, ledger account and onchain operation runs on the customer chain |
 | Real provider integration | Phase A built: Hydrex runs its real contracts on Base Sepolia (84532) as a verified provider testnet; Base mainnet stays closed. See [Environments and the path to real providers](#environments-and-the-path-to-real-providers) |
+| Base Sepolia cash rails | Built: naira deposits, withdrawals and Friday earnings payouts settle on Base Sepolia (84532) in the beta, with the 2-hour reference freshness window and the 300 s test-pool keeper |
+| Freshness and keeper rules | Built: reference prices must be younger than 2 hours on Base Sepolia to trade; the keeper trades the labelled test pools every 300 s to keep them aligned and to generate testnet Earn fees |
 | Privy wallets | Not integrated. A local test signer and test account stand in for it |
 
 Detailed records: the [onchain specification](docs/superpowers/specs/2026-11-14-v3st-onchain-stocks-and-income-design.md), the [provider decision record](docs/decisions/onchain-providers.md), the [API reference](docs/api/onchain-investments.md) and the [implementation review](docs/implementation-review.md). Where this document and the Nov 14 specification disagree on onchain behaviour, the specification's rules hold until this design's open decisions are settled.

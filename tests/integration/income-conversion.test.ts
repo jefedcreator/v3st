@@ -15,6 +15,7 @@ import { hookFeeAbi, settlementTokenAbi, stockDistributionAbi, stockTokenAbi } f
 import "@/backend/services/onchain/providers";
 import { settlementAssetKey } from "@/backend/services/onchain/testnet";
 import { rewardService } from "@/backend/services/rewards";
+import { simVenue } from "@/backend/services/simulator/venue";
 import { strategyService } from "@/backend/services/strategies";
 import { kycService } from "@/backend/services/kyc";
 import { testnetWalletService } from "@/backend/services/wallets/testnet";
@@ -22,7 +23,7 @@ import { fromDbRaw, fromDbRawNullable, toDbRaw } from "@/utils/asset-units";
 
 import { oneTimeAuth, standingAuth } from "../helpers/authorizations";
 import { useTestDatabase } from "../helpers/db";
-import { makeBankAccount, seedFloat, seedTreasury } from "../helpers/factories";
+import { makeBankAccount, makeStock, seedFloat, seedTreasury } from "../helpers/factories";
 import { drainJobs } from "../helpers/worker";
 import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../helpers/testnet";
 
@@ -285,10 +286,15 @@ describe("receipt-backed income conversion and Friday payout", () => {
     const receiptId = await claimSettlementReward(ctx, keccak256(toHex("basestonk:rei:1")), 2_000_000n);
     await earningsService.recognize(receiptId);
     expect(await ledgerService.balance(acct.userEarnings(ctx.u.id, "testnet"))).toBe(2_000_000n);
-    await earningsService.setPreference(ctx.u.id, { mode: "reinvest", stock_id: ctx.stock.id });
+    // Sim-stock reinvest keeps the legacy trade pipeline; onchain stocks reinvest
+    // through the investment pipeline (see tests/integration/onchain-reinvest.test.ts).
+    const simStock = await makeStock({ symbol: `SIM${randomUUID().slice(0, 6)}`, chain: "testnet" });
+    await earningsService.setPreference(ctx.u.id, { mode: "reinvest", stock_id: simStock.id });
     await seedFloat("yellowcard", 1_000_000_000_000n);
     await seedTreasury("testnet", 1_000_000_000_000n);
     const week = lagosWeek(now());
+    // The sim venue swap reverts, so the reinvest fails and must release once.
+    await simVenue.addFault("swap", `reinvest:${ctx.u.id}:${week}`);
     const r = await earningsBatchService.runBatch(week, now());
     expect(r.reinvested).toBe(1);
     const trade = await db.tradeOrder.findUniqueOrThrow({ where: { key: `reinvest:${ctx.u.id}:${week}` } });

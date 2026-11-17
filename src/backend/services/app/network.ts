@@ -14,7 +14,7 @@ export function customerChain(): CustomerChain {
   const parsed = z
     .enum(["testnet", "basesepolia"])
     .default("testnet")
-    .safeParse(process.env.APP_CUSTOMER_CHAIN || undefined);
+    .safeParse(process.env.APP_CUSTOMER_CHAIN ?? undefined);
   if (!parsed.success) {
     throw new InternalServerErrorException("Invalid APP_CUSTOMER_CHAIN");
   }

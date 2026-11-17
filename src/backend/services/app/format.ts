@@ -31,7 +31,7 @@ export function customerReference(id: string): string {
   }
   const chars: string[] = [];
   for (let shift = 35; shift >= 0; shift -= 5) {
-    chars.push(CROCKFORD_ALPHABET[Number((value >> BigInt(shift)) & 31n)]);
+    chars.push(CROCKFORD_ALPHABET[Number((value >> BigInt(shift)) & 31n)] ?? "0");
   }
   return `V3-${chars.slice(0, 4).join("")}-${chars.slice(4, 8).join("")}`;
 }

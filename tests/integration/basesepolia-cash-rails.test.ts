@@ -37,14 +37,18 @@ async function fundViaDeposit(userId: string, key: string, ngnAmount: bigint) {
   return depositService.get(userId, deposit.id);
 }
 
-async function readTokenBalance(chainId: number, token: string, address: string): Promise<bigint> {
+async function readTokenBalance(
+  chainId: number,
+  token: `0x${string}`,
+  address: `0x${string}`,
+): Promise<bigint> {
   const client = publicClientOn(chainId);
   return client.readContract({
-    address: token as `0x${string}`,
+    address: token,
     abi: settlementTokenAbi,
     functionName: "balanceOf",
-    args: [address as `0x${string}`],
-  }) as Promise<bigint>;
+    args: [address],
+  });
 }
 
 describe("Base Sepolia cash rails", () => {
@@ -88,7 +92,7 @@ describe("Base Sepolia cash rails", () => {
       const paid = await withdrawalService.get(user.id, withdrawal.id);
       expect(paid.status).toBe("paid");
       const after = await readTokenBalance(84532, node.settlement, account.accountAddress);
-      expect(before - after).toBe(BigInt(paid.debit_usdc));
+      expect(before - after).toBe(BigInt(paid.debit_usdc ?? "0"));
     } finally {
       await node.stop();
     }

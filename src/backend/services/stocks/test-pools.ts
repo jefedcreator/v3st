@@ -107,7 +107,7 @@ export function assertKeeperSwap(
     throw new Error("Keeper swaps run on Base Sepolia only");
   }
   const routerEntry = manifest.external.HydrexSwapRouter;
-  if (!routerEntry || routerEntry.address.toLowerCase() !== i.router.toLowerCase()) {
+  if (routerEntry?.address.toLowerCase() !== i.router.toLowerCase()) {
     throw new Error("Router is not the manifest's Hydrex swap router");
   }
   const poolEntry = Object.values(manifest.external).find(
@@ -253,7 +253,7 @@ class TestPoolAligner {
           beforeMicroUsd: midMicroUsd,
           afterMicroUsd: afterMid,
           referenceMicroUsd: ref,
-          txHash: hash as Hex,
+          txHash: hash,
         };
         await db.testPoolAlignment.create({ data });
         results.push({ stockId: stock.id, action: "aligned" });

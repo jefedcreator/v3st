@@ -47,6 +47,17 @@ yarn seed:beta                                 # seeds the tAAPL stand-in tracki
 SEPOLIA_LIVE=1 yarn sepolia:smoke              # operator-only end-to-end journey; prints tx hashes and fees
 ```
 
+Customer beta environment (`APP_STAGE=beta`):
+
+- `APP_CUSTOMER_CHAIN` — `testnet` for the local loopback chain, `basesepolia` for the live beta.
+- `PRIVY_MODE` — `simulated` in the beta (local token issuer); real Privy verification needs `PRIVY_APP_ID` and `PRIVY_VERIFICATION_KEY`.
+- `PRIVY_BETA_ALLOWLIST` — comma-separated tester emails allowed to sign in during the beta; keep Privy's own allowlist in step with it (allowlisted testers receive real sign-in emails from Privy).
+- `BASE_SEPOLIA_KEEPER_PRIVATE_KEY` — funds and runs the 300 s test-pool keeper that keeps Base Sepolia stand-in pools aligned (and supplies most testnet Earn fees).
+- `yarn sepolia:treasury --micro <amount>` — operator-only Base Sepolia treasury top-up.
+- `SEPOLIA_LIVE=1 APP_CUSTOMER_CHAIN=basesepolia yarn sepolia:customer-smoke` — operator-only live customer smoke (sign-in → fund → buy); exits non-zero unless the order completes and the DTO passes the customer-vocabulary leak check.
+
+Customer API docs: [docs/api/customer-app.md](docs/api/customer-app.md).
+
 `GET /api/v1/ops/integrations` reports Hydrex as `verified_provider_testnet` with `verified_chain_id: 84532` only while the RPC URL is set and the on-disk manifest still matches the deployed code hashes; otherwise it reports `disabled_unverified`. Mainnet chain IDs stay rejected in every environment. See [docs/runbooks/onchain-beta.md](docs/runbooks/onchain-beta.md).
 
 ## Backend commands
@@ -58,6 +69,7 @@ SEPOLIA_LIVE=1 yarn sepolia:smoke              # operator-only end-to-end journe
 - `yarn test` / `yarn test:api` / `yarn test:contracts` / `yarn typecheck` / `yarn lint` / `yarn build` — the verification gate.
 - `yarn testnet:start` / `yarn testnet:deploy` — launch the isolated loopback Anvil testnet and deploy the labelled test contracts (manifest written to the gitignored `.testnet/`).
 - `yarn sepolia:deploy` / `yarn sepolia:smoke` — deploy the verified Base Sepolia manifest and run the operator-only smoke journey (see above).
+- `yarn sepolia:treasury` / `yarn sepolia:customer-smoke` — operator-only Base Sepolia treasury top-up and live customer smoke journey (see above).
 - Runbooks: [docs/runbooks/backend-beta.md](docs/runbooks/backend-beta.md) (schedules, ops endpoints) and [docs/runbooks/onchain-beta.md](docs/runbooks/onchain-beta.md) (testnet operations).
 
 ## Verification and handoff

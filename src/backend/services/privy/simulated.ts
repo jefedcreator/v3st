@@ -18,14 +18,14 @@ export function privyRuntime(): PrivyRuntime {
   const parsed = z
     .enum(["sandbox", "simulated"])
     .default("simulated")
-    .safeParse(process.env.PRIVY_MODE || undefined);
+    .safeParse(process.env.PRIVY_MODE ?? undefined);
   if (!parsed.success) {
     throw new InternalServerErrorException("Invalid PRIVY_MODE");
   }
   return {
     mode: parsed.data,
-    appId: process.env.PRIVY_APP_ID || undefined,
-    verificationKey: process.env.PRIVY_VERIFICATION_KEY || undefined,
+    appId: process.env.PRIVY_APP_ID ?? undefined,
+    verificationKey: process.env.PRIVY_VERIFICATION_KEY ?? undefined,
     betaAllowlist: (process.env.PRIVY_BETA_ALLOWLIST ?? "")
       .split(",")
       .map((entry) => entry.trim().toLowerCase())

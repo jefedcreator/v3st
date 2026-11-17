@@ -151,3 +151,26 @@ plan. Local replica results establish neither commercial provider testnet suppor
 nor partner latency. The backend-only scope and beta/test-funds boundary remain;
 no real funds, identity submissions, mainnet work or application deployment is
 part of this review.
+
+## Customer app backend (2026-11)
+
+Plan: `docs/superpowers/plans/2026-11-17-v3st-customer-app-backend.md` (tasks 1–17), executed on
+`feat/customer-app-backend`. Customer API docs: [docs/api/customer-app.md](api/customer-app.md).
+
+Final gate results (2026-11-17, no Base Sepolia variables set):
+
+- `bash scripts/setup-cloud.sh` — environment note: the sandbox ships Node v22.23.4 while `.nvmrc`
+  pins 24.15.0, so the script's version check stops before its remaining steps; `.env` was created
+  from `.env.example` and dependencies were already installed.
+- `yarn prisma validate` — schema valid. `yarn prisma generate` — done.
+  Migrations added: `20261117080000_onchain_reinvest`, `20261117090000_notifications`,
+  `20261117100000_customer_profile`.
+- `yarn test:contracts` — 17 passed, 0 failed (4 suites).
+- `yarn test` — 94 files, 502 tests passed, 0 failed (includes `tests/app/*`: auth, onboarding,
+  cash, catalog, home, orders-now, orders-waiting, security, earn, activity, notifications, settings,
+  customer-journey, routes-guard).
+- `yarn lint` — 0 errors. `yarn typecheck` — 0 errors (the 9 pre-existing errors in scripts/privy/
+  wallets/test files were fixed along the way). `yarn build` — done in ~64 s.
+- Live check (operator, needs keys): `yarn sepolia:deploy && yarn seed:beta && SEPOLIA_LIVE=1
+  APP_CUSTOMER_CHAIN=basesepolia yarn sepolia:customer-smoke` — NOT run in this environment; the smoke
+  script `scripts/sepolia-customer-smoke.ts` is in place and guarded by `SEPOLIA_LIVE=1`.

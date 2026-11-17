@@ -11,6 +11,10 @@ No setting or operator endpoint activates live providers or mainnet chains.
 
 ## Setup and evidence
 
+Keeper and treasury (Base Sepolia beta): fund the keeper with test ETH and test USDC from the Base Sepolia faucets and set `BASE_SEPOLIA_KEEPER_PRIVATE_KEY` (testnet-only key). The keeper runs every 300 s (`policy.app.keeper.slotSeconds`) and trades the labelled test pools to keep stand-in prices aligned with their reference — on testnet, those keeper trades are also what generate most of the Earn fees customers see. Top up the USDC treasury with `yarn sepolia:treasury --micro <amount>` (operator-only, mints into the basesepolia treasury with the relayer's `managedMint`).
+
+Freshness: on Base Sepolia a reference price must be younger than **2 hours** to trade (`referenceUsable`); the trading and display windows are tracked separately, so a stale reference pauses new orders (customers see "Prices are updating") without hiding the last known price.
+
 Use Node from `.nvmrc`, Yarn 1.22.22, Foundry from `.foundry-version` and solc
 0.8.30 from `foundry.toml`. Run `bash scripts/setup-cloud.sh`, configure a local
 beta PostgreSQL database, apply migrations with `yarn db:migrate`, then start

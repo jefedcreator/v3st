@@ -264,9 +264,11 @@ Every exported handler must be wrapped with `withMiddleware`. It:
 export const withMiddleware = <B = null, P = null, Q = null>(
   handler: (request: AuthRequest<B, P, Q>, context: { params: P | undefined }) => Promise<Response>,
   middlewares: MiddlewareFunction<B, P, Q>[],
-  options?: { bodyMode?: 'json' | 'raw' | 'none'; maxBodyBytes?: number }
+  options?: { bodyMode?: 'json' | 'raw' | 'none'; maxBodyBytes?: number; audience?: 'internal' | 'customer' }
 ) => { /* ... */ };
 ```
+
+`audience: "customer"` marks a route as customer-facing (`/api/v1/app/**`): error responses are mapped through the customer copy table in `src/backend/services/app/copy.ts` instead of exposing internal codes, and `tests/app/routes-guard.test.ts` fails if any app route omits it.
 
 The exported route function takes a **required** second argument `context: { params: Promise<Record<string, string>> }` (Next 15 `RouteContext`). The wrapper awaits these raw inputs; `pathParamValidatorMiddleware` parses them, assigns its inferred output to `request.params`, and the handler's `context.params` receives that same validated value. Without a path validator both validated path fields remain absent.
 
@@ -823,3 +825,5 @@ Client
 20. **Onchain effects are operation-scoped and recoverable.** Every economic action has a stable operation id, a persisted signed-payload/tx hash before broadcast, and finalizes only from observed local receipts — a crash retries the same transaction/nonce, never a replacement economic action.
 
 21. **No optional/conditional object spread** (`...(cond ? {k: v} : {})`) anywhere; assign properties with `if` statements instead.
+
+22. **The customer layer lives in `src/backend/services/app/*`** (one file per area: session, onboarding, identity, catalog, cash, orders, holdings, home, earn, earnings, activity, inbox, events, automations, profile). Customer routes call only these services, and every customer DTO passes the vocabulary rule: no internal terms (addresses, tx hashes, provider names, table/field internals) may reach a customer response — enforced by `findCustomerLeaks` (`src/backend/services/app/vocabulary.ts`) in `tests/helpers/app.ts`.

@@ -4,7 +4,7 @@ import {
   authorizationService,
   type AuthorizationDto,
 } from "@/backend/services/authorizations";
-import { STANDING_ACTIONS } from "@/backend/validators/authorization.validator";
+import { type STANDING_ACTIONS } from "@/backend/validators/authorization.validator";
 
 // Order actions (order_buy/order_sell) exist only via createOrderConsent, never
 // through the public validator, so this helper takes the public action set.

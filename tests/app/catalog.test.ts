@@ -205,7 +205,7 @@ describe("customer catalog", () => {
       params: { id: delisted.id },
     });
     expect(shown.status).toBe(200);
-    const detail = (shown.json as { data: { ticker: string; trading: string; your_position: { shares_micro: string } | null } }).data;
+    const detail = (shown.json as { data: { ticker: string; trading: string; your_position: { shares_micro: string } | null; documents: string[] } }).data;
     expect(detail.ticker).toBe("TSTA");
     expect(detail.trading).toBe("paused");
     expect(detail.your_position?.shares_micro).toBe("5000000");

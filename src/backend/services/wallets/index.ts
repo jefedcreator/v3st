@@ -257,7 +257,7 @@ class WalletService {
     const local = await db.chainTransfer.findUniqueOrThrow({ where: { id: transferId } });
     if ((local.chain === "testnet" || local.chain === "basesepolia") && !["awaiting_approval", "confirmed", "failed"].includes(local.status)) {
       const spec = await this.specFromTransfer(db, local);
-      const bound = await this.boundAddress(db, local.chain as Chain, spec);
+      const bound = await this.boundAddress(db, local.chain, spec);
       const screened = await screeningService.screen(local.chain, local.toAddress);
       if (screened !== "allow") throw new PolicyViolation("SCREENING_DENIED");
       assertTransferPolicy(spec, { fromAddress: local.fromAddress, toAddress: local.toAddress, boundAddress: bound });

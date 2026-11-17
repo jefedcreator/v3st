@@ -154,6 +154,8 @@ Use Next's static metadata API and original static social artwork. Title: **V3ST
 
 Add typed service-backed read wrappers in `src/server/` only when needed. Use request-scoped React `cache()` for repeated reads and private/no-store financial reads. Preserve redirect/not-found control flow. Failure renders unavailable/error, never fabricated empty balances or ₦0. Distinguish failure from genuine empty results and inaccessible/missing resources.
 
+Customer screens read through the customer service layer (`src/backend/services/app/*`) via server wrappers and mutate only through `/api/v1/app/*` routes (see [docs/api/customer-app.md](../docs/api/customer-app.md)). Customer screens never call `/api/v1/*` operator endpoints, never see internal event names (the app stream sends `changed` frames with screen areas), and poll or subscribe to `GET /api/v1/app/events` for live updates.
+
 TanStack Query and Axios are optional future additions for client caching/mutations. If selected, use an SSR-safe per-user QueryClient, typed methods, query-key factories, timestamped initial data and relevant invalidation. Clear user caches/streams on logout or account changes. Axios uses canonical `baseURL: "/api/v1"` with cookie credentials. Do not add this stack to the marketing page.
 
 Private metadata must not publish balances, personal details or tokens in OG image URLs. Historical `liveMetadata`, `pageMetadata`, invite previews and bot-card examples are not installed V3ST utilities or required features. The landing uses a static public card without account access.
@@ -187,6 +189,7 @@ These are existing V3ST backend contracts, independent of the local demo:
 - Explicit `src/types/dto.ts` serializers produce snake_case wire fields. Money/raw token quantities cross JSON as integer strings, never BigInt/floats. Never expose raw Prisma rows or provider payloads.
 - `src/types/contract.ts` contains existing operator evidence/status DTOs. Preserve them; add actual compile-time assertions when needed without claiming the file already proves every service/DTO equality.
 - Quote expiry, changed terms, unavailable reads, holds and unresolved operations remain visible states. Current API docs/services govern their meaning; education examples do not.
+- Customer error responses are already display copy: render `message` from `/api/v1/app/*` errors directly and use `code` only for analytics/branching. Never surface raw internal error codes or stack details to customer screens.
 
 ### Session transport
 

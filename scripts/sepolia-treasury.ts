@@ -1,5 +1,7 @@
 import { encodeFunctionData, keccak256, toHex, type Hex } from "viem";
 
+import type { Chain } from "../src/backend/services/wallets/chains";
+
 import { assertBetaRuntime } from "../src/backend/integrations/beta-policy";
 import { BASE_SEPOLIA_CHAIN_ID } from "../src/backend/integrations/onchain-policy";
 import { settlementTokenAbi } from "../src/backend/services/onchain/abis";
@@ -30,7 +32,7 @@ async function main(): Promise<void> {
   const verified = await verifyManifest(chainId);
   if (!verified.ok) throw new Error(`Base Sepolia manifest does not verify: ${verified.reason}`);
 
-  const chain = ledgerChainFor(chainId);
+  const chain = ledgerChainFor(chainId) as Chain;
   const treasuryAddress = await walletService.treasuryAddress(chain);
   const key = `topup:basesepolia:${new Date().toISOString()}`;
   const settlement = manifest.contracts.TestSettlementToken!.address;
@@ -44,10 +46,10 @@ async function main(): Promise<void> {
     functionName: "managedMint",
     args: [keccak256(toHex(key)), treasuryAddress as Hex, amount],
   });
-  const signedTx = await walletClient.signTransaction({ to: settlement, data, nonce, gas: 200_000n, gasPrice });
+  const signedTx = await walletClient.signTransaction({ account: relayer, chain: chainObject(chainId), to: settlement, data, nonce, gas: 200_000n, gasPrice });
   const txHash = keccak256(signedTx);
   await publicClient.sendRawTransaction({ serializedTransaction: signedTx });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as Hex });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") throw new Error(`managedMint reverted: ${txHash}`);
   const target = chainTarget(chainId);
   const required = receipt.blockNumber + BigInt(target.confirmations);

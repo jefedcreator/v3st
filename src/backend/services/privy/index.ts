@@ -20,7 +20,9 @@ function decodePayload(token: string): Record<string, unknown> | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   try {
-    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as Record<string, unknown>;
+    const segment = parts[1];
+    if (segment === undefined) return null;
+    return JSON.parse(Buffer.from(segment, "base64url").toString("utf8")) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -67,7 +69,7 @@ class PrivyAuthService {
       throw new UnauthorizedException("Invalid sign-in token");
     }
     const emailAccount = identityUser.linked_accounts.find((account) => account.type === "email");
-    if (!emailAccount || emailAccount.type !== "email" || !emailAccount.address) {
+    if (emailAccount?.type !== "email" || !emailAccount?.address) {
       throw new ForbiddenException("No email linked to this sign-in", "LOGIN_NOT_ALLOWED");
     }
     const email = emailAccount.address.toLowerCase();

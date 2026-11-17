@@ -12,7 +12,7 @@ import { now } from "@/backend/clock";
 import { securityService } from "@/backend/services/security";
 import { simulatedPrivy } from "@/backend/services/privy/simulated";
 import { db } from "@/server/db";
-import { HttpException } from "@/utils/exceptions";
+import { type HttpException } from "@/utils/exceptions";
 
 import { callAppRoute, ORIGIN, signInCustomer } from "../helpers/app";
 import { useTestDatabase } from "../helpers/db";

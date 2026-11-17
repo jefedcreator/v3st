@@ -29,7 +29,8 @@
     "test:e2e": "playwright test",
     "sepolia:deploy": "tsx --env-file-if-exists=.env scripts/sepolia-deploy.ts",
     "sepolia:smoke": "tsx --env-file-if-exists=.env scripts/sepolia-smoke.ts",
-    "sepolia:treasury": "tsx --env-file-if-exists=.env scripts/sepolia-treasury.ts"
+    "sepolia:treasury": "tsx --env-file-if-exists=.env scripts/sepolia-treasury.ts",
+    "sepolia:customer-smoke": "tsx --env-file-if-exists=.env scripts/sepolia-customer-smoke.ts"
   },
   "dependencies": {
     "@hydrexfi/hydrex-sdk": "1.2.8",

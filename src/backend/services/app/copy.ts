@@ -111,7 +111,7 @@ export const CUSTOMER_ERROR_COPY = {
   SCREENING_DENIED: { code: "ACCOUNT_REVIEW", message: "We need to check this. Please contact support." },
   TRAVEL_RULE_DATA_MISSING: { code: "ACCOUNT_REVIEW", message: "We need to check this. Please contact support." },
   INTERNAL: { code: "SOMETHING_WENT_WRONG", message: "Something went wrong. Please try again." },
-} satisfies { [K in ErrorCode]: { code: CustomerErrorCode; message: string } };
+} satisfies Record<ErrorCode, { code: CustomerErrorCode; message: string }>;
 
 export function customerErrorFor(code: ErrorCode): { code: CustomerErrorCode; message: string } {
   return CUSTOMER_ERROR_COPY[code];

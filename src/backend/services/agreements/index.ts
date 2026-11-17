@@ -12,7 +12,7 @@ class AgreementService {
   ): Promise<void> {
     for (const item of items) {
       const current = CUSTOMER_DOCUMENTS[item.slug];
-      if (!current || current.version !== item.version) {
+      if (current?.version !== item.version) {
         throw new ConflictException(
           `Document ${item.slug} was updated; accept version ${current?.version ?? "unknown"}`,
           "AGREEMENT_OUTDATED",
@@ -33,7 +33,7 @@ class AgreementService {
     for (const row of rows) {
       const slug = row.document as DocumentSlug;
       const current = CUSTOMER_DOCUMENTS[slug];
-      if (current && row.version === current.version) {
+      if (current?.version === row.version) {
         accepted.add(slug);
       }
     }

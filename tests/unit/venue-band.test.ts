@@ -31,7 +31,7 @@ describe("venue band", () => {
 
   it("does not check chains without a band", () => {
     expect(() =>
-      assertVenueWithinBand({ ...stock, chain: "testnet" } as Stock, "buy", 1_000_000_000n, 1n),
+      assertVenueWithinBand({ ...stock, chain: "testnet" }, "buy", 1_000_000_000n, 1n),
     ).not.toThrow();
   });
 

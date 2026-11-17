@@ -4,7 +4,7 @@ import { db, withTx } from "@/server/db";
 import type { ChainTransfer, Prisma } from "@/server/prisma";
 import { policy } from "@/backend/config/policy";
 import { assertBetaStage } from "@/backend/integrations/onchain-policy";
-import { chainTarget, publicClientOn, rpcOn, walletClientOn, relayerOn } from "@/backend/services/onchain/chains";
+import { chainObject, chainTarget, publicClientOn, rpcOn, walletClientOn, relayerOn } from "@/backend/services/onchain/chains";
 import { manifestFor, settlementAssetKeyOn, verifyManifest, type NetworkManifest } from "@/backend/services/onchain/manifests";
 import { settlementTokenAbi } from "@/backend/services/onchain/abis";
 import { allocateRelayerNonce, relayerLockKey } from "@/backend/services/execution/nonce";
@@ -44,7 +44,7 @@ async function perform(
       const data = mint
         ? encodeFunctionData({ abi: settlementTokenAbi, functionName: "managedMint", args: [keccak256(toHex(t.key)), t.toAddress as Address, fromDbRaw(t.amount)] })
         : encodeFunctionData({ abi: settlementTokenAbi, functionName: "managedTransfer", args: [keccak256(toHex(t.key)), t.fromAddress as Address, t.toAddress as Address, fromDbRaw(t.amount)] });
-      const signedTx = await walletClientOn(chainId).signTransaction({ to: settlement, data, nonce, gas: 200_000n, gasPrice });
+      const signedTx = await walletClientOn(chainId).signTransaction({ account: relayerOn(chainId), chain: chainObject(chainId), to: settlement, data, nonce, gas: 200_000n, gasPrice });
       const input: Prisma.LocalChainTransferCreateInput = { key: t.key, deploymentId: manifest.deploymentId, requestHash, nonce, txHash: keccak256(signedTx), signedTx };
       return tx.localChainTransfer.create({ data: input });
     });
