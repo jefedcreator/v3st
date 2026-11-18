@@ -46,6 +46,8 @@ mainnet transactions, real BVN or real SMS ever happen in this environment.
 - `POST /api/v1/ops/orders/[id]/refund` — refunds a held/awaiting deposit through the provider.
 - `POST /api/v1/ops/transfers/[id]/approve` — one operator approval; a transfer at or above the
   quorum threshold needs two distinct operators before it is submitted on-chain.
+- `GET /api/v1/ops/waitlist?page=&size=` — the landing page's beta waitlist, newest first, with
+  `{ email, source, privacy_version, created_at }` rows (see [docs/api/waitlist.md](../api/waitlist.md)).
 
 ## Procedures
 
@@ -61,6 +63,9 @@ mainnet transactions, real BVN or real SMS ever happen in this environment.
   recorded in the transition audit).
 - **Quorum approval:** transfers at or above `policy.treasury.quorumThresholdMicroUsdc` (25,000
   USDC) sit in `awaiting_approval`; two operators call `POST /api/v1/ops/transfers/<id>/approve`.
+- **Invite waitlist testers:** export the list with `GET /api/v1/ops/waitlist`, then add each
+  invited email to `PRIVY_BETA_ALLOWLIST` so it can sign in during the beta. Nothing is emailed
+  automatically — the operator sends invites manually, and the waitlist only stores addresses.
 
 ## Recovery
 

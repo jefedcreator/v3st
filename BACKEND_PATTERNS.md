@@ -253,7 +253,7 @@ Every exported handler must be wrapped with `withMiddleware`. It:
 
 1. Resolves path params from Next.js `context.params` into `request.parsedParams` (awaited — Next 15 params are a Promise)
 2. Parses the query string into `request.parsedQuery`
-3. Reads the body **once as bytes** and enforces `maxBodyBytes` (default 65 536) on both the declared `Content-Length` and the actual length — over the cap is `413 PAYLOAD_TOO_LARGE`. Then, per `options.bodyMode` (default `'json'`): `'json'` parses to `request.parsedBody` (unparseable is `400 MALFORMED_JSON`), `'raw'` sets `request.rawBody`, `'none'` skips the body
+3. Reads the body **once as bytes** and enforces `maxBodyBytes` (default 65 536) on both the declared `Content-Length` and the actual length — over the cap is `413 PAYLOAD_TOO_LARGE`. Then, per `options.bodyMode` (default `'json'`): `'json'` parses to `request.parsedBody` (unparseable is `400 MALFORMED_JSON`), `'raw'` sets `request.rawBody`, `'none'` skips the body, `'form'` accepts JSON or `application/x-www-form-urlencoded` (see below)
 4. Runs each middleware function in sequence; short-circuits on the first `{ next: false }` response
 5. Calls the handler
 6. On any error returns an `ApiErrorResponse` (`{ status, message, code, data: null }`); `HttpException`s keep their status/message/code, anything else becomes `500 INTERNAL` with the public message `Internal server error`. `reportError` (Sentry) is called only for status ≥ 500 and middleware crashes
@@ -264,7 +264,7 @@ Every exported handler must be wrapped with `withMiddleware`. It:
 export const withMiddleware = <B = null, P = null, Q = null>(
   handler: (request: AuthRequest<B, P, Q>, context: { params: P | undefined }) => Promise<Response>,
   middlewares: MiddlewareFunction<B, P, Q>[],
-  options?: { bodyMode?: 'json' | 'raw' | 'none'; maxBodyBytes?: number; audience?: 'internal' | 'customer' }
+  options?: { bodyMode?: 'json' | 'raw' | 'none' | 'form'; maxBodyBytes?: number; audience?: 'internal' | 'customer'; formRedirect?: { path: string; successStatus: string } }
 ) => { /* ... */ };
 ```
 
