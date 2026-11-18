@@ -168,6 +168,7 @@ export const withMiddleware = <B = null, P = null, Q = null>(
               throw new BadRequestException("Malformed JSON body", "MALFORMED_JSON");
             }
           } else if (contentType === "application/x-www-form-urlencoded") {
+            request.formEncoded = true;
             const text = new TextDecoder().decode(bytes);
             const params = new URLSearchParams(text);
             const record: Record<string, string> = {};
@@ -178,7 +179,6 @@ export const withMiddleware = <B = null, P = null, Q = null>(
               record[key] = value;
             }
             request.parsedBody = record;
-            request.formEncoded = true;
           } else {
             throw new BadRequestException("Unsupported content type", "BAD_REQUEST");
           }

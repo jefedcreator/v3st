@@ -37,7 +37,7 @@ test("shows the API message for an invalid email", async ({ page }) => {
     }),
   );
   await page.goto("/");
-  await page.locator("#hero-email").fill("not-an-email");
+  await page.locator("#hero-email").fill("a@b");
   await page.locator('form:has(#hero-email) button[type="submit"]').click();
   const live = page.locator("#hero-email-status");
   await expect(live).toHaveText("Enter a valid email address.");

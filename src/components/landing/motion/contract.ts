@@ -150,7 +150,8 @@ export function parallaxOffset(input: {
 }): number {
   const range = input.viewportHeight / 2 + input.sectionHeight / 2;
   const raw = (-(input.sectionCenterY - input.viewportHeight / 2) / range) * PARALLAX_PX;
-  return Math.max(-PARALLAX_PX, Math.min(PARALLAX_PX, raw));
+  const clamped = Math.max(-PARALLAX_PX, Math.min(PARALLAX_PX, raw));
+  return clamped === 0 ? 0 : clamped;
 }
 
 export const CURSOR = {

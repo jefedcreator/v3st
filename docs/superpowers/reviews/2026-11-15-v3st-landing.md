@@ -1,3 +1,5 @@
+> **Superseded (2026-11-18):** replaced by the [2026-11-17 landing redesign spec](../specs/2026-11-17-v3st-landing-redesign-design.md), its [plan](../plans/2026-11-18-v3st-landing-redesign.md) and its [review](../reviews/2026-11-18-v3st-landing-redesign.md).
+
 # V3ST landing implementation review
 
 Implementation began 2026-11-15 on `codex/implement-v3st-landing` from the clean `codex/v3st-landing` planning branch.

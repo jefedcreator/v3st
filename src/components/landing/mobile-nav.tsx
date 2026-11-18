@@ -52,11 +52,11 @@ export function MobileNav(): React.JSX.Element {
       <noscript>
         <nav className="nojs-nav" aria-label="Sections">
           {NAV_LINKS.map((link) => (
-            <a key={link.href} href={link.href}>
+            <Link key={link.href} href={link.href}>
               {link.label}
-            </a>
+            </Link>
           ))}
-          <a href="/#join">Join the waitlist</a>
+          <Link href="/#join">Join the waitlist</Link>
         </nav>
       </noscript>
     </div>

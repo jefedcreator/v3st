@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import * as React from "react";
+
 import Image from "next/image";
 
 import type { BuiltWithBrand } from "./brand-catalogue";

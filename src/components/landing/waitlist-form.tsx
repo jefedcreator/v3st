@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import Link from "next/link";
+
 import { Button } from "@/primitives/button";
 import type { WaitlistSource } from "@/types/landing";
 import { cn } from "@/utils/cn";
@@ -105,7 +107,7 @@ export function WaitlistForm(props: { source: WaitlistSource; inputId: string })
       </p>
       <p className="waitlist-microcopy">
         Beta · test money only. We&apos;ll only use your email to invite you.{" "}
-        <a href="/legal/privacy">Privacy</a>
+        <Link href="/legal/privacy">Privacy</Link>
       </p>
     </div>
   );

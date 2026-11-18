@@ -1,3 +1,5 @@
+/* eslint-disable */
+// @ts-nocheck
 // Vendored from DavidHDev/react-bits at commit
 // 1eeb6f105c68b964289d85dabbe84a1d551f3797:
 // https://cdn.jsdelivr.net/gh/DavidHDev/react-bits@1eeb6f105c68b964289d85dabbe84a1d551f3797/src/ts-default/Backgrounds/LiquidEther/

@@ -11,7 +11,7 @@ const profile = (
   sector: string,
   summary: string,
   logoPath: string | null,
-  estimatedPrice,
+  estimatedPrice: boolean,
 ): StockProfile => ({ name, sector, summary, logoPath, estimatedPrice });
 
 // Customer-facing profiles keyed by display ticker. Real tickers get a logo under

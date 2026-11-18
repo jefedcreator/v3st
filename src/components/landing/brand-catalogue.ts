@@ -19,7 +19,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "yellow-card",
     name: "Yellow Card",
-    src: "//brands/yellow-card.svg",
+    src: "/brands/yellow-card.svg",
     width: 2977,
     height: 680,
     symbolOnly: false,
@@ -29,7 +29,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "paycrest",
     name: "Paycrest",
-    src: "//brands/paycrest.svg",
+    src: "/brands/paycrest.svg",
     width: 135,
     height: 28,
     symbolOnly: false,
@@ -39,7 +39,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "privy",
     name: "Privy",
-    src: "//brands/privy.svg",
+    src: "/brands/privy.svg",
     width: 219,
     height: 24,
     symbolOnly: false,
@@ -49,7 +49,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "coinbase",
     name: "Coinbase",
-    src: "//brands/coinbase.svg",
+    src: "/brands/coinbase.svg",
     width: 1102,
     height: 197,
     symbolOnly: false,
@@ -59,7 +59,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "base",
     name: "Base",
-    src: "//brands/base.svg",
+    src: "/brands/base.svg",
     width: 1280,
     height: 324,
     symbolOnly: false,
@@ -69,7 +69,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "circle-usdc",
     name: "Circle (USDC)",
-    src: "//brands/circle-usdc.svg",
+    src: "/brands/circle-usdc.svg",
     width: 1068,
     height: 309,
     symbolOnly: false,
@@ -79,7 +79,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "hydrex",
     name: "Hydrex",
-    src: "//brands/hydrex.svg",
+    src: "/brands/hydrex.svg",
     width: 210,
     height: 65,
     symbolOnly: false,
@@ -89,7 +89,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "o1-exchange",
     name: "o1 Exchange",
-    src: "//brands/o1-exchange.svg",
+    src: "/brands/o1-exchange.svg",
     width: 2400,
     height: 1000,
     symbolOnly: false,
@@ -99,7 +99,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "bankr",
     name: "Bankr",
-    src: "//brands/bankr.svg",
+    src: "/brands/bankr.svg",
     width: 150,
     height: 150,
     symbolOnly: true,
@@ -109,7 +109,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "stonks-exchange",
     name: "Stonks Exchange",
-    src: "//brands/stonks-exchange.png",
+    src: "/brands/stonks-exchange.png",
     width: 128,
     height: 128,
     symbolOnly: true,
@@ -119,7 +119,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "basestonk",
     name: "BaseStonk",
-    src: "//brands/basestonk.png",
+    src: "/brands/basestonk.png",
     width: 256,
     height: 256,
     symbolOnly: true,
@@ -129,7 +129,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
   {
     id: "feel-cash",
     name: "Feel.cash",
-    src: "//brands/feel-cash.svg",
+    src: "/brands/feel-cash.svg",
     width: 145,
     height: 225,
     symbolOnly: true,

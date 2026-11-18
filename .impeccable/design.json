@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "builtOn": "2026-11-18",
+  "world": "v3st-landing-redesign",
+  "authority": {
+    "spec": "docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md",
+    "plan": "docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md",
+    "review": "docs/superpowers/reviews/2026-11-18-v3st-landing-redesign.md",
+    "surfaceBrief": ".impeccable/surfaces/src-app-marketing-page-tsx.md"
+  },
+  "theme": {
+    "mode": "dark-only",
+    "tokens": {
+      "void": "#020604",
+      "inset": "#050B08",
+      "surface": "#08100C",
+      "surface-raised": "#0C1712",
+      "stroke": "#15211B",
+      "control-border": "#5A6F62",
+      "ink": "#E3EBE6",
+      "heading": "#FFFFFF",
+      "muted-foreground": "#93A69B",
+      "subtle": "#7F9187",
+      "signal": "#00804D",
+      "signal-hover": "#009459",
+      "gain": "#3DDC97",
+      "loss": "#FF6B5A"
+    },
+    "fluidPalette": ["#0D6A3D", "#008A52", "#3DDC97"],
+    "font": "Bricolage Grotesque via next/font, latin-ext subset, weight 300 display"
+  },
+  "layout": {
+    "contentWidth": 1200,
+    "gutter": 24,
+    "sectionPadding": { "desktop": 112, "mobile": 72 },
+    "builtWithPadding": { "desktop": 96, "mobile": 64 },
+    "radii": { "pill": 999, "card": 28, "tickerRow": 16 },
+    "depth": "hairline strokes + signal glow 0 0 24px at 26% on price rows only",
+    "layers": { "content": 1, "header": 20, "cursor": 30, "skip": 40, "sheetOverlay": 50, "sheet": 51 }
+  },
+  "routes": {
+    "/": {
+      "render": "static, revalidate 300",
+      "firstLoadJS_kB": 134,
+      "sections": ["hero", "stocks", "built-with", "earn", "how-it-works", "safeguards", "faq", "join"]
+    },
+    "/legal/[slug]": { "render": "static, five documents from CUSTOMER_DOCUMENTS" },
+    "/waitlist": { "render": "dynamic, noindex, status copy + form" }
+  },
+  "motion": {
+    "contract": "src/components/landing/motion/contract.ts",
+    "hero": {
+      "track": "160vh",
+      "stage": "sticky 100vh",
+      "overlap": "-45vh",
+      "fitClearancePx": 190,
+      "introMs": {
+        "background": [0, 900],
+        "heading": [200, 900],
+        "copy": [480, 1180],
+        "actions": [760, 1460],
+        "rail": [1040, 1740]
+      },
+      "navCue": { "fromMs": 2120, "spanMs": 900 },
+      "handover": {
+        "actions": [0, 0.4],
+        "rail": [0, 0.36],
+        "copy": [0.18, 0.66],
+        "heading": [0.4, 1],
+        "background": [0.45, 1]
+      }
+    },
+    "ticker": { "secondsPerRow": 4.5, "viewportRem": { "base": 22, "at640": 26 }, "mask": "transparent, opaque 12%-88%" },
+    "counter": { "durationMs": 800, "threshold": 0.35, "easing": "easeOutCubic" },
+    "diagram": { "enterMs": 420, "staggerMs": 60, "autoplayDelayMs": 1080, "stepMs": 3600, "floatSeconds": 8 },
+    "parallaxPx": 70,
+    "cursor": { "smoothing": 0.2, "fadeMs": 200, "scaleMs": 110 },
+    "sheet": { "openMs": 260, "closeMs": 170 },
+    "fluid": { "lazy": true, "afterFrames": 2, "dprCap": 1.5 }
+  },
+  "fallbacks": [
+    "server HTML fully visible; no blank intro replay on deep links or restored scroll",
+    "no-JS: native waitlist POST with 303 to /waitlist?status=, native details FAQ, noscript nav",
+    "reduced motion: ordinary flow, no fluid/loops/parallax/follower, final counters",
+    "no WebGL / saveData / context loss: static hero glow artwork",
+    "short viewport: ordinary flow instead of cropping",
+    "focus-within forces hero group opacity 1; dim groups take no pointer events",
+    "pause control stops all self-running loops, resumes from paused frame, memory only"
+  ],
+  "assets": {
+    "brands": "public/brands/ + sources.json (12 official marks, treatments, beta status, hashes)",
+    "stocks": "public/stocks/ + sources.json (8 marks)",
+    "art": "public/art/ + sources.json (6 original AVIF+WebP rasters, aria-hidden)",
+    "icon": "/icon.svg",
+    "social": "/opengraph-image.png"
+  },
+  "reviewArtifacts": ".impeccable/review/*.png"
+}

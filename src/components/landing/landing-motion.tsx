@@ -5,7 +5,7 @@ import * as React from "react";
 type LandingMotionContextValue = {
   paused: boolean;
   reducedMotion: boolean;
-  setPaused(value: boolean): void;
+  setPaused: (value: boolean) => void;
 };
 
 const LandingMotionContext = React.createContext<LandingMotionContextValue | null>(null);

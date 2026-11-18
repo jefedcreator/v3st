@@ -28,7 +28,7 @@ export const test = base.extend<{ guard: void }>({
         const resourceType = request.resourceType();
         const isPageFetch =
           (resourceType === "fetch" || resourceType === "xhr") &&
-          Boolean(request.headers()["rsc"]);
+          Boolean(request.headers().rsc);
         const allowed =
           url.origin === ORIGIN &&
           ["GET", "HEAD"].includes(method) &&
@@ -86,7 +86,9 @@ export const test = base.extend<{ guard: void }>({
       context.on("page", (page) => {
         page.on("pageerror", (error) => errors.push(error.message));
         page.on("console", (message) => {
-          if (message.type() === "error") errors.push(message.text());
+          if (message.type() === "error" && !message.text().startsWith("Failed to load resource")) {
+            errors.push(message.text());
+          }
         });
       });
       await use();

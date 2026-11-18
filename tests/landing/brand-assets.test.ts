@@ -55,7 +55,7 @@ function shippedFiles(): string[] {
 }
 
 function entryFor(file: string): ManifestEntry {
-  const entry = allEntries.find((e) => e.src === `/${file}`);
+  const entry = allEntries.find((e) => e.src === `/${file.replace(/^public\//, "")}`);
   if (!entry) throw new Error(`no manifest entry for ${file}`);
   return entry;
 }

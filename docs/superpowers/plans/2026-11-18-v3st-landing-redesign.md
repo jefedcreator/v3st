@@ -132,19 +132,19 @@ Outside the landing directory:
 
 ## Task checklist
 
-- [ ] Task 1 — Foundation and clean slate
-- [ ] Task 2 — Logos, wordmark and brand assets
-- [ ] Task 3 — Public beta ticker read
-- [ ] Task 4 — Rate limiting, form bodies and waitlist data
-- [ ] Task 5 — Waitlist route, operator export and privacy note
-- [ ] Task 6 — Marketing layout, header, footer and legal pages
-- [ ] Task 7 — Waitlist form and result page
-- [ ] Task 8 — Home page sections
-- [ ] Task 9 — Motion contract and hero choreography
-- [ ] Task 10 — Fluid background
-- [ ] Task 11 — Section motion and the frontend guide
-- [ ] Task 12 — Browser test suite
-- [ ] Task 13 — Final verification, rendered review and documentation
+- [x] Task 1 — Foundation and clean slate
+- [x] Task 2 — Logos, wordmark and brand assets
+- [x] Task 3 — Public beta ticker read
+- [x] Task 4 — Rate limiting, form bodies and waitlist data
+- [x] Task 5 — Waitlist route, operator export and privacy note
+- [x] Task 6 — Marketing layout, header, footer and legal pages
+- [x] Task 7 — Waitlist form and result page
+- [x] Task 8 — Home page sections
+- [x] Task 9 — Motion contract and hero choreography
+- [x] Task 10 — Fluid background
+- [x] Task 11 — Section motion and the frontend guide
+- [x] Task 12 — Browser test suite
+- [x] Task 13 — Final verification, rendered review and documentation
 
 ---
 

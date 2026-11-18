@@ -63,7 +63,7 @@ test("anchors and the skip link reach their sections", async ({ page }) => {
   for (const link of NAV_LINKS) {
     await page.locator(`.desktop-nav a[href="${link.href}"]`).click();
     const anchor = link.href.replace(/^\//, "");
-    const heading = page.locator(`${anchor} h2`).first();
+    const heading = page.locator(anchor).first();
     await expect
       .poll(
         async () => {
@@ -73,9 +73,15 @@ test("anchors and the skip link reach their sections", async ({ page }) => {
         { timeout: 8_000 },
       )
       .toBeGreaterThanOrEqual(0);
-    const box = await heading.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.y).toBeLessThanOrEqual(120);
+    await expect
+      .poll(
+        async () => {
+          const box = await heading.boundingBox();
+          return box ? box.y : -1;
+        },
+        { timeout: 8_000 },
+      )
+      .toBeLessThanOrEqual(120);
   }
   await page.goto("/");
   await page.keyboard.press("Tab");
@@ -109,7 +115,7 @@ test("mobile sheet traps focus, closes on Escape and restores focus", async ({ p
 test("ticker falls back to names when prices are unavailable", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  const rows = page.locator(".ticker-row");
+  const rows = page.locator(".ticker-list:not(.ticker-duplicate) .ticker-row");
   await expect(rows).toHaveCount(8);
   for (const row of await rows.all()) {
     expect(await row.textContent()).not.toContain("₦");
@@ -124,6 +130,11 @@ test("built-with row shows all 12 marks in order with valid dimensions", async (
   await page.goto("/");
   const items = page.locator("#built-with ul li");
   await expect(items).toHaveCount(12);
+  await page.waitForFunction(() =>
+    Array.from(document.querySelectorAll("#built-with img")).every(
+      (img) => img.complete && img.naturalWidth > 0,
+    ),
+  );
   const alts = await page.locator("#built-with img").evaluateAll((imgs) =>
     imgs.map((img) => img.getAttribute("alt")),
   );
@@ -146,8 +157,8 @@ test("legal pages render each document and unknown slugs 404", async ({ page }) 
     expect(response?.status()).toBe(200);
     await expect(page.locator(".legal-page h1")).toHaveText(CUSTOMER_DOCUMENTS[slug as keyof typeof CUSTOMER_DOCUMENTS].title);
   }
-  const missing = await page.goto("/legal/unknown");
-  expect(missing?.status()).toBe(404);
+  const missing = await page.request.get("/legal/unknown");
+  expect(missing.status()).toBe(404);
 });
 
 test("waitlist result page shows status copy", async ({ page }) => {

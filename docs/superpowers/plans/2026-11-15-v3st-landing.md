@@ -1,3 +1,5 @@
+> **Superseded (2026-11-18):** replaced by the [2026-11-17 landing redesign spec](../specs/2026-11-17-v3st-landing-redesign-design.md), its [plan](../plans/2026-11-18-v3st-landing-redesign.md) and its [review](../reviews/2026-11-18-v3st-landing-redesign.md).
+
 # V3ST Landing Page Implementation Plan
 
 > **For agentic workers:** Use Superpowers `subagent-driven-development` or `executing-plans` to implement this plan task by task when installed. If unavailable, execute this self-contained checklist natively and record that fact. Apply Impeccable when available; its relevant decisions are included here so the cloud agent does not depend on another machine's skill paths. This handoff is planning only; a separate cloud agent performs implementation.

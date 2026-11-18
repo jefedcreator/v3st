@@ -148,7 +148,7 @@ export function JourneyDiagram(props: {
               <div
                 className="journey-panel-card"
                 data-active={String(index === active)}
-                style={{ "--journey-index": index }}
+                style={{ "--journey-index": index } as React.CSSProperties}
                 onPointerEnter={() => handleEnter(index)}
                 onPointerLeave={handleLeave}
               >

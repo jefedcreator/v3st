@@ -26,7 +26,7 @@ async function waitOpacity(
 
 async function scrollToProgress(page: import("@playwright/test").Page, progress: number) {
   await page.evaluate((target) => {
-    const track = document.querySelector("[data-hero-track]") as HTMLElement | null;
+    const track = document.querySelector<HTMLElement>("[data-hero-track]");
     if (!track) return;
     const span = track.getBoundingClientRect().height - window.innerHeight;
     window.scrollTo(0, target * span);
@@ -88,8 +88,8 @@ test("header button appears after handover", async ({ page }) => {
     .poll(
       () =>
         page.evaluate(() => {
-          const root = document.querySelector("[data-landing]") as HTMLElement;
-          return Number(getComputedStyle(root).getPropertyValue("--header-cta"));
+          const root = document.querySelector<HTMLElement>("[data-landing]");
+          return root ? Number(getComputedStyle(root).getPropertyValue("--header-cta")) : -1;
         }),
       { timeout: 8_000 },
     )
@@ -213,11 +213,20 @@ test("reduced motion renders ordinary flow", async ({ browser }) => {
 test("WebGL unavailable keeps the static artwork", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await context.addInitScript(() => {
-    const original = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string, ...args: unknown[]) {
-      if (type === "webgl2" || type === "webgl") return null;
-      return (original as (...a: unknown[]) => unknown).call(this, type, ...args);
-    } as typeof HTMLCanvasElement.prototype.getContext;
+    const proto = HTMLCanvasElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, "getContext");
+    const original = descriptor?.value as (
+      this: HTMLCanvasElement,
+      type: string,
+      ...args: unknown[]
+    ) => unknown;
+    Object.defineProperty(proto, "getContext", {
+      ...descriptor,
+      value: function (this: HTMLCanvasElement, type: string, ...args: unknown[]) {
+        if (type === "webgl2" || type === "webgl") return null;
+        return original.call(this, type, ...args);
+      },
+    });
   });
   const page = await context.newPage();
   await page.goto("/");

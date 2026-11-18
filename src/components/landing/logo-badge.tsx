@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import * as React from "react";
+
 import Image from "next/image";
 
 // A 40px circular badge for a profiled stock. When the logo file is missing

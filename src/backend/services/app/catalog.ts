@@ -1,7 +1,8 @@
 import type { Stock } from "@/server/prisma";
 import { db } from "@/server/db";
 import { now } from "@/backend/clock";
-import { STOCK_PROFILES } from "@/backend/content/stock-profiles";
+import { PUBLIC_TICKERS, STOCK_PROFILES } from "@/backend/content/stock-profiles";
+import type { PublicTickerDto, PublicTickerRow } from "@/types/landing";
 import { WAD } from "@/backend/services/stocks/corporate-actions";
 import { stockHistory, type ChartRange } from "@/backend/services/stocks/history";
 import {

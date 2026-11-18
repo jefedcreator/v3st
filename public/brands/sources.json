@@ -2,7 +2,7 @@
   {
     "id": "yellow-card",
     "name": "Yellow Card",
-    "src": "//brands/yellow-card.svg",
+    "src": "/brands/yellow-card.svg",
     "sourcePage": "https://yellowcard.io/press/",
     "assetUrl": "https://images.yellowcard.io/press-kits/Logo-Formats.zip",
     "variant": "One-colour blockout white logo",
@@ -17,22 +17,22 @@
   {
     "id": "paycrest",
     "name": "Paycrest",
-    "src": "//brands/paycrest.svg",
+    "src": "/brands/paycrest.svg",
     "sourcePage": "https://www.paycrest.io/",
     "assetUrl": "https://www.paycrest.io/ (site header wordmark, inline SVG)",
     "variant": "Header wordmark",
     "treatment": "filtered-white",
-    "width": 135,
+    "width": 134,
     "height": 28,
     "contentType": "image/svg+xml",
-    "sha256": "9ad831a5d8ddc0dabb22eafdb01028b96737a50c19adde4cac0927af454df759",
+    "sha256": "494b777fedcc52f72e32d15919ff7dff9100b2e24584559f2eb5a9ce86848e67",
     "retrievedOn": "2026-11-18",
     "betaStatus": "simulated"
   },
   {
     "id": "privy",
     "name": "Privy",
-    "src": "//brands/privy.svg",
+    "src": "/brands/privy.svg",
     "sourcePage": "https://www.privy.io/brand-guidelines",
     "assetUrl": "https://www.privy.io/ (site header wordmark, inline SVG)",
     "variant": "Header wordmark",
@@ -40,14 +40,14 @@
     "width": 219,
     "height": 24,
     "contentType": "image/svg+xml",
-    "sha256": "26af396d3898ec9665000ac172dff0ff868f537d5c7f3f00f319fd2b12c5e04e",
+    "sha256": "a673e8eb690608dcf9a4905b52720474fe2b646c296600401dc5ea7293e9caed",
     "retrievedOn": "2026-11-18",
     "betaStatus": "test-mode"
   },
   {
     "id": "coinbase",
     "name": "Coinbase",
-    "src": "//brands/coinbase.svg",
+    "src": "/brands/coinbase.svg",
     "sourcePage": "https://www.coinbase.com/press",
     "assetUrl": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Coinbase.svg",
     "variant": "Official blue wordmark (press page serves light/dark variants; live page unreachable from build sandbox, mark taken from the Commons copy of the official wordmark)",
@@ -55,14 +55,14 @@
     "width": 1102,
     "height": 197,
     "contentType": "image/svg+xml",
-    "sha256": "5a1b0134559c18a27144a5401323e2b49aaf70547c6fb988837196082aa10a40",
+    "sha256": "91b8666c539f3ab859ceebc16b6a7267cf2baf20db524ff4fbe4d2b96cb9ef88",
     "retrievedOn": "2026-11-18",
     "betaStatus": "live-read"
   },
   {
     "id": "base",
     "name": "Base",
-    "src": "//brands/base.svg",
+    "src": "/brands/base.svg",
     "sourcePage": "https://brand.base.org/",
     "assetUrl": "https://brand.base.org/base-brand.zip",
     "variant": "White logotype lockup",
@@ -70,14 +70,14 @@
     "width": 1280,
     "height": 324,
     "contentType": "image/svg+xml",
-    "sha256": "7c4d10a43d6f92f46830bd399b2474dd0fb0424a9e2dc8dbc4a7b9e69b3169c6",
+    "sha256": "d1c03bc7bb190ec65ae5f765d13fde00e3965b7c452271578f9613c63a34e697",
     "retrievedOn": "2026-11-18",
     "betaStatus": "test-mode"
   },
   {
     "id": "circle-usdc",
     "name": "Circle (USDC)",
-    "src": "//brands/circle-usdc.svg",
+    "src": "/brands/circle-usdc.svg",
     "sourcePage": "https://www.circle.com/pressroom#brandkit",
     "assetUrl": "https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/Pressroom/brandkit/logo-downloads/usdc.zip",
     "variant": "USDC lockup, inverse (for dark grounds)",
@@ -92,7 +92,7 @@
   {
     "id": "hydrex",
     "name": "Hydrex",
-    "src": "//brands/hydrex.svg",
+    "src": "/brands/hydrex.svg",
     "sourcePage": "https://www.hydrex.fi/",
     "assetUrl": "https://www.hydrex.fi/ (site header white wordmark, inline SVG)",
     "variant": "White wordmark lockup",
@@ -107,7 +107,7 @@
   {
     "id": "o1-exchange",
     "name": "o1 Exchange",
-    "src": "//brands/o1-exchange.svg",
+    "src": "/brands/o1-exchange.svg",
     "sourcePage": "https://o1.exchange/brand",
     "assetUrl": "https://o1.exchange/brand/o1-horizontal-white.svg",
     "variant": "White horizontal wordmark",
@@ -122,7 +122,7 @@
   {
     "id": "bankr",
     "name": "Bankr",
-    "src": "//brands/bankr.svg",
+    "src": "/brands/bankr.svg",
     "sourcePage": "https://bankr.bot/",
     "assetUrl": "https://bankr.bot/favicon.svg",
     "variant": "Official symbol (favicon)",
@@ -137,7 +137,7 @@
   {
     "id": "stonks-exchange",
     "name": "Stonks Exchange",
-    "src": "//brands/stonks-exchange.png",
+    "src": "/brands/stonks-exchange.png",
     "sourcePage": "https://www.thestonks.exchange/",
     "assetUrl": "https://www.thestonks.exchange/logo.png",
     "variant": "Site logo",
@@ -152,7 +152,7 @@
   {
     "id": "basestonk",
     "name": "BaseStonk",
-    "src": "//brands/basestonk.png",
+    "src": "/brands/basestonk.png",
     "sourcePage": "https://basestonk.io/",
     "assetUrl": "https://basestonk.io/app-icon.png",
     "variant": "App icon",
@@ -167,7 +167,7 @@
   {
     "id": "feel-cash",
     "name": "Feel.cash",
-    "src": "//brands/feel-cash.svg",
+    "src": "/brands/feel-cash.svg",
     "sourcePage": "https://feel.cash/launchpad",
     "assetUrl": "https://feel.cash/assets/brand-mstr-I2O5BKTm.svg",
     "variant": "Official symbol (brand mark)",
@@ -175,7 +175,7 @@
     "width": 145,
     "height": 225,
     "contentType": "image/svg+xml",
-    "sha256": "0cfaa62ba8d828e2936cc99f73fe89f442083b881d06d5cde1cc8c4870853250",
+    "sha256": "efb7cd52c634314be3a3b8f70a6e32a6f87ceebffe9d02348e8e5ab666ad8fe3",
     "retrievedOn": "2026-11-18",
     "betaStatus": "simulated"
   }
