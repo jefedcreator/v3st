@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
         YELLOWCARD_MODE: "simulated",
         SIMULATED_IDENTITY_SECRET: "vitest-simulated-identity-secret-0001",
         PAYCREST_SIM_WEBHOOK_SECRET: "paycrest-test-secret",
+        RATE_LIMIT_SECRET: "vitest-rate-limit-secret-00000000000000001",
         NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       },
     },

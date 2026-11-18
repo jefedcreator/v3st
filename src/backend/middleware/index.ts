@@ -45,7 +45,34 @@ function statusToCode(status: number): ErrorCode {
   if (status === 409) return "CONFLICT";
   if (status === 413) return "PAYLOAD_TOO_LARGE";
   if (status === 422) return "VALIDATION_FAILED";
+  if (status === 429) return "RATE_LIMITED";
   return "INTERNAL";
+}
+
+// With formRedirect set, a url-encoded request's every response becomes a 303
+// to `${path}?status=<s>`: the success status on 2xx, otherwise the response's
+// code lowercased (the customer code for the customer audience, else the
+// internal code). JSON requests are unchanged.
+async function redirectForFormResponse(
+  response: Response,
+  redirect: { path: string; successStatus: string },
+  requestId: string,
+): Promise<Response> {
+  let statusParam = redirect.successStatus;
+  if (response.status < 200 || response.status >= 300) {
+    let code: string | undefined;
+    try {
+      const body = (await response.clone().json()) as { code?: unknown } | null;
+      if (body && typeof body.code === "string" && body.code.length > 0) code = body.code;
+    } catch {
+      code = undefined;
+    }
+    statusParam = (code ?? statusToCode(response.status)).toLowerCase();
+  }
+  const location = new URL(`${redirect.path}?status=${statusParam}`, env.NEXT_PUBLIC_APP_URL);
+  const redirected = NextResponse.redirect(location, 303);
+  redirected.headers.set("X-Request-Id", requestId);
+  return redirected;
 }
 
 function errorJson(
@@ -126,6 +153,35 @@ export const withMiddleware = <B = null, P = null, Q = null>(
         }
         if (bodyMode === "raw") {
           request.rawBody = bytes;
+        } else if (bodyMode === "form") {
+          const contentType = (request.headers.get("content-type") ?? "")
+            .split(";")[0]!
+            .trim()
+            .toLowerCase();
+          if (bytes.length === 0) {
+            request.parsedBody = {};
+          } else if (contentType === "application/json") {
+            const text = new TextDecoder().decode(bytes);
+            try {
+              request.parsedBody = JSON.parse(text);
+            } catch {
+              throw new BadRequestException("Malformed JSON body", "MALFORMED_JSON");
+            }
+          } else if (contentType === "application/x-www-form-urlencoded") {
+            const text = new TextDecoder().decode(bytes);
+            const params = new URLSearchParams(text);
+            const record: Record<string, string> = {};
+            for (const [key, value] of params) {
+              if (Object.prototype.hasOwnProperty.call(record, key)) {
+                throw new BadRequestException("Repeated form field", "BAD_REQUEST");
+              }
+              record[key] = value;
+            }
+            request.parsedBody = record;
+            request.formEncoded = true;
+          } else {
+            throw new BadRequestException("Unsupported content type", "BAD_REQUEST");
+          }
         } else if (bytes.length === 0) {
           request.parsedBody = {};
         } else {
@@ -187,8 +243,11 @@ export const withMiddleware = <B = null, P = null, Q = null>(
     const method = request.method;
     const parsed = new URL(request.url);
     const path = `${parsed.pathname}${parsed.search}`;
-    const response = await executeRequest(req, context);
+    let response = await executeRequest(req, context);
     const duration = Date.now() - start;
+    if (options?.formRedirect && request.formEncoded) {
+      response = await redirectForFormResponse(response, options.formRedirect, request.requestId);
+    }
     logRequest(method, path, response.status, duration, redact(request.parsedBody));
     return response;
   };
@@ -386,6 +445,8 @@ export const originMiddleware = async <B, P, Q>(
   }
   return { message: "", statusCode: 200, next: true };
 };
+
+export { clientIp, rateLimitMiddleware } from "./rate-limit";
 
 export type {
   AuthRequest,

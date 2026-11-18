@@ -1389,3 +1389,26 @@ model CustomerOrder {
     @@index([status])
     @@map("customer_orders")
 }
+
+// Beta waitlist sign-ups from the landing page. The email is stored lowercased
+// and unique; no address is stored (rate limiting keeps only a keyed hash).
+model WaitlistEntry {
+    id             String   @id @default(cuid())
+    email          String   @unique
+    source         String
+    privacyVersion String
+    createdAt      DateTime @default(now())
+
+    @@map("waitlist_entries")
+}
+
+// Fixed-window rate-limit buckets. The key is an HMAC of scope and client
+// address, so no raw address is ever persisted.
+model RateLimitBucket {
+    key         String
+    windowStart DateTime
+    count       Int      @default(0)
+
+    @@id([key, windowStart])
+    @@map("rate_limit_buckets")
+}

@@ -75,7 +75,8 @@ export type ErrorCode =
   | "ORDER_NOT_CANCELLABLE"
   | "REFERENCE_STALE"
   | "PRICE_OUT_OF_RANGE"
-  | "INSUFFICIENT_SHARES";
+  | "INSUFFICIENT_SHARES"
+  | "RATE_LIMITED";
 
 export interface ApiResponse<T> {
   status: number;

@@ -31,6 +31,7 @@ export type CustomerErrorCode =
   | "TEMPORARILY_UNAVAILABLE"
   | "CONSENT_ENDED"
   | "ACCOUNT_REVIEW"
+  | "TOO_MANY_TRIES"
   | "SOMETHING_WENT_WRONG";
 
 export const CUSTOMER_ERROR_COPY = {
@@ -110,6 +111,7 @@ export const CUSTOMER_ERROR_COPY = {
   AUTHORIZATION_EXPIRED: { code: "CONSENT_ENDED", message: "This automatic action was turned off. Set it up again to continue." },
   SCREENING_DENIED: { code: "ACCOUNT_REVIEW", message: "We need to check this. Please contact support." },
   TRAVEL_RULE_DATA_MISSING: { code: "ACCOUNT_REVIEW", message: "We need to check this. Please contact support." },
+  RATE_LIMITED: { code: "TOO_MANY_TRIES", message: "Too many tries. Please wait a few minutes and try again." },
   INTERNAL: { code: "SOMETHING_WENT_WRONG", message: "Something went wrong. Please try again." },
 } satisfies Record<ErrorCode, { code: CustomerErrorCode; message: string }>;
 

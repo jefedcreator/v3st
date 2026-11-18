@@ -17,6 +17,8 @@ export const env = createEnv({
     YELLOWCARD_API_SECRET: z.string().optional(),
     SIMULATED_IDENTITY_SECRET: z.string().min(32),
     PAYCREST_SIM_WEBHOOK_SECRET: z.string().min(16).optional(),
+    // HMAC key for the PostgreSQL rate limiter; raw client addresses are never stored.
+    RATE_LIMIT_SECRET: z.string().min(32),
     SENTRY_DSN: z.string().url().optional(),
     TESTNET_RPC_URL: z.string().url().optional(),
     TESTNET_CHAIN_ID: z.coerce.number().int().positive().default(31337),
@@ -72,6 +74,7 @@ export const env = createEnv({
     YELLOWCARD_API_SECRET: process.env.YELLOWCARD_API_SECRET,
     SIMULATED_IDENTITY_SECRET: process.env.SIMULATED_IDENTITY_SECRET,
     PAYCREST_SIM_WEBHOOK_SECRET: process.env.PAYCREST_SIM_WEBHOOK_SECRET,
+    RATE_LIMIT_SECRET: process.env.RATE_LIMIT_SECRET,
     SENTRY_DSN: process.env.SENTRY_DSN,
     TESTNET_RPC_URL: process.env.TESTNET_RPC_URL,
     TESTNET_CHAIN_ID: process.env.TESTNET_CHAIN_ID,

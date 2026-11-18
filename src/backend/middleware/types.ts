@@ -25,6 +25,7 @@ export interface AuthRequest<B = null, P = null, Q = null> extends NextRequest {
   rawBody?: Uint8Array;
   idempotencyKey?: string;
   authTransport?: "cookie" | "bearer";
+  formEncoded?: boolean;
   requestId: string;
 }
 
@@ -37,9 +38,10 @@ export type MiddlewareResponse = {
 };
 
 export type WithMiddlewareOptions = {
-  bodyMode?: "json" | "raw" | "none";
+  bodyMode?: "json" | "raw" | "none" | "form";
   maxBodyBytes?: number;
   audience?: "internal" | "customer";
+  formRedirect?: { path: string; successStatus: string };
 };
 
 export type MiddlewareFunction<B = null, P = null, Q = null> = (

@@ -146,6 +146,7 @@ Internal `ErrorCode`s are mapped to customer codes and copy in `src/backend/serv
 | `TEMPORARILY_UNAVAILABLE` | This is taking longer than usual. Your money is safe. Please try again later. | RAIL_UNAVAILABLE, RATES_UNAVAILABLE, FLOAT_UNAVAILABLE, WALLET_NOT_READY, SELL_FAILED, PROVIDER_UNVERIFIED, SPONSOR_UNAVAILABLE, NETWORK_UNHEALTHY, CHAIN_RESET_DETECTED, RECONCILIATION_BREACH |
 | `CONSENT_ENDED` | This automatic action was turned off. Set it up again to continue. | AUTHORIZATION_REVOKED, AUTHORIZATION_EXPIRED |
 | `ACCOUNT_REVIEW` | We need to check this. Please contact support. | SCREENING_DENIED, TRAVEL_RULE_DATA_MISSING |
+| `TOO_MANY_TRIES` | Too many tries. Please wait a few minutes and try again. | RATE_LIMITED |
 | `SOMETHING_WENT_WRONG` | Something went wrong. Please try again. | INTERNAL |
 
 Validation failures (`CHECK_DETAILS`, 422) carry a field-specific message for the first failing field:

@@ -307,6 +307,16 @@ request type picks only the raw input and validated output fields it consumes.
 Shared auth and transport middleware stay generic across all three channels, so
 composition preserves each route's declared schema types and `null` slots.
 
+### `form` body mode and `formRedirect`
+
+`bodyMode: 'form'` (used by the public waitlist route) accepts `application/json` (parsed exactly like `'json'`) and `application/x-www-form-urlencoded`, which is parsed with `URLSearchParams` into a string record on `request.parsedBody`. A repeated form field, or any other content type, answers `400 BAD_REQUEST`. The parsed form is flagged on `request.formEncoded`.
+
+With `formRedirect: { path, successStatus }` set, every response to a url-encoded request becomes a `303` redirect to `new URL(`${path}?status=<s>`, env.NEXT_PUBLIC_APP_URL)`: `successStatus` on a 2xx, otherwise the response's code lowercased — the customer code when `audience: 'customer'` (e.g. `check_details`, `too_many_tries`), otherwise the internal code. JSON requests keep the normal envelopes. This is what lets a native `<form method="post">` work without JavaScript and land on a readable result page.
+
+### `rateLimitMiddleware`
+
+`rateLimitMiddleware({ scope, limit, windowSeconds })` (in `src/backend/middleware/rate-limit.ts`, re-exported from the middleware index) counts hits in PostgreSQL through `rateLimitService` (`src/backend/services/security/rate-limit.ts`) and answers `{ next: false, statusCode: 429, code: 'RATE_LIMITED' }` over the limit. Buckets are fixed-window rows keyed by `rateLimitKey(scope, clientIp, RATE_LIMIT_SECRET)` — a hex HMAC-SHA256, so no raw address is stored — and each hit deletes buckets older than a day in the same transaction. The client address is the first `x-forwarded-for` hop, else `x-real-ip`, else `"unknown"` (`clientIp()`); this assumes deployment behind a proxy that sets the header. `RATE_LIMIT_SECRET` (min 32 chars) is a required server env var.
+
 ### `idempotencyKeyMiddleware`
 
 Requires an `Idempotency-Key` header matching `^[A-Za-z0-9_-]{8,128}$` — missing is `400 IDEMPOTENCY_KEY_REQUIRED`, malformed is `400 BAD_REQUEST`. The key is attached to `request.idempotencyKey`.

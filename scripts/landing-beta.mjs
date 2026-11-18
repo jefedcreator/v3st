@@ -31,6 +31,7 @@ Object.assign(childEnv, {
   DATABASE_URL: "postgresql://landing:local-only@127.0.0.1:9/landing_unused",
   SIMULATED_IDENTITY_SECRET: "landing-only-simulated-identity-secret-0001",
   PAYCREST_SIM_WEBHOOK_SECRET: "landing-only-paycrest-secret-0001",
+  RATE_LIMIT_SECRET: "landing-only-rate-limit-secret-0000000001",
   SENTRY_DSN: "",
   TESTNET_CHAIN_ID: "31337",
   NEXT_TELEMETRY_DISABLED: "1",
