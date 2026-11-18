@@ -1,0 +1,128 @@
+[
+  {
+    "id": "hero-glow",
+    "name": "Hero fallback glow",
+    "src": "/art/hero-glow.avif",
+    "fallback": "/art/hero-glow.webp",
+    "origin": "Authored for this repo as SVG by the artwork generator script (scratch, not shipped); rendered to PNG with headless Chromium at 2x and encoded with sharp. Original work, no third-party material.",
+    "sourceSvg": "hero-glow.svg (generator output, fluid palette #0D6A3D/#008A52/#00804D/#3DDC97 on transparent)",
+    "width": 1600,
+    "height": 900,
+    "formats": {
+      "avif": {
+        "contentType": "image/avif",
+        "sha256": "49cd0a3af877592497a0547f1005da0f255ad29e58ebc38af3dd721d89061a3c"
+      },
+      "webp": {
+        "contentType": "image/webp",
+        "sha256": "7aba7bd734b5acbc0dc59cbe86331fede89147cdcbff445b94a8a8a35c2264c1"
+      }
+    },
+    "authoredOn": "2026-11-18"
+  },
+  {
+    "id": "journey-panels",
+    "name": "How-it-works isometric panels",
+    "src": "/art/journey-panels.avif",
+    "fallback": "/art/journey-panels.webp",
+    "origin": "Authored for this repo as SVG by the artwork generator script (scratch, not shipped); rendered to PNG with headless Chromium at 2x and encoded with sharp. Original work, no third-party material.",
+    "sourceSvg": "journey-panels.svg (generator output, fluid palette #0D6A3D/#008A52/#00804D/#3DDC97 on transparent)",
+    "width": 1200,
+    "height": 900,
+    "formats": {
+      "avif": {
+        "contentType": "image/avif",
+        "sha256": "7c1222b7a8574506dba64842b515a5622f8517a614e809f40ea2992f2d1febb3"
+      },
+      "webp": {
+        "contentType": "image/webp",
+        "sha256": "bce38c11a262cf59f88efa3f1b79e9d6fa315b8e9c12112c4fa40d4052c6bd04"
+      }
+    },
+    "authoredOn": "2026-11-18"
+  },
+  {
+    "id": "light-beam",
+    "name": "How-it-works diagonal light beam",
+    "src": "/art/light-beam.avif",
+    "fallback": "/art/light-beam.webp",
+    "origin": "Authored for this repo as SVG by the artwork generator script (scratch, not shipped); rendered to PNG with headless Chromium at 2x and encoded with sharp. Original work, no third-party material.",
+    "sourceSvg": "light-beam.svg (generator output, fluid palette #0D6A3D/#008A52/#00804D/#3DDC97 on transparent)",
+    "width": 1600,
+    "height": 900,
+    "formats": {
+      "avif": {
+        "contentType": "image/avif",
+        "sha256": "0c06223dae6dfeab8e7757b8c25d7a082ec0db3b32dc2933eab2921cba1f82d2"
+      },
+      "webp": {
+        "contentType": "image/webp",
+        "sha256": "6f671b9ae183a632bd551236d17129596ae902b23198b8aaa480f4562a6199a1"
+      }
+    },
+    "authoredOn": "2026-11-18"
+  },
+  {
+    "id": "safeguard-streaks",
+    "name": "Safeguards diagonal light streaks",
+    "src": "/art/safeguard-streaks.avif",
+    "fallback": "/art/safeguard-streaks.webp",
+    "origin": "Authored for this repo as SVG by the artwork generator script (scratch, not shipped); rendered to PNG with headless Chromium at 2x and encoded with sharp. Original work, no third-party material.",
+    "sourceSvg": "safeguard-streaks.svg (generator output, fluid palette #0D6A3D/#008A52/#00804D/#3DDC97 on transparent)",
+    "width": 1200,
+    "height": 800,
+    "formats": {
+      "avif": {
+        "contentType": "image/avif",
+        "sha256": "b8ce42a4bfbf6c1aed50dd5fa38f0e60e84db05ac02bbe8a85a2b34e0e46bbb2"
+      },
+      "webp": {
+        "contentType": "image/webp",
+        "sha256": "b9251a4b8cac28cf77ca5807927150d43ca926eadf4aed3baf909565400c4aaa"
+      }
+    },
+    "authoredOn": "2026-11-18"
+  },
+  {
+    "id": "join-beams",
+    "name": "Join panel converging beams",
+    "src": "/art/join-beams.avif",
+    "fallback": "/art/join-beams.webp",
+    "origin": "Authored for this repo as SVG by the artwork generator script (scratch, not shipped); rendered to PNG with headless Chromium at 2x and encoded with sharp. Original work, no third-party material.",
+    "sourceSvg": "join-beams.svg (generator output, fluid palette #0D6A3D/#008A52/#00804D/#3DDC97 on transparent)",
+    "width": 1200,
+    "height": 800,
+    "formats": {
+      "avif": {
+        "contentType": "image/avif",
+        "sha256": "81e73e8af8e6e3360f828fa901fbc02932f2c9d539b8c6b79d18b09703729123"
+      },
+      "webp": {
+        "contentType": "image/webp",
+        "sha256": "6cf25208394f5eba81aef37260a8395731e8e9a6dbbe16b8530c586ad19637df"
+      }
+    },
+    "authoredOn": "2026-11-18"
+  },
+  {
+    "id": "footer-glow",
+    "name": "Footer radial glow",
+    "src": "/art/footer-glow.avif",
+    "fallback": "/art/footer-glow.webp",
+    "origin": "Authored for this repo as SVG by the artwork generator script (scratch, not shipped); rendered to PNG with headless Chromium at 2x and encoded with sharp. Original work, no third-party material.",
+    "sourceSvg": "footer-glow.svg (generator output, fluid palette #0D6A3D/#008A52/#00804D/#3DDC97 on transparent)",
+    "width": 1600,
+    "height": 600,
+    "formats": {
+      "avif": {
+        "contentType": "image/avif",
+        "sha256": "c5f0b1fe2905d34613add2f500e17e5e5018ae544393669247d1f51a580f1479"
+      },
+      "webp": {
+        "contentType": "image/webp",
+        "sha256": "39394732b2ee2d5977fa1145686e3a86ad962e655b9aa0de4a462b7b192f9956"
+      }
+    },
+    "authoredOn": "2026-11-18"
+  }
+]

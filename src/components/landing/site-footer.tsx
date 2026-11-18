@@ -60,7 +60,20 @@ export function SiteFooter(): React.JSX.Element {
           services V3ST is built to work with. V3ST isn&apos;t affiliated with or endorsed by them.
         </p>
         <div className="footer-wordmark-wrap" aria-hidden="true">
-          <div className="footer-glow" />
+          <div className="footer-glow">
+            <picture>
+              <source srcSet="/art/footer-glow.avif" type="image/avif" />
+              <source srcSet="/art/footer-glow.webp" type="image/webp" />
+              <img
+                src="/art/footer-glow.webp"
+                alt=""
+                width={1600}
+                height={600}
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+          </div>
           <Wordmark className="footer-wordmark" />
         </div>
         <p className="footer-copy">© 2026 V3ST</p>
