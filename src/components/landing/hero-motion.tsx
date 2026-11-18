@@ -69,10 +69,13 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
     const computeFit = (): boolean => {
       const content = track.querySelector<HTMLElement>(".hero-inner");
       const rail = track.querySelector<HTMLElement>('[data-hero-group="rail"]');
+      const railHeight = rail?.offsetHeight ?? 0;
+      // The rail sits inside .hero-inner, so don't count it twice.
+      const contentHeight = Math.max(0, (content?.offsetHeight ?? 0) - railHeight);
       return heroFits({
         viewportHeight: window.innerHeight,
-        contentHeight: content?.offsetHeight ?? 0,
-        railHeight: rail?.offsetHeight ?? 0,
+        contentHeight,
+        railHeight,
         reducedMotion: reducedMotionRef.current,
       });
     };
