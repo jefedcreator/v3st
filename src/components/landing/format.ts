@@ -1,6 +1,8 @@
 // Browser-safe exact formatters. Money is BigInt minor units (kobo) as
 // integer strings; no float ever touches a naira amount.
 
+import { counterDecimals } from "./motion/contract";
+
 function parseKobo(kobo: string): bigint {
   if (!/^-?(0|[1-9]\d*)$/.test(kobo)) throw new Error(`invalid kobo amount: ${JSON.stringify(kobo)}`);
   return BigInt(kobo);
@@ -90,13 +92,7 @@ export function counterText(
   suffix: string,
   settled: boolean,
 ): string {
-  const d = settled
-    ? decimals
-    : value >= 100
-      ? decimals
-      : value >= 10
-        ? Math.max(decimals, 1)
-        : Math.max(decimals, 2);
+  const d = settled ? decimals : counterDecimals(value, decimals);
   const fixed = value.toFixed(d);
   const dot = fixed.indexOf(".");
   const int = dot === -1 ? fixed : fixed.slice(0, dot);

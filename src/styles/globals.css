@@ -1109,3 +1109,27 @@
     text-align: left;
   }
 }
+
+/* ---- Hero choreography (Task 9) ---- */
+
+.hero-motion {
+  display: contents;
+}
+[data-hero-group]:focus-within {
+  opacity: 1 !important;
+}
+[data-hero-group][data-hero-dim="true"] {
+  pointer-events: none;
+}
+[data-landing][data-hero-fit="true"] [data-hero-track] {
+  height: 160vh;
+}
+[data-landing][data-hero-fit="true"] [data-hero-track] > .hero {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-height: 100vh;
+}
+[data-landing][data-hero-fit="true"] .landing-after-hero {
+  margin-top: -45vh;
+}
