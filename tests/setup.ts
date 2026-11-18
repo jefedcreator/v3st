@@ -5,8 +5,8 @@ vi.stubGlobal("fetch", () =>
 );
 
 vi.mock("@/backend/observability", () => ({
-  logRequest: () => undefined,
-  reportError: () => undefined,
+  logRequest: vi.fn(),
+  reportError: vi.fn(),
 }));
 
 // The local testnet (one anvil per run, shared by all test files) keeps

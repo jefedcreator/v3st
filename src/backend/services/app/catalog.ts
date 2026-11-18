@@ -83,6 +83,27 @@ class AppCatalogService {
     return Number(((currentKobo - beforeKobo) * 10_000n) / beforeKobo);
   }
 
+  private async priceFields(
+    stock: Stock,
+    rate: Rate | null,
+    at: Date,
+  ): Promise<
+    Pick<AppStockListItemDto, "price_kobo" | "price_status" | "price_as_of" | "change_24h_bps">
+  > {
+    const display = referenceDisplay(stock, at);
+    // A price older than the display window is unknown to the customer: no
+    // number is shown, only "unavailable".
+    const sharePrice = display ? sharePriceMicroUsd(stock) : null;
+    const priceStatus: AppPriceStatus = display ? display.status : "unavailable";
+    return {
+      price_kobo:
+        sharePrice !== null && rate !== null ? toKobo(sharePrice, rate).toString() : null,
+      price_status: priceStatus,
+      price_as_of: display?.asOf.toISOString() ?? null,
+      change_24h_bps: await this.change24hBps(stock, sharePrice, rate, at),
+    };
+  }
+
   private async listItem(
     stock: Stock,
     onWatchlist: boolean,
@@ -91,19 +112,12 @@ class AppCatalogService {
   ): Promise<AppStockListItemDto> {
     const profile = profileOf(stock);
     const display = referenceDisplay(stock, at);
-    // A price older than the display window is unknown to the customer: no
-    // number is shown, only "unavailable".
     const sharePrice = display ? sharePriceMicroUsd(stock) : null;
-    const priceStatus: AppPriceStatus = display ? display.status : "unavailable";
     return {
       ...this.stockRef(stock),
       sector: profile?.sector ?? "Other",
-      price_kobo:
-        sharePrice !== null && rate !== null ? toKobo(sharePrice, rate).toString() : null,
+      ...(await this.priceFields(stock, rate, at)),
       price_usd_micro: sharePrice === null ? null : sharePrice.toString(),
-      price_status: priceStatus,
-      price_as_of: display?.asOf.toISOString() ?? null,
-      change_24h_bps: await this.change24hBps(stock, sharePrice, rate, at),
       trading: this.tradingStatus(stock, at),
       on_watchlist: onWatchlist,
       is_test: true,
@@ -154,6 +168,65 @@ class AppCatalogService {
     return Promise.all(
       stocks.map((stock) => this.listItem(stock, watched.has(stock.id), rate, at)),
     );
+  }
+
+  // The landing page's read-only beta ticker: one row per profiled ticker that
+  // carries a logo, in profile order, never test fixtures. A stock missing from
+  // the catalog keeps its row with null prices rather than being dropped.
+  async publicTicker(at: Date = now()): Promise<PublicTickerDto> {
+    let rate: Rate | null = null;
+    try {
+      rate = (await ratesService.display()).payoutRate;
+    } catch {
+      rate = null;
+    }
+    const rows = await db.stock.findMany({
+      where: {
+        chain: customerChain(),
+        enabled: true,
+        delisted: false,
+        displayTicker: { in: Object.keys(STOCK_PROFILES) },
+      },
+    });
+    const byTicker = new Map(
+      rows.filter((stock) => this.inCatalog(stock)).map((stock) => [stock.displayTicker!, stock]),
+    );
+    const out: PublicTickerRow[] = [];
+    for (const ticker of PUBLIC_TICKERS) {
+      const profile = STOCK_PROFILES[ticker]!;
+      const stock = byTicker.get(ticker);
+      let price_kobo: string | null = null;
+      let price_status: AppPriceStatus = "unavailable";
+      let price_as_of: string | null = null;
+      let change_24h_bps: number | null = null;
+      let line_kobo: string[] = [];
+      if (stock) {
+        const fields = await this.priceFields(stock, rate, at);
+        price_kobo = fields.price_kobo;
+        price_status = fields.price_status;
+        price_as_of = fields.price_as_of;
+        change_24h_bps = fields.change_24h_bps;
+        const chart = await this.chart(stock.id, "1D");
+        if (chart.status === "ok") line_kobo = chart.points.map((point) => point.price_kobo);
+      }
+      out.push({
+        ticker,
+        name: profile.name,
+        sector: profile.sector,
+        logo_path: profile.logoPath ?? "",
+        price_kobo,
+        price_status,
+        price_is_estimate: profile.estimatedPrice,
+        price_as_of,
+        change_24h_bps,
+        line_kobo,
+      });
+    }
+    const asOfValues = out
+      .map((row) => row.price_as_of)
+      .filter((value): value is string => value !== null)
+      .sort();
+    return { rows: out, as_of: asOfValues.at(-1) ?? null };
   }
 
   async get(userId: string, stockId: string): Promise<AppStockDetailDto> {
