@@ -1,4 +1,5 @@
 import { HERO_COUNTERS, HERO_SUBLINE } from "./content";
+import { FluidBackground } from "./fluid/fluid-background";
 import { HeroMotion } from "./hero-motion";
 import { WaitlistForm } from "./waitlist-form";
 
@@ -17,18 +18,7 @@ export function Hero(): React.JSX.Element {
             style={{ opacity: "var(--hero-background, 1)" }}
             aria-hidden="true"
           >
-            <picture>
-              <source srcSet="/art/hero-glow.avif" type="image/avif" />
-              <source srcSet="/art/hero-glow.webp" type="image/webp" />
-              <img
-                src="/art/hero-glow.webp"
-                alt=""
-                width={1600}
-                height={900}
-                fetchPriority="high"
-                decoding="async"
-              />
-            </picture>
+            <FluidBackground />
           </div>
           <div className="shell hero-inner">
             <div data-hero-group="heading" style={{ opacity: "var(--hero-heading, 1)" }}>

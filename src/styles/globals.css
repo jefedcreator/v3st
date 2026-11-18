@@ -1133,3 +1133,24 @@
 [data-landing][data-hero-fit="true"] .landing-after-hero {
   margin-top: -45vh;
 }
+
+/* ---- Fluid background (Task 10) ---- */
+
+.fluid-background {
+  position: absolute;
+  inset: 0;
+}
+.fluid-background .fluid-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fluid-canvas {
+  position: absolute;
+  inset: 0;
+}
+.fluid-canvas .liquid-ether-container {
+  position: absolute;
+  inset: 0;
+}
