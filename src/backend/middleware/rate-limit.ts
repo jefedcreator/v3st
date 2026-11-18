@@ -1,6 +1,6 @@
 import { rateLimitService } from "@/backend/services/security/rate-limit";
 
-import type { MiddlewareFunction } from "./types";
+import type { AuthRequest, MiddlewareResponse } from "./types";
 
 // The client address is the first x-forwarded-for hop, else x-real-ip, else a
 // shared "unknown" bucket. This assumes deployment behind a proxy that sets the
@@ -20,8 +20,8 @@ export function rateLimitMiddleware(options: {
   scope: string;
   limit: number;
   windowSeconds: number;
-}): MiddlewareFunction {
-  return async (request) => {
+}): <B, P, Q>(request: AuthRequest<B, P, Q>) => Promise<MiddlewareResponse> {
+  return async <B, P, Q>(request: AuthRequest<B, P, Q>): Promise<MiddlewareResponse> => {
     const result = await rateLimitService.hit({
       scope: options.scope,
       clientIp: clientIp(request.headers),

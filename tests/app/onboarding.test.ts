@@ -186,7 +186,7 @@ describe("customer onboarding, test identities and agreements", () => {
       expect(res.status).toBe(200);
       const body = (res.json as { data: { body: string; version: string; slug: string } }).data;
       expect(body.slug).toBe(doc.slug);
-      expect(body.version).toBe("2026-11-17");
+      expect(body.version).toBe(doc.slug === "privacy" ? "2026-11-18" : "2026-11-17");
       for (const phrase of REQUIRED_PHRASES[doc.slug]) {
         expect(body.body.toLowerCase()).toContain(phrase.toLowerCase());
       }

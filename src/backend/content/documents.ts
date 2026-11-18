@@ -8,6 +8,9 @@ export type CustomerDocument = {
 };
 
 const VERSION = "2026-11-17";
+// The privacy document changed on its own date (waitlist note); only
+// INVEST_DOCUMENTS are required at onboarding, so no tester re-accepts anything.
+const PRIVACY_VERSION = "2026-11-18";
 
 export const CUSTOMER_DOCUMENTS: Record<DocumentSlug, CustomerDocument> = {
   terms: {
@@ -65,10 +68,12 @@ You can withdraw at any time and you get back shares and cash in whatever mix th
   privacy: {
     slug: "privacy",
     title: "Privacy",
-    version: VERSION,
+    version: PRIVACY_VERSION,
     body: `# Privacy
 
 We use your email address to sign you in and to tell you about your account. We use your bank account details to send withdrawals to the account you added.
+
+If you join the waitlist, we use your email address only to invite you to the beta.
 
 We do not store your phone number, and we do not sell your personal data to anyone. In the beta nothing is shared outside the app.
 `,
