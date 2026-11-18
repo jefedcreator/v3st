@@ -1,3 +1,4 @@
+import { CursorFollower } from "@/components/landing/cursor-follower";
 import { LandingMotionProvider } from "@/components/landing/landing-motion";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteHeader } from "@/components/landing/site-header";
@@ -15,6 +16,7 @@ export default function MarketingLayout({
         {children}
       </main>
       <SiteFooter />
+      <CursorFollower />
     </LandingMotionProvider>
   );
 }

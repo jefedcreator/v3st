@@ -4,6 +4,7 @@ import type { PublicTickerDto } from "@/types/landing";
 
 import { STOCKS_BODY } from "./content";
 import { formatPriceCaption } from "./format";
+import { PriceTicker } from "./price-ticker";
 import { TickerRow } from "./ticker-row";
 
 // The "Trade the market" split: copy on the left, the vertical beta ticker on
@@ -21,13 +22,11 @@ export function StocksSection(props: { ticker: PublicTickerDto }): React.JSX.Ele
           </a>
         </div>
         <div className="stocks-ticker">
-          <div className="ticker-viewport">
-            <ul aria-label="Beta prices" className="ticker-list">
-              {props.ticker.rows.map((row) => (
-                <TickerRow key={row.ticker} row={row} />
-              ))}
-            </ul>
-          </div>
+          <PriceTicker rowCount={props.ticker.rows.length}>
+            {props.ticker.rows.map((row) => (
+              <TickerRow key={row.ticker} row={row} />
+            ))}
+          </PriceTicker>
           <p className="ticker-caption">
             {formatPriceCaption(props.ticker.as_of, new Date())}
           </p>

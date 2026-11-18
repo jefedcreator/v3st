@@ -1,5 +1,6 @@
 import { BUILT_WITH } from "./brand-catalogue";
 import { BrandMark } from "./brand-mark";
+import { Counter } from "./counter";
 import { SAFEGUARD_STATS } from "./content";
 
 const baseBrand = BUILT_WITH.find((brand) => brand.id === "base")!;
@@ -39,8 +40,14 @@ export function Safeguards(): React.JSX.Element {
                   />
                 </picture>
               </div>
-              <span data-figure className="type-figure safeguard-figure">
-                {stat.finalText}
+              <span className="type-figure safeguard-figure">
+                <Counter
+                  value={stat.value}
+                  decimals={stat.decimals}
+                  prefix={stat.prefix}
+                  suffix={stat.suffix}
+                  finalText={stat.finalText}
+                />
               </span>
               <span className="type-label safeguard-label">{stat.label}</span>
               {stat.line ? <p className="safeguard-line">{stat.line}</p> : null}

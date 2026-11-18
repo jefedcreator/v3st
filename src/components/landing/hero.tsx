@@ -1,4 +1,5 @@
 import { HERO_COUNTERS, HERO_SUBLINE } from "./content";
+import { Counter } from "./counter";
 import { FluidBackground } from "./fluid/fluid-background";
 import { HeroMotion } from "./hero-motion";
 import { WaitlistForm } from "./waitlist-form";
@@ -40,8 +41,15 @@ export function Hero(): React.JSX.Element {
               <ul className="hero-counters">
                 {HERO_COUNTERS.map((counter) => (
                   <li key={counter.label} className="hero-counter">
-                    <span data-figure className="type-figure hero-figure">
-                      {counter.finalText}
+                    <span className="type-figure hero-figure">
+                      <Counter
+                        value={counter.value}
+                        decimals={counter.decimals}
+                        prefix={counter.prefix}
+                        suffix={counter.suffix}
+                        finalText={counter.finalText}
+                        startAfterMs={1040}
+                      />
                     </span>
                     <span className="type-label hero-counter-label">{counter.label}</span>
                   </li>

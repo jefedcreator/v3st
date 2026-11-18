@@ -7,6 +7,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { JOURNEY_STAGES } from "./content";
+import { BeamParallax, JourneyDiagram } from "./journey-diagram";
 
 const STAGE_ICONS = {
   Bank,
@@ -17,11 +18,12 @@ const STAGE_ICONS = {
 } as const;
 
 // The centred "How it works" section. The ordered list is the authoritative
-// content; the panels and the light beam are aria-hidden decoration.
+// content; the diagram and the light beam are aria-hidden decoration, and the
+// beam is the only parallax target.
 export function HowItWorks(): React.JSX.Element {
   return (
     <section id="how-it-works" className="landing-section how-it-works">
-      <div className="how-beam" aria-hidden="true">
+      <BeamParallax className="how-beam" aria-hidden="true">
         <picture>
           <source srcSet="/art/light-beam.avif" type="image/avif" />
           <source srcSet="/art/light-beam.webp" type="image/webp" />
@@ -34,26 +36,15 @@ export function HowItWorks(): React.JSX.Element {
             decoding="async"
           />
         </picture>
-      </div>
+      </BeamParallax>
       <div className="shell how-inner">
         <h2 className="type-h2 how-heading">How V3ST works.</h2>
         <p className="type-lead how-lead">
           Your naira goes in by bank transfer and comes back the same way. Everything in between
           is handled for you.
         </p>
-        <div className="how-diagram" aria-hidden="true">
-          <picture>
-            <source srcSet="/art/journey-panels.avif" type="image/avif" />
-            <source srcSet="/art/journey-panels.webp" type="image/webp" />
-            <img
-              src="/art/journey-panels.webp"
-              alt=""
-              width={1200}
-              height={900}
-              loading="lazy"
-              decoding="async"
-            />
-          </picture>
+        <div className="how-diagram">
+          <JourneyDiagram stages={JOURNEY_STAGES} />
         </div>
         <ol className="journey-list">
           {JOURNEY_STAGES.map((stage) => {
