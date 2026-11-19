@@ -89,7 +89,7 @@ It is phone-first. Every page does one job, and short jobs are modals. Home is t
 | --- | --- |
 | [`CLAUDE.md`](CLAUDE.md) | Code style, a commit per task, final-only verification, no Claude co-author lines |
 | The spec | Operator decisions, the page and modal rule, routes, modals, states, pinned copy, the app's visual system |
-| The plan | Twenty-one tasks with files, interfaces and the tests to write; Global Constraints and Review Focus |
+| The plan | Twenty-one tasks with files, interfaces and the tests to write; Global Constraints and Review Focus. The build is complete and committed on `feat/customer-app-pages` |
 | [`.impeccable/surfaces/src-app-app-layout-tsx.md`](.impeccable/surfaces/src-app-app-layout-tsx.md) | The app's direction contract (Impeccable surface brief) |
 | [`docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.png`](docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.png) (source: the `.html` beside it) | The chosen Home sketch at 390×844, rendered with the real font, and the finish review's critique reference. The spec wins where they differ: the sketch shows a 24-hour percentage and a payout bank that the API doesn't return |
 | [`docs/api/customer-app.md`](docs/api/customer-app.md), [`src/types/app.ts`](src/types/app.ts) | The customer API contract, the vocabulary rule and the error copy |
@@ -109,7 +109,8 @@ These rules trip agents up on this assignment:
   - Reuse a money job's `Idempotency-Key` for every retry, and renew it only with a new preview.
 - **The app stays a beta.** Test money only, simulated Privy or Privy's sandbox app, no deployment, and no email, SMS or push.
   - Don't change financial behaviour, provider modes or `policy.ts`.
-  - The only backend change is the beta route in Task 3.
+  - The only backend change is the beta route in Task 3 (`POST /api/v1/app/beta/orders/[id]/complete-transfer`), plus the two document types.
+- **Commands.** The app's pure-logic tests live in `tests/app-ui/` (`yarn test`). Its browser suite is separate: `yarn app-e2e prepare`, then `yarn test:e2e:app` (port 3108, `TEST_DATABASE_URL` ending in `_test`, loopback chain 31337). The landing suite stays `yarn test:e2e` on port 3107; Playwright's default config ignores `e2e/app/**`.
 
 ## Skills
 

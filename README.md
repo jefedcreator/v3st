@@ -98,4 +98,15 @@ Open `http://127.0.0.1:3107`. This launcher clears the documented provider envir
 
 Browser suite: `yarn test:e2e` (Chromium installed with `yarn playwright install chromium`, or set `LANDING_CHROMIUM_PATH`). Playwright owns a production server at `http://127.0.0.1:3107`, supplies simulated-only settings and an unreachable database URL, and refuses external/API/RPC/WebSocket requests. It does not start a financial worker. The full `yarn test` suite separately needs isolated local PostgreSQL beta and `_test` databases plus Forge/Anvil. Keep browser reports/screenshots/traces and generated output out of Git. No deployment is included.
 
+The customer app for beta testers lives at `/signin` (the landing links to it): sign in with an `@v3st.test` email in simulated Privy mode, finish setup, and then use `/home`, `/stocks`, `/cash`, `/earn` and `/settings`. Preview it with `yarn dev` (or `yarn start`) connecting a reachable beta database, `APP_STAGE=beta` and `PRIVY_MODE=simulated`.
+
+The app's browser suite needs the isolated `_test` database and the local test chain:
+
+```bash
+yarn app-e2e prepare   # refuses unless TEST_DATABASE_URL ends in _test and the RPC is loopback 31337
+yarn test:e2e:app
+```
+
+It builds and serves the app on `http://127.0.0.1:3108` with the worker and simulated Privy.
+
 Waitlist operations: the form posts to `POST /api/v1/waitlist`, rate-limited to 5 requests per 10 minutes per client address (PostgreSQL buckets keyed by an HMAC of the address, never the raw IP). `RATE_LIMIT_SECRET` is required (at least 32 characters): `.env.example` carries a local-only placeholder, and any shared environment needs its own unique value. Export invited testers with the operator-only `GET /api/v1/ops/waitlist?page=&size=`, then add each invited email to `PRIVY_BETA_ALLOWLIST`; see [docs/runbooks/backend-beta.md](docs/runbooks/backend-beta.md) and [docs/api/waitlist.md](docs/api/waitlist.md). Nothing is emailed automatically.

@@ -23,4 +23,6 @@ The approved brand (2026-11-17) is dark:
 
 The "Built to work with" row shows official marks of the 12 services V3ST is built around. It asserts no partnership or endorsement, and says that most of those services are in test mode or simulated.
 
-The landing assignment adds a waitlist route and a read-only public ticker. It includes no deployment, no change to financial behaviour, no authenticated dashboards and no live activation.
+The landing assignment adds a waitlist route, a read-only public ticker and a quiet Sign in link in the header and footer that leads to `/signin`. It includes no deployment, no change to financial behaviour and no live activation.
+
+Beyond the landing, V3ST now has a beta customer app: invited testers sign in at `/signin`, finish setup (identity test card, PIN, documents, bank account), and use the phone-first pages the API serves — home as one live money line, stocks with buying and selling, cash with add money and withdraw, Earn, earnings, activity receipts and settings. Everything runs on test money; every job the API supports is reachable from a 390px phone.
