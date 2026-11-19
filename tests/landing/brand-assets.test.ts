@@ -76,6 +76,29 @@ it("lists the 12 brands in the spec's order", () => {
   expect(brandManifest.map((e) => e.id)).toEqual(BUILT_WITH.map((b) => b.id));
 });
 
+it("mirrors the manifest's dimensions, treatment and beta status in the catalogue", () => {
+  for (const brand of BUILT_WITH) {
+    const entry = brandManifest.find((e) => e.id === brand.id)!;
+    expect({ src: brand.src, width: brand.width, height: brand.height, treatment: brand.treatment, betaStatus: brand.betaStatus })
+      .toEqual({ src: entry.src, width: entry.width, height: entry.height, treatment: entry.treatment, betaStatus: entry.betaStatus });
+  }
+  expect(BUILT_WITH.filter((b) => b.symbolOnly).map((b) => b.id)).toEqual([
+    "bankr", "stonks-exchange", "basestonk", "feel-cash",
+  ]);
+});
+
+it("declares each SVG's intrinsic size to match its manifest entry", () => {
+  for (const file of svgFiles()) {
+    const root = /<svg\b[^>]*>/.exec(readFileSync(file, "utf8"))![0];
+    const width = /\swidth="([\d.]+)(?:px)?"/.exec(root)?.[1];
+    const height = /\sheight="([\d.]+)(?:px)?"/.exec(root)?.[1];
+    if (width === undefined || height === undefined) continue; // sized by viewBox only
+    const entry = entryFor(file);
+    expect(Math.round(Number(width)), file).toBe(entry.width);
+    expect(Math.round(Number(height)), file).toBe(entry.height);
+  }
+});
+
 it("records each brand's real beta status", () => {
   expect(status("coinbase")).toBe("live-read");
   for (const id of ["yellow-card", "privy", "base", "hydrex"]) expect(status(id)).toBe("test-mode");

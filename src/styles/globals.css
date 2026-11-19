@@ -494,7 +494,9 @@
   font-size: 1rem;
 }
 .waitlist-microcopy {
-  color: var(--color-subtle);
+  /* Muted, not subtle: over the hero's moving fluid, subtle measured 4.66:1
+     at its worst frame, too close to the 4.5:1 floor. */
+  color: var(--color-muted-foreground);
   font-size: 0.8125rem;
 }
 .waitlist-microcopy a {
@@ -544,6 +546,15 @@
 .landing-section {
   padding-block: 7rem;
 }
+/* Anchor jumps land each section's heading just below the fixed header
+   (96px desktop, 88px mobile) instead of a whole section padding lower:
+   scroll margin = header + 16px − the section's top padding. */
+.landing-section[id] {
+  scroll-margin-top: 0;
+}
+.built-with[id] {
+  scroll-margin-top: 1rem;
+}
 .landing-section h2 {
   color: var(--color-heading);
   margin-bottom: 1.5rem;
@@ -570,18 +581,40 @@
 }
 .hero-inner {
   position: relative;
+  isolation: isolate;
   display: grid;
   justify-items: center;
   gap: 1.75rem;
   padding-block: 9rem 5rem;
   text-align: center;
 }
+/* The soft void veil behind the hero copy (spec §Visual system): it keeps the
+   copy at 4.5:1 or better over the brightest fluid and glow frames. It fades
+   with the heading during the handover. */
+.hero-inner::before {
+  content: "";
+  position: absolute;
+  /* The box overhangs the copy and the gradient reaches zero at its edges
+     (closest-side), so the veil never ends in a visible line. */
+  inset: -6% -12% -10%;
+  z-index: -1;
+  background: radial-gradient(
+    closest-side,
+    rgb(2 6 4 / 0.66),
+    rgb(2 6 4 / 0.5) 55%,
+    rgb(2 6 4 / 0.22) 80%,
+    rgb(2 6 4 / 0) 100%
+  );
+  opacity: var(--hero-heading, 1);
+  pointer-events: none;
+}
 .hero-title {
   color: var(--color-heading);
 }
 .hero-subline {
   max-width: 40rem;
-  color: var(--color-muted-foreground);
+  /* Ink, not muted: the subline sits over the moving fluid (spec §Visual system). */
+  color: var(--color-ink);
 }
 .hero-counters {
   display: flex;
@@ -598,15 +631,18 @@
 .hero-figure {
   color: var(--color-heading);
 }
+/* Ink, not subtle: 11px labels over the fluid need the higher contrast. */
 .hero-counter-label {
-  color: var(--color-subtle);
+  color: var(--color-ink);
 }
 
 .stocks-grid {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
   gap: 4rem;
-  align-items: center;
+  /* Top-aligned, so the #stocks anchor lands its heading under the header
+     like every other section; centring dropped it ~67px lower. */
+  align-items: start;
 }
 .stocks-body {
   max-width: 32rem;
@@ -714,7 +750,8 @@
   padding-block: 6rem;
   text-align: center;
 }
-.built-with-label {
+/* Two classes: must out-rank `.landing-section h2`, or the label turns white. */
+.built-with .built-with-label {
   color: var(--color-subtle);
   margin-bottom: 3rem;
 }
@@ -736,7 +773,11 @@
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
-  opacity: 0.55;
+  opacity: 0.6;
+  transition: opacity 200ms;
+}
+.landing-brand-mark:hover {
+  opacity: 0.9;
 }
 .landing-brand-image {
   height: 1.75rem;
@@ -854,10 +895,6 @@
 .how-diagram {
   max-width: 48rem;
   margin: 3rem auto 0;
-}
-.how-diagram img {
-  width: 100%;
-  height: auto;
 }
 .journey-list {
   display: grid;
@@ -1004,6 +1041,27 @@
   color: var(--color-gain);
   text-decoration: underline;
 }
+/* The 200ms height and opacity change on open and close. Browsers without
+   ::details-content drop the rule and open instantly; the native element
+   works either way, with or without JavaScript. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reduced-motion="false"] .faq-item {
+    interpolate-size: allow-keywords;
+  }
+  [data-reduced-motion="false"] .faq-item::details-content {
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      block-size 200ms ease-out,
+      opacity 200ms ease-out,
+      content-visibility 200ms allow-discrete;
+  }
+  [data-reduced-motion="false"] .faq-item[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
 
 .join-section {
   padding-bottom: 9rem;
@@ -1072,6 +1130,12 @@
   .built-with {
     padding-block: 4rem;
   }
+  .landing-section[id] {
+    scroll-margin-top: 2rem;
+  }
+  .built-with[id] {
+    scroll-margin-top: 2.5rem;
+  }
   .hero-inner {
     padding-block: 8rem 4rem;
   }
@@ -1082,6 +1146,9 @@
       "badge name numbers"
       "line line line";
     row-gap: 0.25rem;
+  }
+  .ticker-row > :first-child {
+    grid-area: badge;
   }
   .ticker-row > span:nth-child(2) {
     grid-area: id;
@@ -1218,8 +1285,6 @@
   border-radius: 1.25rem;
   background: rgb(13 106 61 / 0.18);
   color: var(--color-gain);
-  opacity: 0;
-  transform: translateY(12px);
   transition:
     opacity 420ms ease-out,
     transform 420ms ease-out,
@@ -1231,9 +1296,11 @@
     0s,
     0s;
 }
-.journey-diagram[data-entered="true"] .journey-panel-card {
-  opacity: 1;
-  transform: none;
+/* Server HTML shows the panels; the island sets data-entered="false" after
+   hydration and "true" at 20% visible, so only a hydrated page hides them. */
+.journey-diagram[data-entered="false"] .journey-panel-card {
+  opacity: 0;
+  transform: translateY(12px);
 }
 .journey-panel-card[data-active="true"] {
   border-color: var(--color-gain);
@@ -1278,7 +1345,7 @@
 [data-reduced-motion="true"] .journey-panel {
   animation: none;
 }
-[data-reduced-motion="true"] .journey-panel-card {
+[data-reduced-motion="true"] .journey-diagram .journey-panel-card {
   transition-duration: 200ms;
   transition-property: opacity;
   transform: none;
@@ -1316,4 +1383,16 @@
 }
 [data-reduced-motion="true"] .cursor-follower {
   display: none;
+}
+
+/* Without JavaScript the provider never marks reduced motion on the root, so
+   the CSS loops honour the media query directly too. */
+@media (prefers-reduced-motion: reduce) {
+  .ticker-marquee,
+  .journey-panel {
+    animation: none;
+  }
+  .ticker-duplicate {
+    display: none;
+  }
 }

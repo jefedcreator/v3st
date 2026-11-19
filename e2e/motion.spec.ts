@@ -1,10 +1,12 @@
+import type { Page } from "@playwright/test";
+
 import { heroFrame, type HeroGroup } from "../src/components/landing/motion/contract";
 
 import { expect, test } from "./test";
 
 const GROUPS: HeroGroup[] = ["background", "heading", "copy", "actions", "rail"];
 
-async function groupOpacity(page: import("@playwright/test").Page, group: string): Promise<number> {
+async function groupOpacity(page: Page, group: string): Promise<number> {
   return page.evaluate((name) => {
     const el = document.querySelector(`[data-hero-group="${name}"]`);
     return el ? Number(window.getComputedStyle(el).opacity) : -1;
@@ -12,7 +14,7 @@ async function groupOpacity(page: import("@playwright/test").Page, group: string
 }
 
 async function waitOpacity(
-  page: import("@playwright/test").Page,
+  page: Page,
   group: string,
   expected: number,
 ): Promise<void> {
@@ -24,7 +26,7 @@ async function waitOpacity(
     .toBe(true);
 }
 
-async function scrollToProgress(page: import("@playwright/test").Page, progress: number) {
+async function scrollToProgress(page: Page, progress: number) {
   await page.evaluate((target) => {
     const track = document.querySelector<HTMLElement>("[data-hero-track]");
     if (!track) return;
@@ -97,7 +99,8 @@ test("header button appears after handover", async ({ page }) => {
   const cta = page.locator("[data-header-cta]");
   await expect(cta).toBeVisible();
   await cta.click();
-  expect(await page.evaluate(() => window.location.hash)).toBe("#join");
+  // Next's Link updates the URL inside a transition, so wait for the hash.
+  await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("#join");
 });
 
 test("deep link does not replay a blank hero", async ({ page }) => {
@@ -136,21 +139,125 @@ test("ticker moves upward over 36 seconds and pauses on hover and via the contro
   await expect(page.locator('button[aria-label="Play motion"]')).toBeVisible();
 });
 
+test("hero counters count up from zero on a fresh load", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  // Keep the fluid off: headless Chromium runs WebGL in software (SwiftShader),
+  // which starves the main thread so badly that the 800ms count can finish
+  // between two frames. The count is time-based, so the figures stay right;
+  // this only keeps enough frames to observe the intermediate values.
+  await page.addInitScript(() => {
+    const proto = HTMLCanvasElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, "getContext");
+    const original = descriptor?.value as (
+      this: HTMLCanvasElement,
+      type: string,
+      ...args: unknown[]
+    ) => unknown;
+    Object.defineProperty(proto, "getContext", {
+      configurable: true,
+      writable: true,
+      value: function (this: HTMLCanvasElement, type: string, ...args: unknown[]) {
+        if (type === "webgl2" || type === "webgl") return null;
+        return original.call(this, type, ...args);
+      },
+    });
+  });
+  // Record every value the first rail figure shows, from before hydration on,
+  // so the short resting-zero window cannot be missed by polling, and whether
+  // the intro actually ran (the rail faded to 0).
+  await page.addInitScript(() => {
+    const state = { seen: [] as string[], introPlayed: false };
+    (window as unknown as { __rail: typeof state }).__rail = state;
+    const record = () => {
+      const text = document.querySelector('[data-hero-group="rail"] [data-figure]')?.textContent;
+      if (text && state.seen.at(-1) !== text) state.seen.push(text);
+      const root = document.querySelector<HTMLElement>("[data-landing]");
+      if (root?.style.getPropertyValue("--hero-rail") === "0") state.introPlayed = true;
+    };
+    new MutationObserver(record).observe(document, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+  });
+  await page.goto("/");
+  // Wait until the choreography has hydrated and the rail has settled.
+  await expect(page.locator("[data-landing]")).toHaveAttribute("data-hero-fit", /true|false/, {
+    timeout: 8_000,
+  });
+  await expect
+    .poll(() => groupOpacity(page, "rail"), { timeout: 10_000 })
+    .toBeGreaterThan(0.99);
+  await expect
+    .poll(() => page.locator('[data-hero-group="rail"] [data-figure]').first().textContent(), {
+      timeout: 8_000,
+    })
+    .toBe("₦1,000");
+  const rail = await page.evaluate(
+    () => (window as unknown as { __rail: { seen: string[]; introPlayed: boolean } }).__rail,
+  );
+  // Server HTML holds the final value.
+  expect(rail.seen[0]).toBe("₦1,000");
+  expect(rail.seen.at(-1)).toBe("₦1,000");
+  if (rail.introPlayed) {
+    // The rail was hidden by the intro: the figure rested at zero, then counted.
+    expect(rail.seen).toContain("₦0");
+    expect(rail.seen.length).toBeGreaterThanOrEqual(3);
+  } else {
+    // Hydration was too late for the intro (a loaded machine): the contract
+    // keeps the visible figure at its final value and never replays it.
+    expect(rail.seen).toEqual(["₦1,000"]);
+  }
+});
+
+test("counters expose only their final values to assistive technology", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  const figure = page.locator('[data-hero-group="rail"] [data-figure]').first();
+  await expect(figure).toHaveAttribute("aria-hidden", "true");
+  await expect(figure.locator("xpath=..").locator(".sr-only")).toHaveText("₦1,000");
+});
+
+test("leaving the home page settles the header on other routes", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await expect(page.locator("[data-landing]")).toHaveAttribute("data-hero-fit", "true", {
+    timeout: 8_000,
+  });
+  // At the top of the page the header button is still hidden by the hero.
+  await expect(page.locator("[data-landing]")).toHaveAttribute("data-header-cta-hidden", "true");
+  // Navigate client-side without scrolling, so the hero is still mid-intro or
+  // at rest at the top (header button hidden) when it unmounts.
+  await page.evaluate(() =>
+    document.querySelector<HTMLAnchorElement>('footer a[href="/legal/privacy"]')!.click(),
+  );
+  await page.waitForURL("**/legal/privacy");
+  await expect(page.locator(".legal-page h1")).toHaveText("Privacy");
+  const root = page.locator("[data-landing]");
+  await expect(root).not.toHaveAttribute("data-header-cta-hidden", /.*/);
+  await expect(root).not.toHaveAttribute("data-hero-fit", /.*/);
+  expect(
+    await root.evaluate((el) => getComputedStyle(el).getPropertyValue("--header-cta").trim()),
+  ).toBe("1");
+  await expect(page.locator("[data-header-cta]")).toBeVisible();
+});
+
 test("counters reach their final values", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  const figures = page.locator("[data-figure]");
-  await expect
-    .poll(
-      async () => {
-        const texts = await figures.allTextContents();
-        return ["₦1,000", "8", "₦2,000", "₦0", "1%", "30 days"].every((want) =>
-          texts.includes(want),
-        );
-      },
-      { timeout: 10_000 },
-    )
-    .toBe(true);
+  const settle = (selector: string, want: string[]) =>
+    expect
+      .poll(() => page.locator(`${selector} [data-figure]`).allTextContents(), {
+        timeout: 10_000,
+      })
+      .toEqual(want);
+  // The hero rail counts in during the intro.
+  await settle('[data-hero-group="rail"]', ["₦1,000", "8", "₦2,000"]);
+  // Below-the-fold counters rest at zero until 35% visible, then count once.
+  await page.locator(".safeguard-stats").scrollIntoViewIfNeeded();
+  await settle(".safeguard-stats", ["₦0", "1%", "30 days"]);
 });
 
 test("diagram advances every 3.6 seconds and stops when paused", async ({ page }) => {
@@ -221,7 +328,8 @@ test("WebGL unavailable keeps the static artwork", async ({ browser }) => {
       ...args: unknown[]
     ) => unknown;
     Object.defineProperty(proto, "getContext", {
-      ...descriptor,
+      configurable: true,
+      writable: true,
       value: function (this: HTMLCanvasElement, type: string, ...args: unknown[]) {
         if (type === "webgl2" || type === "webgl") return null;
         return original.call(this, type, ...args);

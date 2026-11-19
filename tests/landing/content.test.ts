@@ -1,7 +1,9 @@
 import { expect, it } from "vitest";
 
 import { policy } from "@/backend/config/policy";
+import { EARN_AUTOMATION_COPY } from "@/backend/content/earn-products";
 import {
+  EARN_BADGE_STOCKS,
   EARN_CARDS,
   FAQ_ITEMS,
   HERO_COUNTERS,
@@ -45,4 +47,21 @@ it("keeps crypto vocabulary out of the copy", () => {
   expect(copy).not.toMatch(
     /\b(wallet|tokens?|tokeni[sz]ed|usdc|gas|on-?chain|blockchain|swaps?|liquidity|sepolia)\b/i,
   );
+});
+
+it("keeps the figures inside sentences derived, not typed", () => {
+  const days = Math.min(policy.app.earn.automation.expiryDays, policy.onchain.authorizationMaxDays);
+  expect(SAFEGUARD_STATS[2]!.line).toContain(`ends after ${days} days`);
+  // The Earn card's collection night is the product's own automation copy.
+  expect(EARN_CARDS[1]!.body).toContain("every Thursday night");
+  expect(EARN_AUTOMATION_COPY).toContain("every Thursday night");
+});
+
+it("badges the first Earn card with four profiled stocks by name", () => {
+  expect(EARN_BADGE_STOCKS).toEqual([
+    { ticker: "AAPL", name: "Apple", logoPath: "/stocks/aapl.svg" },
+    { ticker: "NVDA", name: "NVIDIA", logoPath: "/stocks/nvda.svg" },
+    { ticker: "TSLA", name: "Tesla", logoPath: "/stocks/tsla.svg" },
+    { ticker: "AMZN", name: "Amazon", logoPath: "/stocks/amzn.svg" },
+  ]);
 });

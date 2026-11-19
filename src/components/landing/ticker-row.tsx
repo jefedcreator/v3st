@@ -1,3 +1,5 @@
+import * as React from "react";
+
 import type { PublicTickerRow } from "@/types/landing";
 
 import { formatChangeBps, formatTickerPrice } from "./format";
@@ -34,7 +36,7 @@ export function TickerRow(props: { row: PublicTickerRow }): React.JSX.Element {
   const toneClass = negative ? "ticker-loss" : "ticker-gain";
   return (
     <li className="ticker-row">
-      <LogoBadge ticker={row.ticker} logoPath={row.logo_path} />
+      <LogoBadge ticker={row.ticker} logoPath={row.logo_path} alt={row.name} />
       <span className="ticker-id">
         <span className="ticker-symbol">{row.ticker}</span>
         <span className="ticker-chip">{row.sector}</span>

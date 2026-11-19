@@ -7,7 +7,8 @@ import Image from "next/image";
 
 // A 40px circular badge for a profiled stock. When the logo file is missing
 // from public/, the ticker letters render instead, so deleting a file is the
-// whole removal procedure for a brand that objects.
+// whole removal procedure for a brand that objects. Pass the company name as
+// `alt` (the spec's alt text for stock badges); the ticker is the fallback.
 export function LogoBadge(props: {
   ticker: string;
   logoPath: string;
@@ -25,7 +26,7 @@ export function LogoBadge(props: {
       >
         <Image
           src={props.logoPath}
-          alt={props.alt ?? `${props.ticker} logo`}
+          alt={props.alt ?? props.ticker}
           width={Math.round(size * 0.62)}
           height={Math.round(size * 0.62)}
           unoptimized

@@ -29,13 +29,16 @@ const STAGE_ICONS: Record<string, PhosphorIcon> = {
 // caption per stage, entrance once at 20% visible, autoplay from 1080ms
 // every 3600ms while visible and not engaged, 120ms hover intent and 140ms
 // leave grace. The whole thing is aria-hidden; the ordered list is the content.
-// Paused or reduced motion stops entrance stagger, autoplay and float.
+// Paused, hidden, offscreen or reduced motion stops autoplay; it resumes when
+// the diagram is visible again. Server HTML shows the panels: they are only
+// hidden for the entrance once JavaScript has hydrated (data-entered="false").
 export function JourneyDiagram(props: {
   stages: readonly { title: string; caption: string; icon: string }[];
 }): React.JSX.Element {
   const { paused, reducedMotion } = useLandingMotion();
   const rootRef = React.useRef<HTMLDivElement | null>(null);
-  const [entered, setEntered] = React.useState(false);
+  // null until hydrated, so the server HTML carries no entrance state.
+  const [entered, setEntered] = React.useState<boolean | null>(null);
   const [active, setActive] = React.useState(0);
   const enteredRef = React.useRef(false);
   const visibleRef = React.useRef(false);
@@ -48,6 +51,7 @@ export function JourneyDiagram(props: {
   const delayRef = React.useRef<number | undefined>(undefined);
   const hoverRef = React.useRef<number | undefined>(undefined);
   const leaveRef = React.useRef<number | undefined>(undefined);
+  const total = props.stages.length;
 
   const stopAutoplay = React.useCallback(() => {
     window.clearTimeout(delayRef.current);
@@ -56,9 +60,34 @@ export function JourneyDiagram(props: {
     autoplayRef.current = undefined;
   }, []);
 
+  // Starts (or restarts) autoplay when every condition allows it: entered,
+  // visible, document shown, not paused and motion not reduced.
+  const startAutoplay = React.useCallback(() => {
+    if (
+      autoplayRef.current !== undefined ||
+      delayRef.current !== undefined ||
+      !enteredRef.current ||
+      !visibleRef.current ||
+      document.hidden ||
+      pausedRef.current ||
+      reducedMotionRef.current
+    ) {
+      return;
+    }
+    delayRef.current = window.setTimeout(() => {
+      delayRef.current = undefined;
+      autoplayRef.current = window.setInterval(() => {
+        if (visibleRef.current && !engagedRef.current) {
+          setActive((current) => nextStage(current, total));
+        }
+      }, DIAGRAM.stepMs);
+    }, DIAGRAM.autoplayDelayMs);
+  }, [total]);
+
   React.useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    setEntered((current) => current ?? false);
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = Boolean(entries[0]?.isIntersecting);
@@ -66,41 +95,29 @@ export function JourneyDiagram(props: {
         if (visible && !enteredRef.current) {
           enteredRef.current = true;
           setEntered(true);
-          if (!pausedRef.current && !reducedMotionRef.current) {
-            delayRef.current = window.setTimeout(() => {
-              autoplayRef.current = window.setInterval(() => {
-                if (visibleRef.current && !engagedRef.current) {
-                  setActive((current) => nextStage(current, props.stages.length));
-                }
-              }, DIAGRAM.stepMs);
-            }, DIAGRAM.autoplayDelayMs);
-          }
         }
-        if (!visible) stopAutoplay();
+        if (visible) startAutoplay();
+        else stopAutoplay();
       },
       { threshold: DIAGRAM.threshold },
     );
     observer.observe(root);
+    const onVisibility = () => {
+      if (document.hidden) stopAutoplay();
+      else startAutoplay();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       stopAutoplay();
     };
-  }, [props.stages.length, stopAutoplay]);
+  }, [startAutoplay, stopAutoplay]);
 
   React.useEffect(() => {
-    if (paused || reducedMotion) {
-      stopAutoplay();
-    } else if (enteredRef.current && visibleRef.current && !autoplayRef.current) {
-      delayRef.current = window.setTimeout(() => {
-        autoplayRef.current = window.setInterval(() => {
-          if (visibleRef.current && !engagedRef.current) {
-            setActive((current) => nextStage(current, props.stages.length));
-          }
-        }, DIAGRAM.stepMs);
-      }, DIAGRAM.autoplayDelayMs);
-    }
-    return stopAutoplay;
-  }, [paused, reducedMotion, stopAutoplay]);
+    if (paused || reducedMotion) stopAutoplay();
+    else startAutoplay();
+  }, [paused, reducedMotion, startAutoplay, stopAutoplay]);
 
   const handleEnter = (index: number) => {
     window.clearTimeout(leaveRef.current);
@@ -127,13 +144,11 @@ export function JourneyDiagram(props: {
     [],
   );
 
-  const total = props.stages.length;
-
   return (
     <div
       ref={rootRef}
       className="journey-diagram"
-      data-entered={String(entered)}
+      data-entered={entered === null ? undefined : String(entered)}
       aria-hidden="true"
     >
       <div className="journey-panels">
@@ -160,9 +175,7 @@ export function JourneyDiagram(props: {
         })}
       </div>
       <div className="journey-carousel">
-        <p className="journey-carousel-caption" data-active={String(true)}>
-          {props.stages[active]?.caption}
-        </p>
+        <p className="journey-carousel-caption">{props.stages[active]?.caption}</p>
         <div className="journey-dots">
           {props.stages.map((stage, index) => (
             <span
@@ -173,9 +186,6 @@ export function JourneyDiagram(props: {
           ))}
         </div>
       </div>
-      <span className="sr-only">
-        {total} steps: {props.stages.map((stage) => stage.title).join(", ")}
-      </span>
     </div>
   );
 }
@@ -221,6 +231,8 @@ export function BeamParallax(props: {
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       window.cancelAnimationFrame(raf);
+      // Reduced motion switched on mid-visit: settle the artwork at rest.
+      el.querySelector("img")?.style.removeProperty("transform");
     };
   }, [reducedMotion]);
 

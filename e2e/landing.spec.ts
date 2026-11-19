@@ -63,7 +63,8 @@ test("anchors and the skip link reach their sections", async ({ page }) => {
   for (const link of NAV_LINKS) {
     await page.locator(`.desktop-nav a[href="${link.href}"]`).click();
     const anchor = link.href.replace(/^\//, "");
-    const heading = page.locator(anchor).first();
+    // The plan's contract: the target heading's top lies between 0 and 120px.
+    const heading = page.locator(`${anchor} h2`).first();
     await expect
       .poll(
         async () => {
@@ -95,7 +96,7 @@ test("anchors and the skip link reach their sections", async ({ page }) => {
 test("mobile sheet traps focus, closes on Escape and restores focus", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  const trigger = page.locator('button[aria-label="Open menu"]');
+  const trigger = page.getByRole("button", { name: "Menu", exact: true });
   await trigger.click();
   const dialog = page.locator('[role="dialog"]');
   await expect(dialog).toBeVisible();
@@ -110,6 +111,35 @@ test("mobile sheet traps focus, closes on Escape and restores focus", async ({ p
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
+});
+
+test("mobile sheet closes when a section link is chosen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  const dialog = page.locator('[role="dialog"]');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("link", { name: "FAQ" }).click();
+  await expect(dialog).toBeHidden();
+  await expect
+    .poll(async () => (await page.locator("#faq h2").boundingBox())?.y ?? -1, { timeout: 8_000 })
+    .toBeLessThanOrEqual(120);
+});
+
+test("pause control sits at the header's right edge at every size", async ({ page }) => {
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    const edges = await page.evaluate(() => {
+      const right = document.querySelector(".header-right");
+      const pause = document.querySelector(".pause-control");
+      const visible = Array.from(right?.children ?? []).filter(
+        (el) => getComputedStyle(el).display !== "none",
+      );
+      return { last: visible.at(-1) === pause };
+    });
+    expect(edges.last, `${viewport.width}x${viewport.height}`).toBe(true);
+  }
 });
 
 test("ticker falls back to names when prices are unavailable", async ({ page }) => {
@@ -131,7 +161,7 @@ test("built-with row shows all 12 marks in order with valid dimensions", async (
   const items = page.locator("#built-with ul li");
   await expect(items).toHaveCount(12);
   await page.waitForFunction(() =>
-    Array.from(document.querySelectorAll("#built-with img")).every(
+    Array.from(document.querySelectorAll<HTMLImageElement>("#built-with img")).every(
       (img) => img.complete && img.naturalWidth > 0,
     ),
   );

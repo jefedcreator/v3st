@@ -30,7 +30,7 @@ export const BUILT_WITH: readonly BuiltWithBrand[] = [
     id: "paycrest",
     name: "Paycrest",
     src: "/brands/paycrest.svg",
-    width: 135,
+    width: 134,
     height: 28,
     symbolOnly: false,
     treatment: "filtered-white",

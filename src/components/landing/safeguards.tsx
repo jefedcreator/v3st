@@ -7,11 +7,11 @@ const baseBrand = BUILT_WITH.find((brand) => brand.id === "base")!;
 
 const SAFEGUARD_CARDS = [
   {
-    title: "Every naira on one ledger:",
+    title: "Every naira on one ledger",
     body: "Every deposit, trade and payout is recorded in a double-entry ledger and checked against our partners' records.",
   },
   {
-    title: "Paid only once received:",
+    title: "Paid only once received",
     body: "Earnings count only after they've actually arrived. Anything not yet received is labelled as an estimate.",
   },
 ] as const;
@@ -62,7 +62,7 @@ export function Safeguards(): React.JSX.Element {
             </li>
           ))}
           <li className="safeguard-card">
-            <h3 className="safeguard-card-title">Built on Base:</h3>
+            <h3 className="safeguard-card-title">Built on Base</h3>
             <span className="safeguard-base-mark">
               <BrandMark brand={baseBrand} />
             </span>

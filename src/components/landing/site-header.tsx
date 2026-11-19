@@ -23,10 +23,11 @@ export function SiteHeader(): React.JSX.Element {
             </Link>
           ))}
         </nav>
+        {/* The pause control sits at the right edge at every size. */}
         <div className="header-right">
           <HeaderCta />
-          <PauseControl />
           <MobileNav />
+          <PauseControl />
         </div>
       </div>
     </header>

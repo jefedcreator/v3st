@@ -1,12 +1,5 @@
-import { EARN_CARDS } from "./content";
+import { EARN_BADGE_STOCKS, EARN_CARDS } from "./content";
 import { LogoBadge } from "./logo-badge";
-
-const EARN_BADGE_TICKERS = [
-  { ticker: "AAPL", logoPath: "/stocks/aapl.svg" },
-  { ticker: "NVDA", logoPath: "/stocks/nvda.svg" },
-  { ticker: "TSLA", logoPath: "/stocks/tsla.svg" },
-  { ticker: "AMZN", logoPath: "/stocks/amzn.svg" },
-] as const;
 
 // The vault grid: heading and lead on the left, a 2x2 card grid on the right
 // (one column below 640px). Every card leads with a real rule figure, never an
@@ -27,11 +20,12 @@ export function EarnSection(): React.JSX.Element {
             <li key={card.title} className="earn-card">
               {index === 0 ? (
                 <span className="earn-badges" aria-hidden="true">
-                  {EARN_BADGE_TICKERS.map((badge) => (
+                  {EARN_BADGE_STOCKS.map((badge) => (
                     <LogoBadge
                       key={badge.ticker}
                       ticker={badge.ticker}
                       logoPath={badge.logoPath}
+                      alt={badge.name}
                       size={32}
                     />
                   ))}

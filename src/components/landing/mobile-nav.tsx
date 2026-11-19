@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/primitives/button";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -13,38 +14,46 @@ import {
   SheetTrigger,
 } from "@/primitives/sheet";
 
+import { focusJoinAfterJump } from "./join-focus";
 import { NAV_LINKS } from "./nav-links";
 
-// Below 768px the centred pill nav is replaced by a Menu button opening the
-// left sheet: the five links, the waitlist pill and the beta line. Without
-// JavaScript the <noscript> list renders the same links instead.
+// Below 768px the centred pill nav is replaced by a "Menu" button opening the
+// left sheet: the five links, the waitlist pill and the beta line. Every link
+// closes the sheet as it navigates, so the section it jumps to is not left
+// under an open dialog. Without JavaScript the <noscript> list renders the
+// same links instead.
 export function MobileNav(): React.JSX.Element {
   return (
     <div className="mobile-nav">
       <Sheet>
         <SheetTrigger asChild>
-          <Button variant="outline" size="icon" aria-label="Open menu">
+          <Button variant="outline" className="mobile-menu-trigger">
             <List aria-hidden="true" />
+            Menu
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" aria-label="Menu">
+        <SheetContent side="left">
           <SheetHeader>
             <SheetTitle>Menu</SheetTitle>
             <SheetDescription className="sr-only">
               The page sections and the beta waitlist
             </SheetDescription>
           </SheetHeader>
-          <nav className="mobile-links" aria-label="Mobile">
+          <nav className="mobile-links" aria-label="Sections">
             {NAV_LINKS.map((link) => (
-              <Link key={link.href} href={link.href}>
-                {link.label}
-              </Link>
+              <SheetClose asChild key={link.href}>
+                <Link href={link.href}>{link.label}</Link>
+              </SheetClose>
             ))}
           </nav>
           <div className="mobile-sheet-footer">
-            <Button asChild>
-              <Link href="/#join">Join the waitlist</Link>
-            </Button>
+            <SheetClose asChild>
+              <Button asChild>
+                <Link href="/#join" onClick={focusJoinAfterJump}>
+                  Join the waitlist
+                </Link>
+              </Button>
+            </SheetClose>
             <p className="mobile-beta-line">Beta · test money only</p>
           </div>
         </SheetContent>

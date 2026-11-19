@@ -1,6 +1,6 @@
 import { policy } from "@/backend/config/policy";
 import { EARN_AUTOMATION_COPY } from "@/backend/content/earn-products";
-import { PUBLIC_TICKERS } from "@/backend/content/stock-profiles";
+import { PUBLIC_TICKERS, STOCK_PROFILES } from "@/backend/content/stock-profiles";
 
 import { counterText, formatNaira } from "./format";
 
@@ -92,7 +92,7 @@ export const HERO_COUNTERS: readonly FigureSpec[] = [
 export const SAFEGUARD_STATS: readonly FigureSpec[] = [
   nairaFigure(0n, "NETWORK FEES YOU PAY", "We cover the cost of every transaction."),
   percentFigure(maxSlippageBps, "MOST A TRADE CAN SLIP", "If the price moves further while your order fills, the trade stops and your cash stays put."),
-  countFigure(maxPermissionDays, " days", "LONGEST AUTOMATIC PERMISSION", "Anything done for you in the background needs your permission, and it ends after 30 days unless you renew it."),
+  countFigure(maxPermissionDays, " days", "LONGEST AUTOMATIC PERMISSION", `Anything done for you in the background needs your permission, and it ends after ${maxPermissionDays} days unless you renew it.`),
 ];
 
 export const EARN_CARDS: readonly {
@@ -209,4 +209,17 @@ export const FAQ_ITEMS: readonly {
 ];
 
 // The Earn automation copy the "collected every Thursday night" card leans on.
+// content.test.ts keeps the card's wording in step with it.
 export const EARN_COLLECTION_NOTE = EARN_AUTOMATION_COPY;
+
+// The four stocks whose badges overlap in the first Earn card's header,
+// echoing Katana's token pairs. Names and logos come from the profiles.
+export const EARN_BADGE_STOCKS: readonly { ticker: string; name: string; logoPath: string }[] = [
+  "AAPL",
+  "NVDA",
+  "TSLA",
+  "AMZN",
+].map((ticker) => {
+  const profile = STOCK_PROFILES[ticker]!;
+  return { ticker, name: profile.name, logoPath: profile.logoPath ?? "" };
+});

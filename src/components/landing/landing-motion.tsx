@@ -10,6 +10,17 @@ type LandingMotionContextValue = {
 
 const LandingMotionContext = React.createContext<LandingMotionContextValue | null>(null);
 
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+// The live preference, read directly. React runs child effects before parent
+// effects, so on the first effect pass a motion island sees the provider's
+// initial `reducedMotion: false` before the provider has read the media query.
+// Islands whose first frame must already honour the preference (the hero, the
+// counters) read it here as well as from the context.
+export function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
 export function useLandingMotion(): LandingMotionContextValue {
   const context = React.useContext(LandingMotionContext);
   if (!context) throw new Error("useLandingMotion must be used inside LandingMotionProvider");
@@ -26,7 +37,7 @@ export function LandingMotionProvider(props: { children: React.ReactNode }): Rea
   const [reducedMotion, setReducedMotion] = React.useState(false);
 
   React.useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const media = window.matchMedia(REDUCED_MOTION_QUERY);
     const apply = () => {
       setReducedMotion(media.matches);
       if (rootRef.current) rootRef.current.dataset.reducedMotion = String(media.matches);
