@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 
 import { choiceLine, minimumPayoutLine, outcomeLabel } from "@/components/app/earnings/earnings";
-import type { AppEarningsDto } from "@/types/app";
+import type { AppEarningsDto, AppEarningsWeekDto } from "@/types/app";
 
 function earnings(o: Partial<AppEarningsDto> = {}): AppEarningsDto {
   const base: AppEarningsDto = {
@@ -22,7 +22,8 @@ function ref(name: string): { id: string; ticker: string; name: string; logo_pat
 }
 
 it("names weekly outcomes and the choice", () => {
-  expect(["pending", "paid", "reinvested", "rolled_over", "mixed"].map(outcomeLabel)).toEqual([
+  const outcomes: AppEarningsWeekDto["outcome"][] = ["pending", "paid", "reinvested", "rolled_over", "mixed"];
+  expect(outcomes.map(outcomeLabel)).toEqual([
     "Pending",
     "Paid to your bank",
     "Reinvested",

@@ -25,14 +25,15 @@ export function CashPage({
   limits: MoneyLimits;
 }) {
   const { data } = useCashQuery(cash);
+  const d = data ?? cash;
   const bankQuery = useBankAccountQuery(initialBank);
   const bankAccount = bankQuery.data ?? null;
   const [addOpen, setAddOpen] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
 
   const items = [
-    { label: "On hold", value: <Money kobo={data.on_hold_kobo} /> },
-    { label: "Incoming", value: <Money kobo={data.incoming_kobo} /> },
+    { label: "On hold", value: <Money kobo={d.on_hold_kobo} /> },
+    { label: "Incoming", value: <Money kobo={d.incoming_kobo} /> },
   ];
 
   return (
@@ -41,13 +42,13 @@ export function CashPage({
       <section aria-label="Available" className="flex flex-col gap-2">
         <p className="text-muted-foreground text-sm">Available</p>
         <p className="type-app-figure text-heading">
-          {moneyText(data.available_kobo)}
-          {data.available_kobo === null && <span className="sr-only">not available</span>}
+          {moneyText(d.available_kobo)}
+          {d.available_kobo === null && <span className="sr-only">not available</span>}
         </p>
       </section>
       <KeyValue items={items} />
       <p className="text-subtle text-sm">
-        Updated <time dateTime={data.as_of}>{formatLagosTime(data.as_of)}</time>
+        Updated <time dateTime={d.as_of}>{formatLagosTime(d.as_of)}</time>
       </p>
       <p className="text-ink text-[15px]">
         {bankAccount === null
@@ -80,7 +81,7 @@ export function CashPage({
         <WithdrawDialog
           open={withdrawOpen}
           onOpenChange={setWithdrawOpen}
-          availableKobo={data.available_kobo}
+          availableKobo={d.available_kobo}
           bankAccount={bankAccount}
         />
       )}

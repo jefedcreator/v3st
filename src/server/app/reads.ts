@@ -84,12 +84,12 @@ export const readOnboarding = cache(
 );
 
 export const readTestIdentities = cache(
-  async (_user: AuthenticatedUser): Promise<AppTestIdentityDto[]> =>
-    catching("test-identities", async () => appIdentityService.testIdentities()),
+  async (_user: AuthenticatedUser): Promise<AppTestIdentityDto[] | null> =>
+    catching<AppTestIdentityDto[]>("test-identities", async () => appIdentityService.testIdentities()),
 );
 
 export const readDocuments = cache(
-  async (user: AuthenticatedUser): Promise<AppDocumentSummaryDto[]> =>
+  async (user: AuthenticatedUser): Promise<AppDocumentSummaryDto[] | null> =>
     catching("documents", async () => {
       const accepted = await agreementService.acceptedCurrent(user.id);
       return Object.values(CUSTOMER_DOCUMENTS).map((doc) => ({
@@ -102,8 +102,8 @@ export const readDocuments = cache(
 );
 
 export const readBanks = cache(
-  async (_user: AuthenticatedUser): Promise<AppBankDto[]> =>
-    catching("banks", async () => appCashService.banks()),
+  async (_user: AuthenticatedUser): Promise<AppBankDto[] | null> =>
+    catching<AppBankDto[]>("banks", async () => appCashService.banks()),
 );
 
 export const readHome = cache(
@@ -146,8 +146,8 @@ export const readCash = cache(
 );
 
 export const readEarnProducts = cache(
-  async (user: AuthenticatedUser): Promise<AppEarnProductDto[]> =>
-    catching("earn-products", async () => appEarnService.products(user.id)),
+  async (user: AuthenticatedUser): Promise<AppEarnProductDto[] | null> =>
+    catching<AppEarnProductDto[]>("earn-products", async () => appEarnService.products(user.id)),
 );
 
 export const readEarnProduct = cache(async (user: AuthenticatedUser, id: string) =>

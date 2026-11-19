@@ -22,7 +22,7 @@ export function PriceChart({
   const width = 640;
   const height = 160;
   const path = chart === null ? null : chartPath(chart.points, width, height);
-  const up = chart?.change_bps === null || chart === undefined ? true : chart.change_bps >= 0;
+  const up = chart !== null && chart.change_bps !== null ? chart.change_bps >= 0 : true;
 
   return (
     <div className="flex flex-col gap-3">

@@ -63,7 +63,7 @@ function baseUrl(path: string, query?: Query): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined) continue;
-    params.set(key, value === true ? "true" : value);
+    params.set(key, value === true ? "true" : String(value));
   }
   const text = params.toString();
   if (text === "") return `/api/v1/app${path}`;
@@ -270,7 +270,11 @@ export function createAppApi(deps: AppApiDeps) {
     },
     notifications: {
       list: (cursor?: string) =>
-        request<AppNotificationDto[]>("GET", "/notifications", cursor === undefined ? undefined : { cursor }),
+        request<{ items: AppNotificationDto[]; next_cursor: string | null }>(
+          "GET",
+          "/notifications",
+          cursor === undefined ? undefined : { cursor },
+        ),
       markRead: (body: { ids: string[] } | { all: true }) =>
         request<{ unread: number }>("POST", "/notifications/read", undefined, body),
     },

@@ -55,8 +55,8 @@ export function EarnProductPage({ product: initial }: { product: AppEarnProductD
       </p>
       {product.position !== null && (
         <section aria-label="Your position" className="flex flex-col gap-2 rounded-2xl border border-stroke bg-surface p-5">
-          <KeyValue>
-            {[
+          <KeyValue
+            items={[
               { label: "Added", value: <Money kobo={product.position.added_kobo} /> },
               { label: "Value", value: <Money kobo={product.position.value_kobo} /> },
               { label: "Earned", value: <Money kobo={product.position.earned_kobo} /> },
@@ -65,8 +65,8 @@ export function EarnProductPage({ product: initial }: { product: AppEarnProductD
                 value: formatLagosDay(product.position.joined_at),
               },
             ]}
-          </KeyValue>
-        </section>
+          />
+       </section>
       )}
       <div className="flex flex-wrap items-center gap-3">
         {view.statusText !== null && <Badge variant="secondary">{view.statusText}</Badge>}
