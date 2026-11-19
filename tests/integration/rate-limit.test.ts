@@ -49,6 +49,21 @@ describe("rate limiting", () => {
     expect(await hit()).toMatchObject({ allowed: true, count: 1 });
   });
 
+  it("counts concurrent hits exactly, never letting a burst past the limit", async () => {
+    setNow("2026-11-18T12:00:00Z");
+    const results = await Promise.all(Array.from({ length: 8 }, () => hit()));
+    expect(results.map((r) => r.count).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(results.filter((r) => r.allowed)).toHaveLength(5);
+    expect(await db.rateLimitBucket.count()).toBe(1);
+  });
+
+  it("stores the window start the Prisma client reads back", async () => {
+    setNow("2026-11-18T12:07:30Z");
+    await hit();
+    const [bucket] = await db.rateLimitBucket.findMany();
+    expect(bucket!.windowStart.toISOString()).toBe("2026-11-18T12:00:00.000Z");
+  });
+
   it("deletes buckets older than a day", async () => {
     setNow("2026-11-18T12:00:00Z");
     await db.rateLimitBucket.create({

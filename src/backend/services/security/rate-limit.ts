@@ -15,6 +15,13 @@ export const rateLimitService = {
   // Fixed-window counter: windowStart is the request time rounded down to a
   // multiple of windowSeconds. A hit is allowed while count <= limit. Buckets
   // older than a day are deleted in the same transaction.
+  //
+  // The increment is one INSERT … ON CONFLICT DO UPDATE … RETURNING statement,
+  // so concurrent hits on the same bucket serialise on the row: no two requests
+  // can read the same count, and two first hits cannot race to create the row.
+  // The window start is passed as a UTC literal cast to timestamp(3): Prisma
+  // stores DateTime as UTC wall-clock time in these columns, and the literal
+  // keeps that true whatever the session time zone is.
   async hit(input: {
     scope: string;
     clientIp: string;
@@ -31,15 +38,13 @@ export const rateLimitService = {
       await tx.rateLimitBucket.deleteMany({
         where: { windowStart: { lt: new Date(at.getTime() - DAY_MS) } },
       });
-      const existing = await tx.rateLimitBucket.findUnique({
-        where: { key_windowStart: { key, windowStart } },
-      });
-      const count = (existing?.count ?? 0) + 1;
-      await tx.rateLimitBucket.upsert({
-        where: { key_windowStart: { key, windowStart } },
-        create: { key, windowStart, count },
-        update: { count },
-      });
+      const rows = await tx.$queryRaw<Array<{ count: number }>>`
+        INSERT INTO "rate_limit_buckets" ("key", "windowStart", "count")
+        VALUES (${key}, ${windowStart.toISOString()}::timestamp(3), 1)
+        ON CONFLICT ("key", "windowStart")
+        DO UPDATE SET "count" = "rate_limit_buckets"."count" + 1
+        RETURNING "count"`;
+      const count = Number(rows[0]!.count);
       return { allowed: count <= input.limit, count, resetAt };
     });
   },
