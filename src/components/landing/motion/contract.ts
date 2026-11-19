@@ -142,6 +142,15 @@ export function tickerDurationSeconds(rows: number): number {
   return rows * TICKER_SECONDS_PER_ROW;
 }
 
+// The "Built to work with" row scrolls on its own below 768px (an operator
+// decision, 2026-11-19; the wrapped grid stacked 12 marks too tall on phones).
+// A duplicated row moves translateX(0 -> -50%), linear, over count x 3.5s:
+// about 50px a second for the 12 marks at 28px tall.
+export const LOGO_MARQUEE_SECONDS_PER_BRAND = 3.5;
+export function logoMarqueeDurationSeconds(brands: number): number {
+  return brands * LOGO_MARQUEE_SECONDS_PER_BRAND;
+}
+
 export const COUNTER = { durationMs: 800, threshold: 0.35 } as const;
 export function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);

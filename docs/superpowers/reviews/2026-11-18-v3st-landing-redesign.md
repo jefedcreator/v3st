@@ -111,6 +111,10 @@ Fix: `heroTargetProgress` answers 0 when there is no pinned travel. The new `her
 
 The operator asked for the header's pause button to be removed. The spec required it (§Header, citing `FRONTEND_PATTERNS_GUIDE.md` §10 and WCAG 2.2.2). Removing it is a deliberate deviation: moving content now stops only under `prefers-reduced-motion`, on hover or focus (the ticker), offscreen or in a hidden tab, so the page no longer meets WCAG 2.2.2 (Pause, Stop, Hide). The motion context's `paused` state is kept, dormant, and every loop still honours it, so restoring a control is one button that calls `setPaused`. Browser tests that drove the button now check the remaining behaviour: the ticker pauses on hover and resumes, and diagram autoplay stops offscreen and resumes on return.
 
+### Follow-up: horizontal logo row on mobile (operator decision, 2026-11-19)
+
+On phones, the spec's wrapped "Built to work with" grid stacked the twelve marks into a tall column. At the operator's request, below 768px the marks now form one horizontal row that scrolls itself (`LogoMarquee`, `logoMarqueeDurationSeconds`: 42s for twelve), built the same way as the price ticker: an `aria-hidden`, `inert` duplicate for a seamless loop, pausing on hover and focus, offscreen and in a hidden tab, and a still, swipeable row under reduced motion, with or without JavaScript. From 768px up the centred grid is unchanged. This departs from the spec's §3, which follows Katana's static row.
+
 **Rendered contrast**, measured with the fluid running in Chromium (SwiftShader WebGL): hero text was made transparent, and the brightest background pixel behind each element was sampled across 12 frames at 1440×1000 and 390×844. Worst frame: heading 18.2:1, subline 13.7:1, rail labels 10.3:1, rail figures 12.0:1, microcopy 5.4:1. All clear the spec's 4.5:1 floor.
 
 **Notes:**

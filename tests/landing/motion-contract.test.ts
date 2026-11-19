@@ -14,6 +14,7 @@ import {
   heroFrame,
   heroLayoutFrame,
   heroTargetProgress,
+  logoMarqueeDurationSeconds,
   parallaxOffset,
   shouldPlayIntro,
   smoothProgress,
@@ -129,6 +130,7 @@ it("plays the intro only on a fresh, top-of-page load", () => {
 
 it("pins the remaining Katana numbers", () => {
   expect(tickerDurationSeconds(8)).toBe(36);
+  expect(logoMarqueeDurationSeconds(12)).toBe(42);
   expect(tickerDurationSeconds(7)).toBe(31.5);
   expect(easeOutCubic(0.5)).toBe(0.875);
   expect([counterDecimals(1.19, 2), counterDecimals(45, 0), counterDecimals(150, 0), counterDecimals(5, 0)]).toEqual([

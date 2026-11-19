@@ -749,6 +749,80 @@
   align-items: center;
   gap: 3.5rem 5rem;
 }
+/* From 768px up the marks wrap into a centred grid; the duplicate list only
+   exists for the mobile loop below. */
+.logo-marquee-duplicate {
+  display: none;
+}
+@keyframes logo-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+/* Below 768px: one self-scrolling row instead of a tall stack (operator
+   decision, 2026-11-19). It runs edge to edge past the shell's 24px gutter
+   with faded ends. Each list ends with the same 3rem gap that separates its
+   marks, so moving the track by -50% lands exactly on the duplicate and the
+   loop has no seam. */
+@media (max-width: 767px) {
+  .logo-marquee {
+    margin-inline: -1.5rem;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+  }
+  .logo-marquee-track {
+    display: flex;
+    width: max-content;
+    animation: logo-marquee var(--logo-marquee-duration, 42s) linear infinite;
+  }
+  .logo-marquee .built-with-row {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 3rem;
+    padding-inline-end: 3rem;
+  }
+  .logo-marquee .built-with-row > li {
+    flex-shrink: 0;
+  }
+  .logo-marquee .logo-marquee-duplicate {
+    display: flex;
+  }
+  .logo-marquee .landing-brand-mark {
+    white-space: nowrap;
+  }
+  .logo-marquee:hover .logo-marquee-track,
+  .logo-marquee:focus-within .logo-marquee-track,
+  [data-motion-paused="true"] .logo-marquee-track,
+  .logo-marquee[data-offscreen="true"] .logo-marquee-track {
+    animation-play-state: paused;
+  }
+  /* Reduced motion: a still row the visitor can swipe instead. */
+  [data-reduced-motion="true"] .logo-marquee {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  [data-reduced-motion="true"] .logo-marquee-track {
+    animation: none;
+    padding-inline: 1.5rem;
+  }
+}
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  /* The same without JavaScript, which never marks the root. */
+  .logo-marquee {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .logo-marquee-track {
+    animation: none;
+    padding-inline: 1.5rem;
+  }
+  .logo-marquee .logo-marquee-duplicate {
+    display: none;
+  }
+}
 .built-with-caption {
   max-width: 44rem;
   margin: 3rem auto 0;

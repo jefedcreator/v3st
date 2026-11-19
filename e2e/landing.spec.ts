@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import { CUSTOMER_DOCUMENTS } from "../src/backend/content/documents";
 import { NAV_LINKS } from "../src/components/landing/nav-links";
 import { WAITLIST_SUCCESS_COPY } from "../src/components/landing/waitlist-status";
@@ -139,21 +141,27 @@ test("ticker falls back to names when prices are unavailable", async ({ page }) 
   );
 });
 
+// The real list; the mobile loop's aria-hidden duplicate is excluded.
+const BUILT_WITH_LIST = "#built-with .built-with-row:not(.logo-marquee-duplicate)";
+
 test("built-with row shows all 12 marks in order with valid dimensions", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  const items = page.locator("#built-with ul li");
+  const items = page.locator(`${BUILT_WITH_LIST} > li`);
   await expect(items).toHaveCount(12);
-  await page.waitForFunction(() =>
-    Array.from(document.querySelectorAll<HTMLImageElement>("#built-with img")).every(
-      (img) => img.complete && img.naturalWidth > 0,
-    ),
+  await page.locator("#built-with").scrollIntoViewIfNeeded();
+  await page.waitForFunction(
+    (list) =>
+      Array.from(document.querySelectorAll<HTMLImageElement>(`${list} img`)).every(
+        (img) => img.complete && img.naturalWidth > 0,
+      ),
+    BUILT_WITH_LIST,
   );
-  const alts = await page.locator("#built-with img").evaluateAll((imgs) =>
+  const alts = await page.locator(`${BUILT_WITH_LIST} img`).evaluateAll((imgs) =>
     imgs.map((img) => img.getAttribute("alt")),
   );
   expect(alts).toEqual(BRAND_NAMES.map((name) => `${name} logo`));
-  const dims = await page.locator("#built-with img").evaluateAll((imgs) =>
+  const dims = await page.locator(`${BUILT_WITH_LIST} img`).evaluateAll((imgs) =>
     imgs.map((img) => ({
       attr: Boolean(img.getAttribute("width")) && Boolean(img.getAttribute("height")),
       loaded: (img as HTMLImageElement).naturalWidth > 0,
@@ -163,6 +171,71 @@ test("built-with row shows all 12 marks in order with valid dimensions", async (
     expect(dim.attr).toBe(true);
     expect(dim.loaded).toBe(true);
   }
+});
+
+// Row count of the real list: distinct item tops, within a couple of pixels.
+async function builtWithRows(page: Page): Promise<number> {
+  return page.evaluate((list) => {
+    const tops = Array.from(document.querySelectorAll(`${list} > li`)).map((li) =>
+      Math.round(li.getBoundingClientRect().top / 4),
+    );
+    return new Set(tops).size;
+  }, BUILT_WITH_LIST);
+}
+
+test("built-with marks scroll in one horizontal row on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.locator("#built-with").scrollIntoViewIfNeeded();
+  expect(await builtWithRows(page)).toBe(1);
+  const track = page.locator(".logo-marquee-track");
+  expect(await track.evaluate((el) => getComputedStyle(el).animationName)).toBe("logo-marquee");
+  expect(await track.evaluate((el) => getComputedStyle(el).animationDuration)).toBe("42s");
+  const duplicate = page.locator(".logo-marquee-duplicate");
+  await expect(duplicate).toHaveAttribute("aria-hidden", "true");
+  await expect(duplicate).toHaveAttribute("inert", "");
+  // It moves on its own.
+  const before = await track.evaluate((el) => getComputedStyle(el).transform);
+  await expect
+    .poll(() => track.evaluate((el) => getComputedStyle(el).transform), { timeout: 5_000 })
+    .not.toBe(before);
+});
+
+test("built-with marks keep the wrapped grid from 768px up", async ({ page }) => {
+  for (const viewport of [
+    { width: 768, height: 1024 },
+    { width: 1440, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await page.locator("#built-with").scrollIntoViewIfNeeded();
+    expect(await builtWithRows(page), `${viewport.width}px`).toBeGreaterThan(1);
+    expect(
+      await page.locator(".logo-marquee-track").evaluate((el) => getComputedStyle(el).animationName),
+    ).toBe("none");
+    await expect(page.locator(".logo-marquee-duplicate")).toBeHidden();
+  }
+});
+
+test("built-with row stays still and swipeable under reduced motion", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.locator("#built-with").scrollIntoViewIfNeeded();
+  await expect(page.locator(".logo-marquee-duplicate")).toHaveCount(0);
+  expect(
+    await page.locator(".logo-marquee-track").evaluate((el) => getComputedStyle(el).animationName),
+  ).toBe("none");
+  const scroller = await page.locator(".logo-marquee").evaluate((el) => ({
+    overflowX: getComputedStyle(el).overflowX,
+    scrollable: el.scrollWidth > el.clientWidth,
+  }));
+  expect(scroller).toEqual({ overflowX: "auto", scrollable: true });
+  expect(await builtWithRows(page)).toBe(1);
+  await context.close();
 });
 
 test("legal pages render each document and unknown slugs 404", async ({ page }) => {
