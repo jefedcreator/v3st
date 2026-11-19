@@ -107,6 +107,10 @@ Reported after the cross-check: on a 1440×740 browser window the hero showed fo
 
 Fix: `heroTargetProgress` answers 0 when there is no pinned travel. The new `heroLayoutFrame` keeps the groups at their intro value in ordinary flow, with only the header button following the hero out (`flowHandoverProgress`). The fit check excludes padding, and the hero's padding now totals 184px desktop and 176px mobile, within the clearance, so a hero that passes always fits its stage uncropped. 1440×740, 1280×800 and 1440×900 now pin. The agent's short-viewport test only checked `data-hero-fit`, and the other motion tests ran at 1440×1000, just above the old threshold. New unit tests pin the contract; new browser tests cover the three laptop sizes and check the copy stays visible in ordinary flow.
 
+### Follow-up: pause control removed (operator decision, 2026-11-19)
+
+The operator asked for the header's pause button to be removed. The spec required it (§Header, citing `FRONTEND_PATTERNS_GUIDE.md` §10 and WCAG 2.2.2). Removing it is a deliberate deviation: moving content now stops only under `prefers-reduced-motion`, on hover or focus (the ticker), offscreen or in a hidden tab, so the page no longer meets WCAG 2.2.2 (Pause, Stop, Hide). The motion context's `paused` state is kept, dormant, and every loop still honours it, so restoring a control is one button that calls `setPaused`. Browser tests that drove the button now check the remaining behaviour: the ticker pauses on hover and resumes, and diagram autoplay stops offscreen and resumes on return.
+
 **Rendered contrast**, measured with the fluid running in Chromium (SwiftShader WebGL): hero text was made transparent, and the brightest background pixel behind each element was sampled across 12 frames at 1440×1000 and 390×844. Worst frame: heading 18.2:1, subline 13.7:1, rail labels 10.3:1, rail figures 12.0:1, microcopy 5.4:1. All clear the spec's 4.5:1 floor.
 
 **Notes:**

@@ -156,7 +156,7 @@ Zustand and nuqs are aspirational for future needs; neither belongs on the marke
 The landing's motion is pinned by `src/components/landing/motion/contract.ts` (hero choreography, ticker marquee, counters, diagram, parallax, cursor follower, sheet, fluid settings). Drive continuous motion with CSS custom properties, keyframes and rAF loops that write directly to the DOM — no React state per frame. Prefer transforms/opacity.
 
 - Server HTML is fully visible; animation starts only after hydration and never replays a blank intro on deep links, restored scroll or delayed hydration.
-- The visible pause control (44px, "Pause motion"/"Play motion", Phosphor Pause/Play) stops every self-running loop — fluid, ticker, floating panels, diagram autoplay, parallax — and resumes from the paused frame without catching up.
+- There is no visible pause control: the operator removed it on 2026-11-19. `LandingMotionProvider` keeps a dormant `paused` state that every loop still honours (fluid, ticker, floating panels, diagram autoplay, parallax), so a control can return by rendering a button that calls `setPaused`. Without it, moving content stops only under `prefers-reduced-motion`, on hover or focus (the ticker), offscreen or in a hidden tab; WCAG 2.2.2 (Pause, Stop, Hide) asks for a user-operable pause for auto-moving content, so the page no longer meets that criterion.
 - Loops stop when the document is hidden or the element is offscreen; all listeners, timers and GPU resources are released on unmount. On WebGL context loss the fluid falls back to the static hero artwork.
 - Reduced motion is observed live: ordinary flow instead of the pinned hero track, no fluid, no loops/parallax/follower, counters show final values; meaningful state changes keep a short opacity change.
 - Measure hero fit at short heights/zoom and fall back to ordinary flow instead of cropping. A hero group containing `:focus-within` stays at opacity 1; faded groups take no pointer events.
@@ -198,7 +198,7 @@ For the marketing routes:
 - [ ] Local assets with provenance manifests, original artwork, noindex metadata.
 - [ ] Working anchors, skip link, FAQ `<details>`, no-JS form POST with 303 redirect, and a `/waitlist` result page.
 - [ ] No client-side API calls except the waitlist POST; no-JS, reduced-motion, failed-WebGL, mobile/zoom fallbacks.
-- [ ] Keyboard/focus, pause/resume, overflow and network-containment assertions authored in `e2e/`.
+- [ ] Keyboard/focus, overflow and network-containment assertions authored in `e2e/`.
 
 For later data-driven features, add only necessary validators, wrapped handlers, services, DTOs, service-backed reads, reachable pages/navigation and loading/error states. Introduce query/form/store packages only for an actual requirement. Preserve ownership, private metadata, unavailable-data and session contracts.
 

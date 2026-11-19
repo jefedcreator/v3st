@@ -33,7 +33,7 @@ yarn dev
 
 The anonymous `/` route is the redesigned dark landing page: a pinned hero that hands over to the beta price ticker, built-with row, Earn cards, how-it-works, safeguards, FAQ and a closing join panel, plus `/legal/*` reading pages and the `/waitlist` result page. The page is statically regenerated every 300 s; its only server read is the failure-tolerant beta ticker, so a build with an unreachable database renders the no-price fallback. No client-side API call is made except the waitlist `POST /api/v1/waitlist`. The page remains beta and `noindex, nofollow`.
 
-Brand assets, artwork and fonts are locally served. The original WebGL fluid field loads lazily and falls back to original static artwork when WebGL is unavailable or motion is reduced; reduced motion and short viewports use ordinary flow. `Pause motion` (header, 44px) stops every self-running loop and resumes from the paused frame. Native anchors, the FAQ and the waitlist form work without JavaScript. Do not use `db:push` or migration commands against a live or shared database.
+Brand assets, artwork and fonts are locally served. The original WebGL fluid field loads lazily and falls back to original static artwork when WebGL is unavailable or motion is reduced; reduced motion and short viewports use ordinary flow. Native anchors, the FAQ and the waitlist form work without JavaScript. Do not use `db:push` or migration commands against a live or shared database.
 
 ## Base Sepolia verified testnet (Phase A)
 

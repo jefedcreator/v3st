@@ -5,7 +5,6 @@ import { Badge } from "@/primitives/badge";
 import { HeaderCta } from "./header-cta";
 import { MobileNav } from "./mobile-nav";
 import { NAV_LINKS } from "./nav-links";
-import { PauseControl } from "./pause-control";
 import { Wordmark } from "./wordmark";
 
 export function SiteHeader(): React.JSX.Element {
@@ -23,11 +22,9 @@ export function SiteHeader(): React.JSX.Element {
             </Link>
           ))}
         </nav>
-        {/* The pause control sits at the right edge at every size. */}
         <div className="header-right">
           <HeaderCta />
           <MobileNav />
-          <PauseControl />
         </div>
       </div>
     </header>

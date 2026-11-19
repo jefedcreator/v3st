@@ -44,7 +44,7 @@ The primitives in `src/primitives/` are shadcn-generated and restyled in place; 
 - **Badge `default`:** the Beta chip: 11px uppercase, 0.16em tracking, white border at 20%, white text at 80%.
 - **Sheet `left`:** `min(86vw, 340px)` wide, `100dvh` tall, opens in 260ms and closes in 170ms ease-out, overlay `void` at 70%. Radix owns the focus trap, restoration, Escape and scroll lock. Wrap every navigating link inside it in `SheetClose asChild`, or the sheet stays open over the section it jumped to.
 
-Feature components live in `src/components/landing/` (kebab-case files, PascalCase exports). Sections are Server Components; client islands own motion, the mobile sheet, the pause control and the waitlist form. Browser code imports `cn` from `@/utils/cn`, never the `@/utils` barrel (it imports `node:crypto`), and never imports `content.ts`, `policy.ts`, `@/env` or `src/backend/**`.
+Feature components live in `src/components/landing/` (kebab-case files, PascalCase exports). Sections are Server Components; client islands own motion, the mobile sheet and the waitlist form. Browser code imports `cn` from `@/utils/cn`, never the `@/utils` barrel (it imports `node:crypto`), and never imports `content.ts`, `policy.ts`, `@/env` or `src/backend/**`.
 
 ## Motion contract
 
@@ -58,7 +58,7 @@ Pinned in `src/components/landing/motion/contract.ts` and unit-tested. Highlight
 - No WebGL / Data Saver / context loss: the static hero glow artwork (`/art/hero-glow.*`) stays; the fluid loads lazily after two frames only when allowed.
 - Short viewports / zoom: hero fit measured, ordinary flow instead of cropping.
 - Focus inside a hero group forces that group to opacity 1; groups below 0.01 take no pointer events.
-- The page-wide pause control (44px, "Pause motion"/"Play motion") stops every self-running loop and resumes from the paused frame; state is in memory only via `LandingMotionProvider`.
+- There is no visible pause control: the operator removed it on 2026-11-19. `LandingMotionProvider` keeps a dormant `paused` state that every loop still honours (fluid, ticker, floating panels, diagram autoplay, parallax), so a control can return by rendering a button that calls `setPaused`. Without it, moving content stops only under `prefers-reduced-motion`, on hover or focus (the ticker), offscreen or in a hidden tab; WCAG 2.2.2 (Pause, Stop, Hide) asks for a user-operable pause for auto-moving content, so the page no longer meets that criterion.
 
 ## Silent-failure traps
 

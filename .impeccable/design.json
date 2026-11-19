@@ -87,7 +87,7 @@
     "no WebGL / saveData / context loss: static hero glow artwork",
     "short viewport: ordinary flow instead of cropping",
     "focus-within forces hero group opacity 1; dim groups take no pointer events",
-    "pause control stops all self-running loops, resumes from paused frame, memory only"
+    "no visible pause control (removed by the operator 2026-11-19); a dormant paused state is still honoured by every loop"
   ],
   "assets": {
     "brands": "public/brands/ + sources.json (12 official marks, treatments, beta status, hashes)",

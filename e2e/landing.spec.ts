@@ -126,22 +126,6 @@ test("mobile sheet closes when a section link is chosen", async ({ page }) => {
     .toBeLessThanOrEqual(120);
 });
 
-test("pause control sits at the header's right edge at every size", async ({ page }) => {
-  for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport);
-    await page.goto("/");
-    const edges = await page.evaluate(() => {
-      const right = document.querySelector(".header-right");
-      const pause = document.querySelector(".pause-control");
-      const visible = Array.from(right?.children ?? []).filter(
-        (el) => getComputedStyle(el).display !== "none",
-      );
-      return { last: visible.at(-1) === pause };
-    });
-    expect(edges.last, `${viewport.width}x${viewport.height}`).toBe(true);
-  }
-});
-
 test("ticker falls back to names when prices are unavailable", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");

@@ -112,9 +112,7 @@ test("deep link does not replay a blank hero", async ({ page }) => {
   }
 });
 
-test("ticker moves upward over 36 seconds and pauses on hover and via the control", async ({
-  page,
-}) => {
+test("ticker moves upward over 36 seconds and pauses on hover", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   const marquee = page.locator(".ticker-marquee");
@@ -130,13 +128,11 @@ test("ticker moves upward over 36 seconds and pauses on hover and via the contro
     })
     .toBe("paused");
   await page.mouse.move(10, 10);
-  await page.locator('button[aria-label="Pause motion"]').click();
   await expect
     .poll(() => marquee.evaluate((el) => getComputedStyle(el).animationPlayState), {
       timeout: 5_000,
     })
-    .toBe("paused");
-  await expect(page.locator('button[aria-label="Play motion"]')).toBeVisible();
+    .toBe("running");
 });
 
 test("hero counters count up from zero on a fresh load", async ({ page }) => {
@@ -260,7 +256,9 @@ test("counters reach their final values", async ({ page }) => {
   await settle(".safeguard-stats", ["₦0", "1%", "30 days"]);
 });
 
-test("diagram advances every 3.6 seconds and stops when paused", async ({ page }) => {
+test("diagram advances every 3.6 seconds, stops offscreen and resumes on return", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await page.locator("#how-it-works").scrollIntoViewIfNeeded();
@@ -274,28 +272,14 @@ test("diagram advances every 3.6 seconds and stops when paused", async ({ page }
     .toBe("true");
   const first = await activeIndex();
   await expect.poll(activeIndex, { timeout: 8_000 }).not.toBe(first);
-  await page.locator('button[aria-label="Pause motion"]').click();
-  const pausedIndex = await activeIndex();
-  const transform = await page
-    .locator(".ticker-marquee")
-    .evaluate((el) => getComputedStyle(el).transform);
-  await page.waitForTimeout(2_000);
-  expect(await activeIndex()).toBe(pausedIndex);
-  expect(
-    await page.locator(".ticker-marquee").evaluate((el) => getComputedStyle(el).transform),
-  ).toBe(transform);
-  await page.locator('button[aria-label="Play motion"]').click();
-  await expect.poll(activeIndex, { timeout: 8_000 }).not.toBe(pausedIndex);
-});
-
-test("pause control is reachable by keyboard at 390x844", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  const pause = page.locator('button[aria-label="Pause motion"]');
-  await pause.focus();
-  await expect(pause).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page.locator('button[aria-label="Play motion"]')).toBeVisible();
+  // Offscreen, autoplay stops: longer than a 1080ms delay plus a 3600ms step.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const offscreenIndex = await activeIndex();
+  await page.waitForTimeout(5_000);
+  expect(await activeIndex()).toBe(offscreenIndex);
+  // Back in view, it resumes (it used to stay stopped after the first exit).
+  await page.locator("#how-it-works").scrollIntoViewIfNeeded();
+  await expect.poll(activeIndex, { timeout: 8_000 }).not.toBe(offscreenIndex);
 });
 
 test("reduced motion renders ordinary flow", async ({ browser }) => {

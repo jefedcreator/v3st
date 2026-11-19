@@ -256,22 +256,6 @@
   opacity: 1;
   transform: none;
 }
-.pause-control {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-stroke);
-  background: color-mix(in srgb, var(--color-void) 72%, transparent);
-  backdrop-filter: blur(12px);
-  color: var(--color-ink);
-  transition: background-color 200ms, color 200ms;
-}
-.pause-control:hover {
-  background: var(--color-surface-raised);
-  color: var(--color-heading);
-}
 .mobile-nav {
   display: none;
 }
