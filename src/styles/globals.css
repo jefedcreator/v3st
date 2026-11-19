@@ -283,6 +283,19 @@
   opacity: 1;
   transform: none;
 }
+.header-signin {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: 1rem;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  transition: color 200ms;
+}
+.header-signin:hover {
+  color: var(--color-heading);
+}
 .mobile-nav {
   display: none;
 }
@@ -441,7 +454,8 @@
     height: 5.5rem;
   }
   .desktop-nav,
-  .header-cta {
+  .header-cta,
+  .header-signin {
     display: none;
   }
   .mobile-nav {

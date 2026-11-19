@@ -45,6 +45,9 @@ export function MobileNav(): React.JSX.Element {
                 <Link href={link.href}>{link.label}</Link>
               </SheetClose>
             ))}
+            <SheetClose asChild>
+              <a href="/signin">Sign in</a>
+            </SheetClose>
           </nav>
           <div className="mobile-sheet-footer">
             <SheetClose asChild>
@@ -66,6 +69,7 @@ export function MobileNav(): React.JSX.Element {
             </Link>
           ))}
           <Link href="/#join">Join the waitlist</Link>
+          <a href="/signin">Sign in</a>
         </nav>
       </noscript>
     </div>

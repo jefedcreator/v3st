@@ -297,3 +297,15 @@ for (const viewport of VIEWPORTS) {
     expect(overflow.clipped).toBe(false);
   });
 }
+
+test("links to sign-in without prefetching it", async ({ page }) => {
+  await page.goto("/");
+  const link = page.locator(".header-signin");
+  await expect(link).toHaveAttribute("href", "/signin");
+  await link.focus();
+  await expect(link).toBeFocused();
+  await expect(page.locator("footer").getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/signin",
+  );
+});

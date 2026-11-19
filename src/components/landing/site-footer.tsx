@@ -27,6 +27,9 @@ export function SiteFooter(): React.JSX.Element {
                   <Link href={link.href}>{link.label}</Link>
                 </li>
               ))}
+              <li>
+                <a href="/signin">Sign in</a>
+              </li>
             </ul>
           </nav>
           <nav aria-label="Learn">

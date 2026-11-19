@@ -23,6 +23,9 @@ export function SiteHeader(): React.JSX.Element {
           ))}
         </nav>
         <div className="header-right">
+          <a className="header-signin" href="/signin">
+            Sign in
+          </a>
           <HeaderCta />
           <MobileNav />
         </div>
