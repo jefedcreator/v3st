@@ -1,5 +1,11 @@
 # CLAUDE.md
 
+## Interacti middleware instructions
+
+Read [AGENTS.md](AGENTS.md) before changing API handlers or middleware. Its
+V3ST middleware contract is mandatory for every AI agent and supersedes older
+middleware guidance in this repository. Keep the remaining project rules below.
+
 Instructions for Claude Code (and other AI assistants) working in this repository.
 
 ## Architectural blueprint

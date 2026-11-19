@@ -1,5 +1,77 @@
 # Instructions for Cloud and Local Agents
 
+## Interacti middleware standard (all AI agents)
+
+This is a standing requirement for every Interacti product, regardless of the
+agent, model, provider or editor. Apply it to every new or changed product API
+handler. For middleware conventions, this section supersedes older product
+guides and agent rules, including response-type generics, the two-generic
+wrapper and alternative authenticated-route wrappers.
+
+Use the middleware contract established in V3ST's
+`src/backend/middleware/types.ts` and `src/backend/middleware/index.ts`:
+
+- Wrap product API handlers with `withMiddleware<Body, Path, Query>(handler,
+  middlewares)`. The order is **body, path, query**, never response data. Declare
+  all three slots explicitly and use `null` for each unused validated channel.
+- Derive each channel's type from its validator's **output** with
+  `z.infer<typeof schema>` or `z.output<typeof schema>`. Put the matching
+  validator in the middleware list. Path outputs can be transformed values,
+  including numbers; do not constrain all validated paths to string records.
+- Keep raw inputs separate: `parsedBody?: unknown`,
+  `parsedParams?: Record<string, string>` and
+  `parsedQuery?: Record<string, string>`. Only successful validators populate
+  `validatedData?: Body`, `params?: Path` and `query?: Query`. Leave unused
+  validated channels absent; never initialize them with raw input.
+- Validators parse their corresponding raw field and assign the schema result
+  directly to the validated field. Never validate from the output field or
+  cast the output to make a route compile.
+- Handlers read `request.validatedData`, `request.params` and `request.query`
+  without type assertions. A non-null assertion is allowed only when the
+  matching validator ran before the handler. Fix a mismatched generic, schema
+  or middleware list instead of casting or widening to `any`/`unknown`.
+- Keep reusable auth and transport middleware generic across **all three**
+  input channels (`<B, P, Q>`) or accept a narrow `Pick` of the fields they
+  actually use. Validators may use a `Pick` containing their raw and validated
+  fields. Do not annotate shared middleware with concrete default request
+  generics that reject routes with different validated inputs.
+- The wrapper awaits native route context parameters into `parsedParams`.
+  The handler's context receives the validated `params: Path | undefined`, not
+  the raw path record. A route that needs typed path data must validate it.
+- Keep request parsing, ordered middleware execution, short-circuit responses,
+  last-resort error handling and redacted request logging in the wrapper.
+  Preserve the product's auth, privacy, response envelopes and transport
+  requirements. V3ST-specific financial providers, customer copy, body-size
+  limits and form redirects are not universal product requirements.
+- Framework-owned handlers, such as an authentication library's catch-all,
+  retain their framework contract. Frontend-only products and background jobs
+  do not acquire an HTTP backend just to use this pattern; any product API
+  they add must follow this contract using the product's server framework.
+
+```ts
+type CreateBody = z.infer<typeof createSchema>;
+type ItemPath = z.infer<typeof itemPathSchema>;
+type ListQuery = z.infer<typeof listQuerySchema>;
+
+export const POST = withMiddleware<CreateBody, null, null>(
+  async (request) => createHandler(request.validatedData!),
+  [authMiddleware, bodyValidatorMiddleware(createSchema)],
+);
+
+export const GET = withMiddleware<null, ItemPath, ListQuery>(
+  async (request) => readHandler(request.params!, request.query!),
+  [
+    authMiddleware,
+    pathParamValidatorMiddleware(itemPathSchema),
+    queryValidatorMiddleware(listQuerySchema),
+  ],
+);
+```
+
+When changing this contract, update the implementation, affected routes,
+validation/type checks and architectural documentation together. Carry this
+section and the agent entrypoint files into every new Interacti product.
+
 ## Current assignment: the V3ST landing page redesign
 
 Implement [docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md](docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md), starting at Task 1 on a new feature branch. It builds the design in [docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md](docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md), which the operator approved on 2026-11-18.

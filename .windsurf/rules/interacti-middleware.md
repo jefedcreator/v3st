@@ -1,0 +1,12 @@
+---
+trigger: always_on
+---
+
+# Interacti middleware instructions
+
+Read the repository root [AGENTS.md](../../AGENTS.md) before changing API handlers or
+middleware. Follow its mandatory V3ST `withMiddleware<Body, Path, Query>`
+contract with `null` for unused validated channels, separate raw and validated
+inputs, schema-output types and no casts of validated request data. This rule
+applies to every Interacti product and every AI agent and supersedes older
+middleware guidance. Follow the remaining project instructions in `CLAUDE.md`.
