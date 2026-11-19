@@ -122,15 +122,15 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
     }
   }
 
-  const errorId = "privy-signin-error";
+  const errorId = "signin-code-error";
 
   if (stage === "email") {
     return (
       <form className="flex flex-col gap-4" onSubmit={onSendCode} noValidate>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="privy-email">Email</Label>
+          <Label htmlFor="signin-email">Email</Label>
           <Input
-            id="privy-email"
+            id="signin-email"
             type="email"
             autoComplete="email"
             inputMode="email"
@@ -151,9 +151,9 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
   return (
     <form className="flex flex-col gap-4" onSubmit={onCode} noValidate>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="privy-code">Code</Label>
+        <Label htmlFor="signin-code">Code</Label>
         <InputOTP
-          id="privy-code"
+          id="signin-code"
           maxLength={6}
           autoComplete="one-time-code"
           value={code}
