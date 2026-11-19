@@ -585,7 +585,10 @@
   display: grid;
   justify-items: center;
   gap: 1.75rem;
-  padding-block: 9rem 5rem;
+  /* Top and bottom padding must total no more than HERO_FIT_CLEARANCE_PX
+     (190px, motion/contract.ts): the fit check reserves that much, so a hero
+     that passes it always fits its 100vh stage uncropped. 112 + 72 = 184. */
+  padding-block: 7rem 4.5rem;
   text-align: center;
 }
 /* The soft void veil behind the hero copy (spec §Visual system): it keeps the
@@ -1137,7 +1140,8 @@
     scroll-margin-top: 2.5rem;
   }
   .hero-inner {
-    padding-block: 8rem 4rem;
+    /* 112 + 64 = 176, within the 190px fit clearance (see above). */
+    padding-block: 7rem 4rem;
   }
   .ticker-row {
     grid-template-columns: auto minmax(0, 1fr) auto;

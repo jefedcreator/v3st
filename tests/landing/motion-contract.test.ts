@@ -8,9 +8,11 @@ import {
   SHEET,
   counterDecimals,
   easeOutCubic,
+  flowHandoverProgress,
   followerStep,
   heroFits,
   heroFrame,
+  heroLayoutFrame,
   heroTargetProgress,
   parallaxOffset,
   shouldPlayIntro,
@@ -68,6 +70,39 @@ it("smooths progress independent of frame rate, with a 64 ms cap", () => {
     9,
   );
   expect(smoothProgress(0, 1, 1000)).toBe(smoothProgress(0, 1, 64));
+});
+
+it("never hands the hero over in ordinary flow (the blank-hero bug)", () => {
+  // Unpinned, the track is one viewport tall: there is no pinned travel, so
+  // progress is 0 at the top, not 1 (which faded the whole hero out).
+  expect(heroTargetProgress({ top: 0, height: 900 }, 900)).toBe(0);
+  expect(heroTargetProgress({ top: -40, height: 860 }, 900)).toBe(0);
+  // In ordinary flow the groups keep their intro value at any scroll position;
+  // only the header button follows the hero scrolling away.
+  const scrolledAway = heroLayoutFrame({ elapsedMs: 10_000, progress: 1, fit: false });
+  expect(scrolledAway).toMatchObject({ background: 1, heading: 1, copy: 1, actions: 1, rail: 1, headerCta: 1 });
+  expect(heroLayoutFrame({ elapsedMs: 10_000, progress: 0, fit: false }).headerCta).toBe(0);
+  // Pinned, it is exactly the full choreography.
+  expect(heroLayoutFrame({ elapsedMs: 10_000, progress: 0.65, fit: true })).toEqual(
+    heroFrame({ elapsedMs: 10_000, progress: 0.65 }),
+  );
+  // The intro still plays in ordinary flow.
+  expect(heroLayoutFrame({ elapsedMs: 0, progress: 0, fit: false }).heading).toBe(0);
+});
+
+it("measures ordinary-flow progress as the hero scrolls out of view", () => {
+  expect(flowHandoverProgress({ top: 0, height: 800 })).toBe(0);
+  expect(flowHandoverProgress({ top: -400, height: 800 })).toBe(0.5);
+  expect(flowHandoverProgress({ top: -2000, height: 800 })).toBe(1);
+  expect(flowHandoverProgress({ top: 120, height: 800 })).toBe(0);
+});
+
+it("pins a laptop-height hero once its padding isn't counted twice", () => {
+  // The copy measured without padding (419px) plus the rail (117px) fits a
+  // 1440x740 viewport with the 190px clearance; with its 224px padding counted
+  // as content too, the old check needed a viewport about 950px tall.
+  expect(heroFits({ viewportHeight: 740, contentHeight: 419, railHeight: 117, reducedMotion: false })).toBe(true);
+  expect(heroFits({ viewportHeight: 740, contentHeight: 643, railHeight: 117, reducedMotion: false })).toBe(false);
 });
 
 it("measures hero progress and fit", () => {

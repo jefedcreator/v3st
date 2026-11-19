@@ -345,7 +345,7 @@ test("WebGL unavailable keeps the static artwork", async ({ browser }) => {
   await context.close();
 });
 
-test("short viewport falls back to ordinary flow", async ({ page }) => {
+test("short viewport falls back to ordinary flow with the hero visible", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 600 });
   await page.goto("/");
   await expect
@@ -355,4 +355,34 @@ test("short viewport falls back to ordinary flow", async ({ page }) => {
     .locator(".hero")
     .evaluate((el) => getComputedStyle(el).position);
   expect(position).not.toBe("sticky");
+  // Ordinary flow never fades the copy: it stays readable at the top and
+  // while the visitor scrolls down through the hero to reach the rail.
+  for (const group of GROUPS) await waitOpacity(page, group, 1);
+  await page.locator('[data-hero-group="rail"]').scrollIntoViewIfNeeded();
+  for (const group of GROUPS) await waitOpacity(page, group, 1);
 });
+
+for (const viewport of [
+  { width: 1440, height: 740 },
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+]) {
+  test(`laptop viewport ${viewport.width}x${viewport.height} pins the hero and keeps it visible at the top`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    const root = page.locator("[data-landing]");
+    await expect(root).toHaveAttribute("data-hero-fit", "true", { timeout: 8_000 });
+    // Once the intro has run, every group is visible and the header button is
+    // still waiting for the handover (the blank-hero bug showed the opposite).
+    for (const group of GROUPS) await waitOpacity(page, group, 1);
+    await expect(root).toHaveAttribute("data-header-cta-hidden", "true");
+    // Pinned and uncropped: the hero's copy fits inside the 100vh stage.
+    const fits = await page.evaluate(() => {
+      const inner = document.querySelector(".hero-inner")!.getBoundingClientRect();
+      return inner.top >= -1 && inner.bottom <= window.innerHeight + 1;
+    });
+    expect(fits).toBe(true);
+  });
+}

@@ -98,6 +98,15 @@ New tests: `tests/landing/ticker-row.test.ts` (the Delayed and Estimate chips, t
 | `yarn test:e2e` | exit 0: 33 passed, on a fresh build, while another project's `next build` held the load average near 70. Run with `LANDING_CHROMIUM_PATH` pointing at the cached Chromium 1194, because the headless shell wasn't installed. Under load, the agent's header-button test read the URL hash before Next had updated it; it now polls. The new hero-counter test checks the contract whether or not hydration was fast enough for the intro to play |
 | `yarn test:contracts`, full `yarn test` | **not run:** Forge and Anvil aren't installed on this machine, and the repository's Vitest `globalSetup` needs them. The landing work touches no contracts or onchain code; run both in CI or the cloud environment before merging |
 
+### Follow-up: blank hero on laptop screens
+
+Reported after the cross-check: on a 1440×740 browser window the hero showed for a moment on reload, then went blank, and the header's waitlist button appeared at the top of the page. Probing the build showed the same at 1440×900 and 1280×800 (`--hero-heading: 0`, `--header-cta: 1` at scroll 0). There were two compounding causes, both in the original Task 9 code:
+
+1. The fit check counted the hero's 224px of vertical padding as content and then added the 190px clearance on top, so the pinned layout needed a viewport about 950px tall, and most laptops fell back to ordinary flow.
+2. In ordinary flow the track is one viewport tall, and `heroTargetProgress` answered 1 for a track with no pinned travel whenever its top was at or above 0, which includes the very top of the page. The handover then faded every group out right after the intro.
+
+Fix: `heroTargetProgress` answers 0 when there is no pinned travel. The new `heroLayoutFrame` keeps the groups at their intro value in ordinary flow, with only the header button following the hero out (`flowHandoverProgress`). The fit check excludes padding, and the hero's padding now totals 184px desktop and 176px mobile, within the clearance, so a hero that passes always fits its stage uncropped. 1440×740, 1280×800 and 1440×900 now pin. The agent's short-viewport test only checked `data-hero-fit`, and the other motion tests ran at 1440×1000, just above the old threshold. New unit tests pin the contract; new browser tests cover the three laptop sizes and check the copy stays visible in ordinary flow.
+
 **Rendered contrast**, measured with the fluid running in Chromium (SwiftShader WebGL): hero text was made transparent, and the brightest background pixel behind each element was sampled across 12 frames at 1440×1000 and 390×844. Worst frame: heading 18.2:1, subline 13.7:1, rail labels 10.3:1, rail figures 12.0:1, microcopy 5.4:1. All clear the spec's 4.5:1 floor.
 
 **Notes:**

@@ -8,8 +8,9 @@ import {
   MAX_FRAME_MS,
   NAV_CUE,
   SKIP_INTRO_ELAPSED_MS,
+  flowHandoverProgress,
   heroFits,
-  heroFrame,
+  heroLayoutFrame,
   heroTargetProgress,
   shouldPlayIntro,
   smoothProgress,
@@ -68,25 +69,18 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
     const content = track.querySelector<HTMLElement>(".hero-inner");
     const rail = track.querySelector<HTMLElement>('[data-hero-group="rail"]');
 
-    const playIntro = shouldPlayIntro({
-      hydratedAtMs: performance.now(),
-      scrollY: window.scrollY,
-      hash: window.location.hash,
-    });
-    const state = {
-      elapsed: playIntro ? 0 : SKIP_INTRO_ELAPSED_MS,
-      progress: heroTargetProgress(track.getBoundingClientRect(), window.innerHeight),
-      last: performance.now(),
-      running: false,
-      raf: 0,
-    };
-    stateRef.current = state;
-
     let fit = false;
     const refit = () => {
       const railHeight = rail?.offsetHeight ?? 0;
-      // The rail sits inside .hero-inner, so don't count it twice.
-      const contentHeight = Math.max(0, (content?.offsetHeight ?? 0) - railHeight);
+      // The copy's own height: the rail sits inside .hero-inner, so don't count
+      // it twice, and leave out the vertical padding, which the fit clearance
+      // already stands in for (counting both kept laptops out of the pin).
+      let padding = 0;
+      if (content) {
+        const style = window.getComputedStyle(content);
+        padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      }
+      const contentHeight = Math.max(0, (content?.clientHeight ?? 0) - padding - railHeight);
       fit = heroFits({
         viewportHeight: window.innerHeight,
         contentHeight,
@@ -94,6 +88,27 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
         reducedMotion: reducedMotionRef.current,
       });
     };
+    // Pinned, progress runs along the 160vh track; in ordinary flow it follows
+    // the hero scrolling out of view and only drives the header button.
+    const targetProgress = (): number => {
+      const rect = track.getBoundingClientRect();
+      return fit ? heroTargetProgress(rect, window.innerHeight) : flowHandoverProgress(rect);
+    };
+
+    refit();
+    const playIntro = shouldPlayIntro({
+      hydratedAtMs: performance.now(),
+      scrollY: window.scrollY,
+      hash: window.location.hash,
+    });
+    const state = {
+      elapsed: playIntro ? 0 : SKIP_INTRO_ELAPSED_MS,
+      progress: targetProgress(),
+      last: performance.now(),
+      running: false,
+      raf: 0,
+    };
+    stateRef.current = state;
 
     const apply = () => {
       if (reducedMotionRef.current) {
@@ -105,7 +120,7 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
         for (const group of groups) group.dataset.heroDim = "false";
         return;
       }
-      const frame = heroFrame({ elapsedMs: state.elapsed, progress: state.progress });
+      const frame = heroLayoutFrame({ elapsedMs: state.elapsed, progress: state.progress, fit });
       for (const group of HERO_GROUPS) {
         root.style.setProperty(`--hero-${group}`, String(frame[group]));
       }
@@ -126,7 +141,7 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
       if (!pausedRef.current) {
         state.elapsed += dt;
       }
-      const target = heroTargetProgress(track.getBoundingClientRect(), window.innerHeight);
+      const target = targetProgress();
       state.progress = smoothProgress(state.progress, target, dt);
       apply();
       const settled =
@@ -152,7 +167,11 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
       wake();
     };
 
-    refit();
+    // The first apply sets data-hero-fit, so the track takes its real height;
+    // only then is the current scroll position's progress meaningful (a
+    // restored or deep-linked scroll starts where it is, without a sweep).
+    apply();
+    state.progress = targetProgress();
     apply();
     applyRef.current = apply;
     refitRef.current = refit;

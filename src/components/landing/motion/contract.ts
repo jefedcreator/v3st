@@ -73,15 +73,41 @@ export function smoothProgress(current: number, target: number, deltaMs: number)
   return current + (target - current) * k;
 }
 
-// Scroll progress of the hero track: 0 when its top is at the viewport top,
-// 1 when its bottom reaches the viewport bottom.
+// Scroll progress of the pinned hero track: 0 when its top is at the viewport
+// top, 1 when its bottom reaches the viewport bottom. A track no taller than
+// the viewport has no pinned travel, so there is nothing to hand over: 0. (It
+// used to answer 1 at the top of the page, which faded the whole hero out.)
 export function heroTargetProgress(
   rect: { top: number; height: number },
   viewportHeight: number,
 ): number {
   const span = rect.height - viewportHeight;
-  if (span <= 0) return rect.top <= 0 ? 1 : 0;
+  if (span <= 0) return 0;
   return Math.min(1, Math.max(0, -rect.top / span));
+}
+
+// Scroll progress of the hero in ordinary flow (not pinned): 0 while its top
+// is at the viewport top, 1 once it has scrolled entirely out of view.
+export function flowHandoverProgress(rect: { top: number; height: number }): number {
+  if (rect.height <= 0) return 0;
+  return Math.min(1, Math.max(0, -rect.top / rect.height));
+}
+
+// The frame the page applies. Pinned (`fit`), it is the full choreography.
+// In ordinary flow (short viewports, zoom, enlarged text) the groups keep
+// their intro value and never fade with scroll, because the visitor scrolls
+// the hero itself to read it; only the header button still follows the hero
+// scrolling away, using flowHandoverProgress.
+export function heroLayoutFrame(input: {
+  elapsedMs: number;
+  progress: number;
+  fit: boolean;
+}): HeroFrame {
+  const scrolled = heroFrame({ elapsedMs: input.elapsedMs, progress: input.progress });
+  if (input.fit) return scrolled;
+  const resting = heroFrame({ elapsedMs: input.elapsedMs, progress: 0 });
+  resting.headerCta = scrolled.headerCta;
+  return resting;
 }
 
 // The intro only plays on a fresh load that lands at the top of the page
@@ -95,7 +121,10 @@ export function shouldPlayIntro(input: {
 }
 
 // The pinned 160vh track only applies when the whole hero fits with clearance;
-// short viewports, zoom and reduced motion keep ordinary flow.
+// short viewports, zoom and reduced motion keep ordinary flow. `contentHeight`
+// is the copy's own height, excluding the hero's vertical padding: the
+// clearance stands in for that padding (header room plus breathing space), so
+// the hero's padding-block must total no more than HERO_FIT_CLEARANCE_PX.
 export function heroFits(input: {
   viewportHeight: number;
   contentHeight: number;
