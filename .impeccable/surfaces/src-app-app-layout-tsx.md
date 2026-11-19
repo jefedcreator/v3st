@@ -19,7 +19,7 @@ Mode: Operate. Scope: every signed-in customer surface — the `(app)` route gro
 
 Authoritative design: `docs/superpowers/specs/2026-11-19-v3st-customer-app-pages-design.md`. Plan: `docs/superpowers/plans/2026-11-19-v3st-customer-app-pages.md`.
 
-Chosen sketch (critique reference): `docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html`. It is Home's first viewport at 390×844; the build owes the responsive page, everything below the fold and every state the sketch skips. Where it differs from the design, the design wins.
+Chosen sketch (critique reference): `docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.png`, rendered with the real font from the `.html` beside it. It shows a 24-hour percentage and a payout bank that the API doesn't return; the design's pinned strings win. It is Home's first viewport at 390×844; the build owes the responsive page, everything below the fold and every state the sketch skips. Where it differs from the design, the design wins.
 
 ## Direction contract
 

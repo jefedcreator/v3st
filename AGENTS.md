@@ -91,7 +91,7 @@ It is phone-first. Every page does one job, and short jobs are modals. Home is t
 | The spec | Operator decisions, the page and modal rule, routes, modals, states, pinned copy, the app's visual system |
 | The plan | Twenty-one tasks with files, interfaces and the tests to write; Global Constraints and Review Focus |
 | [`.impeccable/surfaces/src-app-app-layout-tsx.md`](.impeccable/surfaces/src-app-app-layout-tsx.md) | The app's direction contract (Impeccable surface brief) |
-| [`docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html`](docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html) | The chosen Home sketch at 390×844, and the finish review's critique reference. The spec wins where they differ |
+| [`docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.png`](docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.png) (source: the `.html` beside it) | The chosen Home sketch at 390×844, rendered with the real font, and the finish review's critique reference. The spec wins where they differ: the sketch shows a 24-hour percentage and a payout bank that the API doesn't return |
 | [`docs/api/customer-app.md`](docs/api/customer-app.md), [`src/types/app.ts`](src/types/app.ts) | The customer API contract, the vocabulary rule and the error copy |
 | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md), [`FRONTEND_PATTERNS_GUIDE.md`](FRONTEND_PATTERNS_GUIDE.md), [`BACKEND_PATTERNS.md`](BACKEND_PATTERNS.md), [`PRODUCT.md`](PRODUCT.md), [`Design.md`](Design.md) | The design system, patterns and product architecture |
 
@@ -144,7 +144,7 @@ Never commit `.env`, credentials, private keys, local databases, generated Prism
 
 ## Earlier assignments
 
-These plans are implemented and remain the record for the backend:
+These plans are implemented and remain the record for what they built:
 
 - the 2026-11-13 ramps and payouts plan;
 - the 2026-11-14 onchain stocks and income plan;

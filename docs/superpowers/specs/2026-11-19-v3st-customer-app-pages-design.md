@@ -75,7 +75,7 @@ The visual system was fixed. Seven ways to organise the app were ranked, and the
 - **In motion**: home leads with in-progress cards on step rails. Rejected: on quiet days its signature disappears.
 - **Harvest weeks**: home leads with eight weeks of Friday earnings. Rejected: testers who never join Earn see an empty band.
 
-The chosen sketch is committed at [`assets/2026-11-19-v3st-app-money-line-sketch.html`](assets/2026-11-19-v3st-app-money-line-sketch.html). Its direction contract is in `.impeccable/surfaces/src-app-app-layout-tsx.md`.
+The chosen sketch is committed at [`assets/2026-11-19-v3st-app-money-line-sketch.html`](assets/2026-11-19-v3st-app-money-line-sketch.html), with a [rendered PNG](assets/2026-11-19-v3st-app-money-line-sketch.png). Where the sketch differs from this design, the design wins: the sketch shows a 24-hour percentage and a payout bank that the API doesn't return. Its direction contract is in `.impeccable/surfaces/src-app-app-layout-tsx.md`.
 
 ### Page or modal
 

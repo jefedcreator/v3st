@@ -33,9 +33,9 @@
 - **Before Task 1, read:**
   - the guides: `AGENTS.md`, `CLAUDE.md`, `FRONTEND_PATTERNS_GUIDE.md`, `DESIGN_SYSTEM.md`, `BACKEND_PATTERNS.md`, `PRODUCT.md`;
   - the API contract: `docs/api/customer-app.md` and `src/types/app.ts`;
-  - the design: the spec, the surface brief and the chosen sketch, `docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html`.
+  - the design: the spec, the surface brief and the chosen sketch, `docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html`, rendered as `…-sketch.png`.
 
-  Open the sketch in a browser at 390×844.
+  The PNG is rendered with the real font at 390×844, and it is the reference to read. Where it differs from the spec, follow the spec and this plan's pinned strings: it shows a 24-hour percentage and a payout bank that the API doesn't return.
 - **`CLAUDE.md` rules:**
   - Make a todo list per task and commit at the end of each task.
   - Never use optional or conditional object spreads (`...(cond ? {…} : {})`, `...(x && {…})`, `...(x ?? {})`). Build objects with `if` statements.
@@ -1829,7 +1829,7 @@ git commit -m "docs: document the customer app's patterns and how to run it"
      - the operator's decisions in spec §Operator decisions;
      - the artifact paths and the screenshot paths;
      - the direction contract (`.impeccable/surfaces/src-app-app-layout-tsx.md`);
-     - the chosen sketch as the critique reference;
+     - the chosen sketch's PNG (`docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.png`) as the critique reference;
      - the detector findings and the craft-floor path.
   3. Act on its disposition word:
      - `fix`: one batch, recapture, verdict pass;
