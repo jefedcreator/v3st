@@ -8,7 +8,6 @@ import {
   useLoginWithEmail,
 } from "@privy-io/react-auth";
 
-import { appApi } from "@/utils/app-api";
 import { isValidEmail } from "@/components/app/signin/signin";
 import { Button, Input, Label } from "@/primitives";
 
@@ -43,7 +42,7 @@ function PrivyResetFlow(props: { appId: string; email: string; onTokens: (tokens
   const [stage, setStage] = React.useState<"email" | "code" | "done">("email");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
-  const [result, setResult] = React.useState<PrivyResetResult | null>(null);
+  const [, setResult] = React.useState<PrivyResetResult | null>(null);
   const exchanged = React.useRef(false);
 
   React.useEffect(() => {
@@ -59,7 +58,7 @@ function PrivyResetFlow(props: { appId: string; email: string; onTokens: (tokens
         getIdentityToken(),
       ]);
       if (accessToken === null || identityToken === null) {
-        setError("That code didn't work. Check it and try again.");
+        setError("That code didn&apos;t work. Check it and try again.");
         return;
       }
       setResult({ access_token: accessToken, identity_token: identityToken });
@@ -76,7 +75,7 @@ function PrivyResetFlow(props: { appId: string; email: string; onTokens: (tokens
       await sendCode({ email, disableSignup: true });
       setStage("code");
     } catch {
-      setError("That code didn't work. Check it and try again.");
+      setError("That code didn&apos;t work. Check it and try again.");
     }
     setPending(false);
   }
@@ -88,13 +87,13 @@ function PrivyResetFlow(props: { appId: string; email: string; onTokens: (tokens
     try {
       await loginWithCode({ code });
     } catch {
-      setError("That code didn't work. Check it and try again.");
+      setError("That code didn&apos;t work. Check it and try again.");
       setPending(false);
     }
   }
 
   if (stage === "done") {
-    return <p className="text-gain text-sm">You're signed in again.</p>;
+    return <p className="text-gain text-sm">You&apos;re signed in again.</p>;
   }
 
   return (

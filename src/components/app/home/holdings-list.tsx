@@ -18,7 +18,7 @@ export function HoldingsList({ home }: { home: AppHomeDto }) {
       <h2 className="type-app-heading text-heading">Your stocks</h2>
       {home.holdings.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          You don't have any stocks yet.{" "}
+          You don&apos;t have any stocks yet.{" "}
           <Link href="/stocks" className="text-gain underline-offset-4 hover:underline">
             Find a stock
           </Link>

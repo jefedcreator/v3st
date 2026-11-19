@@ -68,7 +68,7 @@ export function ChangePinDialog({
               onChange={setConfirm}
             />
             {isValidPin(nextPin) && isValidPin(confirm) && !pinsMatch(nextPin, confirm) && (
-              <p className="text-loss text-sm">Those PINs don't match.</p>
+              <p className="text-loss text-sm">Those PINs don&apos;t match.</p>
             )}
             <Button
               disabled={

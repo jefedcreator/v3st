@@ -1,6 +1,7 @@
+import type { Page } from "@playwright/test";
 import { expect, test, email, PIN, readyAccount } from "./fixtures";
 
-async function fundAndGo(page: import("@playwright/test").Page) {
+async function fundAndGo(page: Page) {
   await readyAccount(page, email("earn"));
   const cashRes = await page.request.fetch("http://127.0.0.1:3108/api/v1/app/cash/deposits", {
     method: "POST",

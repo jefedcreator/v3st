@@ -63,8 +63,8 @@ export function ReceiptPage({
         Support reference {item.reference}
         <CopyButton value={item.reference} label="Copy support reference" />
       </p>
-      {showTransfer && deposit !== null && deposit.pay_to !== null && (
-        <TransferCard payTo={deposit.pay_to} onCompleteBeta={completeBetaDeposit} />
+      {showTransfer && deposit !== null && (
+        <TransferCard payTo={deposit.pay_to!} onCompleteBeta={completeBetaDeposit} />
       )}
       <BetaLine />
     </div>

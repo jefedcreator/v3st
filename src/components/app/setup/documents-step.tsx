@@ -76,7 +76,7 @@ export function DocumentsStep({
           checked={accepted}
           onCheckedChange={(checked) => setAccepted(checked === true)}
         />
-        I've read and accept these documents
+        I&apos;ve read and accept these documents
       </Label>
       <Button type="submit" disabled={!accepted || pending}>
         {pending ? "Accepting…" : "Accept and continue"}

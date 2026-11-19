@@ -1,6 +1,7 @@
+import type { Page } from "@playwright/test";
 import { expect, test, email, PIN, readyAccount } from "./fixtures";
 
-async function fundAndGo(page: import("@playwright/test").Page) {
+async function fundAndGo(page: Page) {
   await readyAccount(page, email("trade"));
   const cashRes = await page.request.fetch("http://127.0.0.1:3108/api/v1/app/cash/deposits", {
     method: "POST",
@@ -14,7 +15,7 @@ async function fundAndGo(page: import("@playwright/test").Page) {
   );
 }
 
-async function stock(page: import("@playwright/test").Page): Promise<string> {
+async function stock(page: Page): Promise<string> {
   await page.goto("/stocks");
   const first = page.locator('a[href^="/stocks/"]').first();
   const href = await first.getAttribute("href");
@@ -78,7 +79,8 @@ test("double confirm places one order", async ({ page }) => {
   const confirm = page.getByRole("button", { name: "Confirm", exact: true });
   await page.getByLabel("Your PIN").fill(PIN);
   await confirm.click();
-  await confirm.click({ force: true, noWaitAfter: true }).catch(() => {});
+  const secondClick = confirm.click({ force: true, noWaitAfter: true });
+  await secondClick.catch(() => undefined);
   await page.waitForURL("**/orders/*");
   await page.goto("/activity");
   await expect(page.getByRole("link", { name: /Buy / })).toHaveCount(1);

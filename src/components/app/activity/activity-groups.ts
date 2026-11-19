@@ -9,7 +9,7 @@ export function groupByLagosDay(
   for (const item of items) {
     const label = lagosDayLabel(item.occurred_at, now);
     const last = groups[groups.length - 1];
-    if (last !== undefined && last.label === label) {
+    if (last?.label === label) {
       last.items.push(item);
     } else {
       groups.push({ label, items: [item] });

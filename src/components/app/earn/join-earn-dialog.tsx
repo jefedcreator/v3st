@@ -163,7 +163,7 @@ export function JoinEarnDialog({
                 checked={acceptedRisk}
                 onCheckedChange={(checked) => setAcceptedRisk(checked === true)}
               />
-              I've read and accept the Earn risks (version {preview.risk_document.version})
+              I&apos;ve read and accept the Earn risks (version {preview.risk_document.version})
             </Label>
             <PinInput id="earn-pin" label="Your PIN" value={pin} onChange={setPin} />
             <Button

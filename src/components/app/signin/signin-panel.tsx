@@ -32,12 +32,12 @@ export function SigninPanel({
       </div>
       {signedOut && (
         <p role="status" aria-live="polite" className="text-gain text-sm">
-          You're signed out.
+          You&apos;re signed out.
         </p>
       )}
       {mode === "simulated" && <SimulatedSignin next={next} />}
       {mode === "sandbox" && appId === null && (
-        <p className="text-muted-foreground text-sm">Sign-in isn't set up on this server yet.</p>
+        <p className="text-muted-foreground text-sm">Sign-in isn&apos;t set up on this server yet.</p>
       )}
       {mode === "sandbox" && appId !== null && (
         <PrivySignin appId={appId} next={next} signedOut={signedOut} />

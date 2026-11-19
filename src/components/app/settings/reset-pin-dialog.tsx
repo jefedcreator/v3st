@@ -105,7 +105,7 @@ export function ResetPinDialog({
                   onChange={setConfirm}
                 />
                 {isValidPin(pin) && isValidPin(confirm) && !pinsMatch(pin, confirm) && (
-                  <p className="text-loss text-sm">Those PINs don't match.</p>
+                  <p className="text-loss text-sm">Those PINs don&apos;t match.</p>
                 )}
                 <Button disabled={!pinsMatch(pin, confirm) || pending} onClick={() => void onReset()}>
                   {pending ? "Saving…" : "Reset PIN"}

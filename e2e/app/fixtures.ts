@@ -42,7 +42,7 @@ async function call(page: Page, verb: "GET" | "POST" | "PUT", path: string, data
   });
 }
 
-async function jsonEnveloped(res: import("@playwright/test").APIResponse): Promise<unknown> {
+async function jsonEnveloped(res: { json: () => Promise<unknown> }): Promise<unknown> {
   const body = await res.json();
   const envelope = body as { data?: unknown };
   return envelope.data;

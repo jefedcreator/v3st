@@ -27,7 +27,6 @@ export function WithdrawDialog({
   open,
   onOpenChange,
   availableKobo,
-  bankAccount,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -85,7 +84,7 @@ export function WithdrawDialog({
     }
   }
 
-  const expired = preview === null ? false : countdownState !== null && countdownState.done;
+  const expired = countdownState?.done === true;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

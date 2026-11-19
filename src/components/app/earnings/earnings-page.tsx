@@ -54,7 +54,7 @@ export function EarningsPage({ earnings: initial }: { earnings: AppEarningsDto }
       ))}
       {empty && (
         <p className="text-muted-foreground text-sm">
-          No earnings yet. Earn pays out on Fridays when there's something to pay.{" "}
+          No earnings yet. Earn pays out on Fridays when there&apos;s something to pay.{" "}
           <Link href="/earn" className="text-gain underline-offset-4 hover:underline">
             See Earn
           </Link>

@@ -6,7 +6,6 @@ import * as React from "react";
 import { appApi, AppApiError, type OrderPreviewBody } from "@/utils/app-api";
 import type { AppOrderPreviewDto, AppStockDetailDto } from "@/types/app";
 import { formatNaira, formatShares } from "@/utils/format";
-import { nextIdempotencyKey } from "@/hooks/app/idempotency";
 import { useIdempotencyKey } from "@/hooks/app/use-idempotency-key";
 import { useCashQuery } from "@/hooks/app/use-cash";
 import { AmountField } from "@/components/app/money/amount-field";
@@ -88,10 +87,6 @@ export function TradeDialog({
       setPayWith(defaultPayWith(availableKobo, kobo));
     }
   }, [paidWithCash, availableKobo, kobo]);
-
-  function nextKey(event: "retry" | "new_preview" | "done"): string {
-    return nextIdempotencyKey(key, event, () => crypto.randomUUID());
-  }
 
   function buildPreviewBody(): OrderPreviewBody {
     const body: OrderPreviewBody = { stock_id: stock.id, side };

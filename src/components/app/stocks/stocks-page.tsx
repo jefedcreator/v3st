@@ -27,10 +27,9 @@ export function StocksPage({
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setDebounced(text);
-      writeUrl(text, watchlist);
     }, 250);
     return () => clearTimeout(timer);
-  }, [text, watchlist]);
+  }, [text]);
 
   function writeUrl(nextQ: string, nextWatchlist: boolean) {
     const params = new URLSearchParams();
@@ -74,7 +73,7 @@ export function StocksPage({
           <StockRow key={stock.id} stock={stock} now={now} />
         ))}
         {(data ?? []).length === 0 && debounced !== "" && (
-          <p className="text-muted-foreground py-6 text-sm">No stocks match "{debounced}".</p>
+          <p className="text-muted-foreground py-6 text-sm">No stocks match &quot;{debounced}&quot;.</p>
         )}
         {(data ?? []).length === 0 && debounced === "" && watchlist && (
           <p className="text-muted-foreground py-6 text-sm">

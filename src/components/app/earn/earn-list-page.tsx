@@ -24,7 +24,7 @@ export function EarnListPage({
         </p>
       </div>
       {products.length === 0 && (
-        <p className="text-muted-foreground text-sm">Earn isn't available right now.</p>
+        <p className="text-muted-foreground text-sm">Earn isn&apos;t available right now.</p>
       )}
       {products.map((product) => {
         const view = positionView(product.position, product.available);

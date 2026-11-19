@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { buildMoneyLine, type LineItem } from "@/components/app/home/line-model";
+import { buildMoneyLine } from "@/components/app/home/line-model";
 import type {
   AppActionItemDto,
   AppActivityItemDto,
@@ -102,7 +102,7 @@ it("shows the Friday payout first when there is Earn value", () => {
     earn_kobo: "477040",
     earnings: { this_week_kobo: "124000", next_payout_on: "2026-11-20", choice: "payout" },
   });
-  const item = buildMoneyLine(h, [], NOW).upcoming[0] as LineItem;
+  const item = buildMoneyLine(h, [], NOW).upcoming[0]!;
   expect(item).toMatchObject({
     title: "Friday payout",
     detail: "₦1,240 so far this week · paid to your bank",

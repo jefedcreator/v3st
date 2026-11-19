@@ -33,7 +33,7 @@ export default async function SetupPage() {
       testIdentities={testIdentities}
       documents={documents}
       banks={banks}
-      investDocuments={INVEST_DOCUMENTS as AppDocumentSlug[] as string[]}
+      investDocuments={INVEST_DOCUMENTS as AppDocumentSlug[]}
     />
   );
 }

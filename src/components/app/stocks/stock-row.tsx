@@ -4,7 +4,6 @@ import Link from "next/link";
 import { cn } from "@/utils/cn";
 
 import type { AppStockListItemDto } from "@/types/app";
-import { useNow } from "@/hooks/app/use-now";
 import { Badge, Tabs, TabsList, TabsTrigger } from "@/primitives";
 import { moneyText } from "@/primitives/money-text";
 import { priceCaption, returnText, tradingChip } from "./price-status";

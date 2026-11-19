@@ -31,9 +31,7 @@ function getQueryClient(): QueryClient {
   if (typeof window === "undefined") {
     return makeQueryClient();
   }
-  if (browserQueryClient === null) {
-    browserQueryClient = makeQueryClient();
-  }
+  browserQueryClient ??= makeQueryClient();
   return browserQueryClient;
 }
 

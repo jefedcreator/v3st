@@ -65,7 +65,7 @@ export function AddMoneyDialog({
         <DialogHeader>
           <DialogTitle>Add money</DialogTitle>
           <DialogDescription>
-            You'll get bank details to send a transfer from your own account.
+            You&apos;ll get bank details to send a transfer from your own account.
           </DialogDescription>
         </DialogHeader>
         <div className="mt-2 flex flex-col gap-4">

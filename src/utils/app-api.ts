@@ -1,6 +1,8 @@
 import type {
   AppActivityDetailDto,
   AppActivityPageDto,
+  AppEarnPositionDto,
+  AppEarnWithdrawPreviewDto,
   AppAutomationDto,
   AppBankAccountDto,
   AppBankDto,
@@ -19,6 +21,7 @@ import type {
   AppOnboardingDto,
   AppOrderDto,
   AppOrderPreviewDto,
+  AppTestIdentityDto,
   AppProfileDto,
   AppSessionDto,
   AppStockDetailDto,
@@ -122,7 +125,7 @@ export function createAppApi(deps: AppApiDeps) {
       }
       throw new AppApiError(message, response.status, code);
     }
-    return (envelope?.data ?? (json as T)) as T;
+    return (envelope?.data ?? (json as T));
   }
 
   return {
@@ -157,7 +160,7 @@ export function createAppApi(deps: AppApiDeps) {
     },
     identity: {
       testIdentities: () =>
-        request<import("@/types/app").AppTestIdentityDto[]>("GET", "/identity/test-identities"),
+        request<AppTestIdentityDto[]>("GET", "/identity/test-identities"),
       verify: (testIdentityId: string) =>
         request<{ verified: boolean; onboarding: AppOnboardingDto }>(
           "POST",
@@ -176,11 +179,9 @@ export function createAppApi(deps: AppApiDeps) {
     },
     security: {
       setPin: (body: { pin: string; current_pin?: string }) =>
-        request("PUT", "/security/pin", undefined, body) as Promise<{
-          [k: string]: unknown;
-        }>,
+        request<Record<string, unknown>>("PUT", "/security/pin", undefined, body),
       resetPin: (body: { access_token: string; identity_token: string; pin: string }) =>
-        request("POST", "/security/pin/reset", undefined, body) as Promise<unknown>,
+        request<unknown>("POST", "/security/pin/reset", undefined, body),
       sessions: () => request<AppDeviceSessionDto[]>("GET", "/security/sessions"),
       revokeSession: (id: string) => request("DELETE", `/security/sessions/${id}`),
       signOutOthers: () => request("POST", "/security/sessions/sign-out-others"),
@@ -209,7 +210,7 @@ export function createAppApi(deps: AppApiDeps) {
     },
     stocks: {
       list: (q: { q?: string; watchlist?: boolean }) =>
-        request<AppStockListItemDto[]>("GET", "/stocks", q as Query),
+        request<AppStockListItemDto[]>("GET", "/stocks", q),
       get: (id: string) => request<AppStockDetailDto>("GET", `/stocks/${id}`),
       chart: (id: string, range: string) =>
         request<AppChartDto>("GET", `/stocks/${id}/chart`, { range }),
@@ -242,12 +243,12 @@ export function createAppApi(deps: AppApiDeps) {
         key: string,
       ) => request<AppEarnProductDto>("POST", `/earn/${id}/join`, undefined, body, key),
       withdrawPreview: (positionId: string) =>
-        request<import("@/types/app").AppEarnWithdrawPreviewDto>(
+        request<AppEarnWithdrawPreviewDto>(
           "POST",
           `/earn/positions/${positionId}/withdraw/preview`,
         ),
       withdraw: (positionId: string, body: { preview_id: string; pin: string }, key: string) =>
-        request<import("@/types/app").AppEarnPositionDto>(
+        request<AppEarnPositionDto>(
           "POST",
           `/earn/positions/${positionId}/withdraw`,
           undefined,
@@ -261,7 +262,7 @@ export function createAppApi(deps: AppApiDeps) {
         choice: "payout" | "reinvest" | "unset";
         stock_id?: string;
         pin: string;
-      }) => request("PUT", "/earnings/preference", undefined, body) as Promise<unknown>,
+      }) => request<unknown>("PUT", "/earnings/preference", undefined, body),
     },
     activity: {
       list: (q: { cursor?: string; limit?: number }) =>

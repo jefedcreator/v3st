@@ -17,19 +17,19 @@ function fakeApi(
   const calls: Call[] = [];
   let signIns = 0;
   const api = createAppApi({
-    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({
-        url: String(input),
+        url: typeof input === "string" ? input : (input as Request).url,
         method: init?.method ?? "GET",
         headers: (init?.headers ?? {}) as Record<string, string>,
-        body: init?.body !== undefined ? String(init.body) : undefined,
+        body: typeof init?.body === "string" ? init.body : undefined,
       });
       if (options.throwOnFetch) throw new TypeError("dropped");
       return new Response(JSON.stringify(json), {
         status,
         headers: { "content-type": "application/json" },
       });
-    }) as unknown as typeof fetch,
+    },
     onSignInRequired: () => {
       signIns += 1;
     },
@@ -74,9 +74,9 @@ describe("the app API client", () => {
 
   it("falls back to generic copy for non-JSON failures and network errors", async () => {
     const html = createAppApi({
-      fetch: (async () =>
-        new Response("<html>bad gateway</html>", { status: 502 })) as unknown as typeof fetch,
-      onSignInRequired: () => {},
+      fetch: async () =>
+        new Response("<html>bad gateway</html>", { status: 502 }),
+      onSignInRequired: () => undefined,
     });
     await expect(html.home.get()).rejects.toMatchObject({
       status: 502,

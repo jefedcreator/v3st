@@ -5,7 +5,7 @@ import * as React from "react";
 import { appApi, AppApiError } from "@/utils/app-api";
 import { Button } from "@/primitives";
 import { PinInput } from "@/components/app/pin/pin-input";
-import { isValidPin, pinsMatch } from "@/components/app/pin/pin";
+import { pinsMatch } from "@/components/app/pin/pin";
 
 export function PinSetupStep({ onDone }: { onDone: () => void }) {
   const [pin, setPin] = React.useState("");
@@ -51,7 +51,7 @@ export function PinSetupStep({ onDone }: { onDone: () => void }) {
       />
       {mismatch && (
         <p id="pin-mismatch" className="text-loss text-sm">
-          Those PINs don't match.
+          Those PINs don&apos;t match.
         </p>
       )}
       <Button type="submit" disabled={!ready || pending}>

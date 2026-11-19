@@ -44,7 +44,7 @@ export function SetupFlow({
   if (current === null) {
     return (
       <div className="flex flex-col items-start gap-4 pt-6" role="status" aria-live="polite">
-        <h1 className="type-app-title text-heading">You're all set</h1>
+        <h1 className="type-app-title text-heading">You&apos;re all set</h1>
         <p className="text-muted-foreground">Add money to make your first investment.</p>
         <Button
           onClick={() => {

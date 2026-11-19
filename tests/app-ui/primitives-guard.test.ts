@@ -11,13 +11,13 @@ describe("primitive source guards", () => {
   it("keeps the icon and import rules", () => {
     for (const { name, text } of files) {
       expect(text.includes("lucide-react"), `${name} uses lucide-react`).toBe(false);
-      expect(/from "@radix-ui\/react-/.test(text), `${name} uses scoped radix imports`).toBe(false);
-      expect(/from "@\/utils"/.test(text), `${name} imports the utils barrel`).toBe(false);
+      expect(text.includes('from "@radix-ui/react-'), `${name} uses scoped radix imports`).toBe(false);
+      expect(text.includes('from "@/utils"'), `${name} imports the utils barrel`).toBe(false);
       expect(
-        /from "@phosphor-icons\/react"/.test(text) && !/import type/.test(text),
+        text.includes('from "@phosphor-icons/react"') && !text.includes('import type'),
         `${name} imports Phosphor outside the SSR entry`,
       ).toBe(false);
-      if (/cn\(/.test(text)) {
+      if (text.includes('cn(')) {
         expect(text.includes('from "@/utils/cn"'), `${name} must import cn from @/utils/cn`).toBe(
           true,
         );

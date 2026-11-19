@@ -35,9 +35,9 @@ export function isActive(pathname: string, href: string): boolean {
 
 // Up to two initials for the account button.
 export function initialsFor(session: AppSessionDto | null): string {
-  if (session === null || session.signed_in !== true) return "";
+  if (session?.signed_in !== true) return "";
   const name = session.customer.display_name ?? session.customer.first_name;
-  if (name !== null && name !== "") {
+  if (name?.trim().length) {
     const parts = name.trim().split(/\s+/);
     return parts
       .slice(0, 2)
@@ -45,6 +45,6 @@ export function initialsFor(session: AppSessionDto | null): string {
       .join("");
   }
   const email = session.customer.email;
-  if (email !== null && email !== "") return email.charAt(0).toUpperCase();
+  if (email?.length) return email.charAt(0).toUpperCase();
   return "";
 }

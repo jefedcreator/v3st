@@ -4,7 +4,6 @@ import * as React from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/primitives";
 import type { AppChartDto, ChartRange } from "@/types/app";
 import { formatChangeBps } from "@/utils/format";
-import { cn } from "@/utils/cn";
 import { chartPath } from "./chart-path";
 
 const RANGES: ChartRange[] = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
@@ -39,7 +38,7 @@ export function PriceChart({
         </TabsList>
       </Tabs>
       {chart === null && (
-        <p className="text-muted-foreground text-sm">The chart isn't available right now.</p>
+        <p className="text-muted-foreground text-sm">The chart isn&apos;t available right now.</p>
       )}
       {chart !== null && chart.status === "not_enough_data" && (
         <p className="text-muted-foreground text-sm">
