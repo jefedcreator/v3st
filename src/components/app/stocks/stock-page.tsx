@@ -13,6 +13,8 @@ import { moneyText } from "@/primitives/money-text";
 import { Button } from "@/primitives";
 import { PageHeader } from "@/components/app/page-header";
 import { DocumentDialog } from "@/components/app/documents/document-dialog";
+import { SetupGate } from "@/components/app/setup-gate";
+import { TradeDialog } from "@/components/app/trade/trade-dialog";
 import { PriceChart } from "./price-chart";
 import { priceCaption } from "./price-status";
 import { StockMark } from "./stock-mark";
@@ -29,7 +31,6 @@ export function StockPage({
   chart: AppChartDto | null;
   limits: MoneyLimits;
 }) {
-  void limits;
   const now = useNow(60_000);
   const { data: stock } = useStockQuery(initial.id, initial);
   const [range, setRange] = React.useState<ChartRange>("1D");
@@ -43,7 +44,7 @@ export function StockPage({
   const caption = priceCaption(stock.price_status, stock.price_as_of, now);
   const paused = stock.trading === "paused";
   const updating = stock.trading === "prices_updating";
-  const buyable = false;
+  const [trade, setTrade] = React.useState<"buy" | "sell" | null>(null);
 
   return (
     <div className="flex flex-col gap-6 pt-4">
@@ -82,18 +83,18 @@ export function StockPage({
         )}
       </section>
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="outline"
-          disabled={!buyable || paused}
-          aria-disabled="true"
-        >
-          Buy
-        </Button>
-        {stock.your_position !== null && (
-          <Button disabled={!buyable || paused || false} aria-disabled="true">
-            Sell
-          </Button>
-        )}
+        <SetupGate label="Finish setting up to invest">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" disabled={paused} onClick={() => setTrade("buy")}>
+              Buy
+            </Button>
+            {stock.your_position !== null && (
+              <Button disabled={paused} onClick={() => setTrade("sell")}>
+                Sell
+              </Button>
+            )}
+          </div>
+        </SetupGate>
         {paused && (
           <p className="text-muted-foreground text-sm">
             Trading is paused for a short time. Your money is safe.
@@ -133,6 +134,17 @@ export function StockPage({
         open={documentOpen}
         onOpenChange={setDocumentOpen}
       />
+      {trade !== null && (
+        <TradeDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setTrade(null);
+          }}
+          side={trade}
+          stock={stock}
+          minKobo={limits.buyMinKobo}
+        />
+      )}
     </div>
   );
 }
