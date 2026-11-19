@@ -381,3 +381,21 @@ export type AppProfileDto = {
   identity: { verified: boolean; level: "standard" | "higher" | null };
   bank_account: AppBankAccountDto | null;
 };
+
+// ---- Documents ----
+
+export type AppDocumentSlug = "terms" | "risks" | "how-shares-are-held" | "earn-risks" | "privacy";
+
+export type AppDocumentSummaryDto = {
+  slug: AppDocumentSlug;
+  title: string;
+  version: string;
+  accepted: boolean;
+};
+
+export type AppDocumentDto = {
+  slug: AppDocumentSlug;
+  title: string;
+  version: string;
+  body: string;
+};

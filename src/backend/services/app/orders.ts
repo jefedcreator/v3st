@@ -4,6 +4,7 @@ import { now } from "@/backend/clock";
 import { policy } from "@/backend/config/policy";
 import { CUSTOMER_DOCUMENTS } from "@/backend/content/documents";
 import { appCatalogService } from "@/backend/services/app/catalog";
+import { appCashService } from "@/backend/services/app/cash";
 import type { AppPayToDto } from "@/backend/services/app/cash";
 import { customerChain } from "@/backend/services/app/network";
 import { customerReference, formatNaira, formatShares, sharesMicroOf, toKobo } from "@/backend/services/app/format";
@@ -454,6 +455,19 @@ class AppOrdersService {
       created_at: order.createdAt.toISOString(),
       completed_at: order.completedAt ? order.completedAt.toISOString() : null,
     };
+  }
+
+  async completeBetaTransfer(userId: string, orderId: string): Promise<AppOrderDto> {
+    const order = await db.customerOrder.findFirst({ where: { id: orderId, userId } });
+    if (order === null || order.depositOrderId === null) {
+      throw new NotFoundException("Order not found");
+    }
+    const depositOrderId = order.depositOrderId;
+    const deposit = await appCashService.getDeposit(userId, depositOrderId);
+    if (deposit.status === "waiting") {
+      await appCashService.completeBetaDeposit(userId, depositOrderId);
+    }
+    return this.get(userId, orderId);
   }
 }
 

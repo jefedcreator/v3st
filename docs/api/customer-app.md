@@ -78,6 +78,7 @@ Every customer response, errors included, passes `findCustomerLeaks` (`src/backe
 | `POST /api/v1/app/orders/preview` | `{ stock_id, side, amount_kobo }` (≥ 100000) or `{ stock_id, side: "sell", sell_all: true }`; a buy may add `pay_with: "cash" \| "bank_transfer"` (default: cash when it covers the amount) | preview with fees; `executes` is `now`, `when_prices_update` or `after_your_transfer` |
 | `POST /api/v1/app/orders` | `{ preview_id, pin }` + idempotency key | placed order |
 | `GET` / `DELETE /api/v1/app/orders/[id]` | — | order detail / cancel while waiting |
+| `POST /api/v1/app/beta/orders/[id]/complete-transfer` | — (beta) | marks a pay-by-transfer order's test transfer paid |
 
 ### Earn and earnings
 
@@ -164,6 +165,7 @@ Validation failures (`CHECK_DETAILS`, 422) carry a field-specific message for th
 
 - Simulated Privy issuer (`/app/beta/privy-tokens`) and test identities (`ada_tier2`, `tunde_tier1`, `rejected`).
 - `POST /app/beta/deposits/[id]/complete` marks a sim bank transfer paid.
+- `POST /app/beta/orders/[id]/complete-transfer` marks a pay-by-transfer order's test transfer paid.
 - Session DTO carries `beta: { test_money: true, notice }` on every response.
 - Earn risks copy states that beta fees come mostly from test trading and have no real value.
 
