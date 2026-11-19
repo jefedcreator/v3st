@@ -48,12 +48,62 @@ Impeccable was not installed in this environment; per the plan's fallback, the r
 ## Provenance and rights
 
 - `public/brands/sources.json` and `public/stocks/sources.json`: 20 official marks with source pages, asset URLs, treatments, sha256, retrievedOn, and `termsNote` + `operatorAccepted: "2026-11-18"` where brand terms restrict third-party use (decision 11). Two SVGs were re-fetched during verification because the first download was truncated; manifests updated to the shipped hashes.
-- `public/art/sources.json`: six original rasters authored for this repo (SVG generator rendered via headless Chromium, encoded with sharp), AVIF + WebP at explicit dimensions.
+- `public/art/sources.json`: ~~six original rasters authored for this repo (SVG generator rendered via headless Chromium, encoded with sharp)~~ **Superseded by the cross-check below:** all six shipped rasters were clipped to their top-left quadrant and the generator was never committed. They are replaced by five rasters from the committed `scripts/landing-art.mjs`.
 - Vendored `liquid-ether.tsx` pins react-bits commit `1eeb6f105c68b964289d85dabbe84a1d551f3797` with the licence in `LICENSE-react-bits.md` (MIT + Commons Clause) and the six listed modifications in the file header.
 
 ## Still open
 
 - None blocking. The page stays `noindex` until a public-release decision; the waitlist is exported manually via `GET /api/v1/ops/waitlist` (see `docs/runbooks/backend-beta.md`); `RATE_LIMIT_SECRET` must be set for the waitlist rate limiter outside local defaults.
+
+## Cross-check against the plan (2026-11-19)
+
+A second pass compared every task's deliverables with the plan and spec, then fixed the shortfalls on this branch. Several claims above didn't hold up:
+
+- **The rendered review missed a visible defect.** Every authored raster in `public/art/` held its artwork in the top-left quadrant of the canvas, cut off with hard edges, so the hero's static glow (the no-WebGL, reduced-motion and Data Saver fallback) was a hard-edged green rectangle. The generating script was not committed, so the provenance "beside it" that the spec requires didn't exist.
+- **`yarn typecheck` did not exit 0 on this branch:** `e2e/landing.spec.ts` called `.complete` and `.naturalWidth` on plain `Element`s.
+- **The anchor test was loosened instead of the layout fixed.** The plan pins the target *heading* between 0 and 120px from the top; the test was changed to measure the section, while headings actually landed about 208px down.
+- **"Counters reach their final values" passed vacuously.** The hero counters never animated (see below), and the test never scrolled to the safeguard counters.
+
+### Shortfalls fixed
+
+| Area | Shortfall | Fix |
+| --- | --- | --- |
+| Rate limiter (Task 4) | `hit()` read the count, then upserted `count + 1` under READ COMMITTED: a concurrent burst could pass the limit, and two first hits could race to create the row (unique-violation 500) | One `INSERT … ON CONFLICT DO UPDATE … RETURNING` statement; new tests for an 8-hit concurrent burst (exactly 5 allowed) and the stored window start |
+| Counters (Task 11) | Child effects run before parent effects, so `Counter` read its hero group's opacity before `HeroMotion` faded it: the hero counters never counted. Below the fold, figures showed their final value until 35% visible, then snapped to 0. Animated digits were exposed to assistive technology | Visibility check deferred one frame; unseen counters rest at zero; final value in an `sr-only` span beside an `aria-hidden` animated span; the final value is restored if a count is interrupted |
+| Hero choreography (Task 9) | CSS variables and data attributes written onto the layout's `[data-landing]` root were never removed, so after a client navigation `/legal/*` kept a hidden header button. Reduced motion flashed a blank hero on the first frame; turning it off live never resumed; layout was read every frame | Unmount clears everything it wrote; `prefersReducedMotion()` is read directly on mount; a live switch back re-fits and resumes; fit is measured only on resize |
+| Mobile sheet (Task 6) | Links didn't close the sheet, leaving it over the section they jumped to. The pause control wasn't at the right edge on mobile. The trigger was an icon instead of Katana's "Menu" | `SheetClose` on every link; pause control moved to the right edge; a visible "Menu" button. The sheet's waitlist button also focuses `#join-email` |
+| Fluid (Task 10) | No error boundary: a failed `three` chunk or an init throw would take down the whole page instead of keeping the static glow. Reduced motion switched on mid-visit left the fluid running | `FluidBoundary` keeps the failure inside the background; `run` is reset when the gate closes |
+| Diagram (Task 11) | Panels were `opacity: 0` in server HTML. Autoplay never resumed after the diagram scrolled out of view, and didn't stop for a hidden tab | Entrance keyed to `data-entered="false"`, set only after hydration; autoplay restarts when visible again and stops on `visibilitychange` |
+| Cursor follower (Task 11) | A `requestAnimationFrame` loop ran forever on every marketing page, touch devices included | Runs only while catching up with the pointer |
+| Artwork (Task 8) | All six rasters clipped (above); `journey-panels` shipped but was never used | `scripts/landing-art.mjs` generates five full-canvas rasters (large glows use radial gradients, since some renderers cap big SVG blurs); the unused raster was removed; `tests/landing/art-assets.test.ts` pins hashes and full-canvas coverage |
+| Copy and figures (Task 8) | The safeguard line typed "30 days" by hand; safeguard card titles kept the spec's markdown colons; the hero subline was `muted` although the spec requires `ink` | Derived from policy; colons removed; subline in `ink` |
+| Hero contrast | Rail labels in `subtle` measured about 2.5:1 by calculation over the glow; there was no veil behind the copy | A soft `void` veil behind the copy (fading with the heading) and `ink` rail labels; waitlist microcopy moved from `subtle` (4.66:1 worst measured frame) to `muted` |
+| Layout | Anchor jumps landed headings about 208px down (Stocks about 179px, because its column was centred against the ticker); the built-with label was out-ranked by `.landing-section h2` and rendered white; brand marks sat at 0.55 with no hover | Per-section scroll margins and a top-aligned Stocks grid; the label's selector strengthened; marks at 0.6 → 0.9 over 200ms |
+| FAQ, reduced motion | The spec's 200ms height and opacity transition was missing; without JavaScript, the CSS loops ignored `prefers-reduced-motion` | `::details-content` transition gated on motion preference; a media-query fallback for the ticker and floating panels |
+| Assets | Paycrest was 135 wide in the catalogue but 134 in the manifest; Hydrex's root `width` disagreed with its `viewBox` and manifest; stock badges' alt text was the ticker, not the company name | Aligned (Hydrex re-hashed) and pinned by new tests; badges use the company name |
+| Docs | `DESIGN_SYSTEM.md` and `.impeccable/design.json` listed the wrong fluid palette; `DESIGN_SYSTEM.md` had lost its primitives section; the README said the rate limit was "per IP+email" with "a dev default" | Corrected. `DESIGN_SYSTEM.md` gains Components and primitives plus a Silent-failure traps section |
+
+New tests: `tests/landing/ticker-row.test.ts` (the Delayed and Estimate chips, the price line, alt text: states the no-database browser build can't show), `tests/landing/art-assets.test.ts`, catalogue-to-manifest and SVG intrinsic-size checks in `brand-assets.test.ts`, derived-copy checks in `content.test.ts`, the two rate-limit cases above, and browser tests for the sheet closing on a link, the pause control's position, hero counters counting from zero, counters' accessible text, and the header settling after leaving `/`.
+
+### Gates on the fixed branch (2026-11-19, local macOS)
+
+| Command | Result |
+| --- | --- |
+| `yarn prisma validate` / `yarn prisma generate` | exit 0 / exit 0 |
+| `yarn typecheck` | exit 0 |
+| `yarn lint` | exit 0: 0 errors; 7 warnings, all in pre-existing files (configs and onchain test helpers) |
+| Vitest, `tests/landing` + `tests/unit` (no database) | 37 files, 157 tests passed (`hydrex-policy` needs the database and ran in the row below) |
+| Vitest, database suites: `rate-limit`, `waitlist` API, `public-ticker`, `documents`, `onboarding`, `catalog`, `tests/unit` | against an isolated throwaway PostgreSQL 14 (`*_test`, all 18 migrations applied cleanly): 148 passed, 1 failed. The failure, `catalog.test.ts > returns chart points…`, predates this work: it records snapshots at a fixed `2026-11-17T08:00Z` and asks for a 1D chart without `setNow`, so it fails on any day after 2026-11-18. This branch doesn't touch that file |
+| `node scripts/landing-beta.mjs build` | exit 0: `/` static, revalidating every 5 minutes, 134 kB first-load JS; `/legal/[slug]` SSG; `/waitlist` dynamic |
+| `yarn test:e2e` | exit 0: 33 passed, on a fresh build, while another project's `next build` held the load average near 70. Run with `LANDING_CHROMIUM_PATH` pointing at the cached Chromium 1194, because the headless shell wasn't installed. Under load, the agent's header-button test read the URL hash before Next had updated it; it now polls. The new hero-counter test checks the contract whether or not hydration was fast enough for the intro to play |
+| `yarn test:contracts`, full `yarn test` | **not run:** Forge and Anvil aren't installed on this machine, and the repository's Vitest `globalSetup` needs them. The landing work touches no contracts or onchain code; run both in CI or the cloud environment before merging |
+
+**Rendered contrast**, measured with the fluid running in Chromium (SwiftShader WebGL): hero text was made transparent, and the brightest background pixel behind each element was sampled across 12 frames at 1440×1000 and 390×844. Worst frame: heading 18.2:1, subline 13.7:1, rail labels 10.3:1, rail figures 12.0:1, microcopy 5.4:1. All clear the spec's 4.5:1 floor.
+
+**Notes:**
+
+- Under software WebGL the fluid starves the main thread enough that an 800ms count can complete between two frames; the count is time-based, so figures stay correct. That counter test stubs WebGL off to observe intermediate values. On GPU devices this doesn't arise.
+- **Still open:** Coinbase's mark ships as the official *blue* wordmark (`unaltered`) because the agent couldn't reach the press kit; the spec prefers the official light variant on this dark ground, so replace it when the press kit is reachable. The Katana side-by-side was not re-captured in this pass.
 
 ## How to preview
 
