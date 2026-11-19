@@ -6,7 +6,7 @@ The entire application must remain in beta. Every provider must use a verified s
 
 ## Cloud agent entry point
 
-Start with [AGENTS.md](AGENTS.md). The current assignment is the landing page redesign: implement the [redesign plan](docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md) against the [approved design](docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md), the [direction contract](.impeccable/surfaces/src-app-marketing-page-tsx.md) and the [approved mock](docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-mock.png). Also read [CLAUDE.md](CLAUDE.md), [Design.md](Design.md), [BACKEND_PATTERNS.md](BACKEND_PATTERNS.md) and [FRONTEND_PATTERNS_GUIDE.md](FRONTEND_PATTERNS_GUIDE.md).
+Start with [AGENTS.md](AGENTS.md). The current assignment is the customer app pages: implement the [app plan](docs/superpowers/plans/2026-11-19-v3st-customer-app-pages.md) against the [approved design](docs/superpowers/specs/2026-11-19-v3st-customer-app-pages-design.md), the [direction contract](.impeccable/surfaces/src-app-app-layout-tsx.md) and the [chosen Home sketch](docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html). The landing redesign is implemented. Also read [CLAUDE.md](CLAUDE.md), [Design.md](Design.md), [BACKEND_PATTERNS.md](BACKEND_PATTERNS.md) and [FRONTEND_PATTERNS_GUIDE.md](FRONTEND_PATTERNS_GUIDE.md).
 
 The earlier plans (ramps and payouts, onchain stocks and income, real provider integration, customer app backend) are implemented and remain the backend's record. Do not interpret copied starter authentication, documentation examples, or missing provider access as permission to use real services.
 

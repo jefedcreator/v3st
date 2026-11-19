@@ -72,33 +72,44 @@ When changing this contract, update the implementation, affected routes,
 validation/type checks and architectural documentation together. Carry this
 section and the agent entrypoint files into every new Interacti product.
 
-## Current assignment: the V3ST landing page redesign
+## Current assignment: the V3ST customer app pages
 
-Implement [docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md](docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md), starting at Task 1 on a new feature branch. It builds the design in [docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md](docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md), which the operator approved on 2026-11-18.
+Implement [docs/superpowers/plans/2026-11-19-v3st-customer-app-pages.md](docs/superpowers/plans/2026-11-19-v3st-customer-app-pages.md), starting at Task 1 on a new feature branch, `feat/customer-app-pages`. It builds the design in [docs/superpowers/specs/2026-11-19-v3st-customer-app-pages-design.md](docs/superpowers/specs/2026-11-19-v3st-customer-app-pages-design.md), which the operator approved on 2026-11-19.
 
-The page replaces the light ivory landing with a dark page that looks and moves like katana.network. It uses flag green `#00804D` and Bricolage Grotesque, is aimed at Nigerian first-time investors, and its main action is joining a stored beta waitlist. Everything you need is in this repository:
+The app is every signed-in page a beta tester needs, built on the existing customer API in the landing's dark design system:
+
+- sign-in at `/signin`, and setup;
+- home, stocks and orders;
+- cash, Earn and earnings;
+- activity and settings.
+
+It is phone-first. Every page does one job, and short jobs are modals. Home is the "Money line": one live line of the customer's money, split by a *Now* marker. The landing gains only a quiet *Sign in* link. Everything you need is in this repository:
 
 | Read | For |
 | --- | --- |
 | [`CLAUDE.md`](CLAUDE.md) | Code style, a commit per task, final-only verification, no Claude co-author lines |
-| The spec | Operator decisions, exact copy, colour and type tokens, Katana's measured motion contract, data contracts, logo sources and rights |
-| The plan | Thirteen tasks with files, interfaces and the tests to write; Global Constraints and Review Focus |
-| [`.impeccable/surfaces/src-app-marketing-page-tsx.md`](.impeccable/surfaces/src-app-marketing-page-tsx.md) | The page's direction contract (Impeccable surface brief) |
-| [`docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-mock.png`](docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-mock.png) | The approved look and finish bar, and the finish review's critique reference. The spec wins where they differ |
-| [`Design.md`](Design.md), [`BACKEND_PATTERNS.md`](BACKEND_PATTERNS.md), [`FRONTEND_PATTERNS_GUIDE.md`](FRONTEND_PATTERNS_GUIDE.md), [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md), [`PRODUCT.md`](PRODUCT.md) | Product architecture and patterns. Where their landing-specific rules conflict with the spec (light theme, Geist, the browser-only demo, "zero API calls"), the spec wins; Tasks 11 and 13 rewrite them |
-| [`docs/api/customer-app.md`](docs/api/customer-app.md) | The customer vocabulary rule and error copy that the waitlist reuses |
+| The spec | Operator decisions, the page and modal rule, routes, modals, states, pinned copy, the app's visual system |
+| The plan | Twenty-one tasks with files, interfaces and the tests to write; Global Constraints and Review Focus |
+| [`.impeccable/surfaces/src-app-app-layout-tsx.md`](.impeccable/surfaces/src-app-app-layout-tsx.md) | The app's direction contract (Impeccable surface brief) |
+| [`docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html`](docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html) | The chosen Home sketch at 390×844, and the finish review's critique reference. The spec wins where they differ |
+| [`docs/api/customer-app.md`](docs/api/customer-app.md), [`src/types/app.ts`](src/types/app.ts) | The customer API contract, the vocabulary rule and the error copy |
+| [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md), [`FRONTEND_PATTERNS_GUIDE.md`](FRONTEND_PATTERNS_GUIDE.md), [`BACKEND_PATTERNS.md`](BACKEND_PATTERNS.md), [`PRODUCT.md`](PRODUCT.md), [`Design.md`](Design.md) | The design system, patterns and product architecture |
 
 These rules trip agents up on this assignment:
 
-- **Never create a file named `DESIGN.md`.** On case-insensitive filesystems (macOS) it collides with the product document `Design.md`.
-  - The design system lives in `DESIGN_SYSTEM.md`, with `.impeccable/design.json` beside it.
-  - Tell Impeccable's documenter to write there, and expect its tooling to call this file DESIGN.md.
-  - A test written in Task 1 fails if `DESIGN.md` ever exists.
-- **Run no test, lint, typecheck, build or Playwright command until Task 13** (`CLAUDE.md`). Write each task's tests as you go; Task 13 runs everything once and records the results.
-- **Copy, figures and logos.** Copy is final; use it word for word. Figures come from code (`policy.ts`, the stock profiles, the public ticker), never typed by hand. Logos are official files with recorded provenance.
-  - The operator accepted the trademark risk of using the official Apple, Microsoft and NVIDIA marks (spec decision 11).
-- **Katana is a behaviour reference only.** Re-capture it in Task 13 to compare. Never copy its code, images, fonts or copy.
-- **The page stays a beta.** Test money only, `noindex`, no analytics or cookies, and no email is ever sent. The waitlist only stores sign-ups.
+- **Never create a file named `DESIGN.md`.** On case-insensitive filesystems (macOS) it collides with the product document `Design.md`. The design system is `DESIGN_SYSTEM.md`, with `.impeccable/design.json` beside it; tell Impeccable's documenter to merge there.
+- **Run no test, lint, typecheck, build or Playwright command until Task 21** (`CLAUDE.md`). Write each task's tests as you go.
+- **Copy and figures.**
+  - No crypto vocabulary anywhere in the app's copy.
+  - Render API error `message`s exactly as they come.
+  - An unknown value is "—", never ₦0.
+  - Figures come from the API or `policy.ts`, never typed by hand.
+- **Modals.**
+  - Never two modals at once: the PIN is the last step inside the job's modal.
+  - Reuse a money job's `Idempotency-Key` for every retry, and renew it only with a new preview.
+- **The app stays a beta.** Test money only, simulated Privy or Privy's sandbox app, no deployment, and no email, SMS or push.
+  - Don't change financial behaviour, provider modes or `policy.ts`.
+  - The only backend change is the beta route in Task 3.
 
 ## Skills
 
@@ -106,11 +117,11 @@ The plan was authored with Superpowers and applies Impeccable. Install neither f
 
 - **Superpowers.** When installed, use its `subagent-driven-development` or `executing-plans` workflow. Otherwise execute the plan's checklist natively, record that in the review record, and continue.
 - **Impeccable (v4.9.1 or later), when installed:**
-  - In Task 1, run `impeccable context --target "src/app/(marketing)/page.tsx"` once.
-  - Read its `reference/craft-floor.md` before the first UI edit (Task 6).
-  - The direction is pinned by the operator: skip `concept-seed`, and build code-led.
-  - In Task 13, run its detector once, then the finish reviewer, then the documenter (writing `DESIGN_SYSTEM.md`).
-  - When Impeccable isn't installed, follow the plan's embedded rules and run a fresh-context finish review against the spec and surface brief.
+  - Before Task 2, run `impeccable context --target "src/app/(app)/layout.tsx"` once.
+  - Read its `reference/craft-floor.md` before the first UI edit (Task 2).
+  - The direction is locked by the operator's surface round (`seed:bc21f5b0c062fffb`): skip `concept-seed`, `shape` and comp rounds, and build code-led.
+  - In Task 21, run its detector once, then the finish reviewer, then the documenter (merging into `DESIGN_SYSTEM.md`).
+  - When Impeccable isn't installed, follow the plan's embedded rules and run a fresh-context finish review against the spec, the surface brief and the sketch.
 
 ## Required release scope
 
@@ -124,7 +135,7 @@ Use Node.js from `.nvmrc` and Yarn 1.22.22. Start with `bash scripts/setup-cloud
 
 - Prisma output is generated per platform during installation, not committed.
 - Keep `yarn.lock` as the only committed package-manager lockfile.
-- Task 13 needs two isolated local PostgreSQL databases (the test one ending in `_test`), Forge and Anvil, and a Chromium for Playwright.
+- Task 21 needs two isolated local PostgreSQL databases (the test one ending in `_test`), Forge and Anvil, and a Chromium for Playwright.
 - Never use the developer's own database.
 
 Do not depend on absolute paths from the original developer's machine, and do not silently install plugins with unrelated permissions.
@@ -138,6 +149,7 @@ These plans are implemented and remain the record for the backend:
 - the 2026-11-13 ramps and payouts plan;
 - the 2026-11-14 onchain stocks and income plan;
 - the 2026-11-16 real provider integration plan;
-- the 2026-11-17 customer app backend plan.
+- the 2026-11-17 customer app backend plan;
+- the 2026-11-18 landing redesign plan, the record for `/`, `/legal/*` and `/waitlist`.
 
-The 2026-11-15 landing spec, plan and review describe the page this assignment replaces. Read them only as history.
+The 2026-11-15 landing spec, plan and review describe the page the 2026-11-18 redesign replaced. Read them only as history.
