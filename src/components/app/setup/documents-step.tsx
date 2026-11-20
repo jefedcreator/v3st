@@ -1,7 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Check } from "@phosphor-icons/react/dist/ssr";
 
 import { appApi, AppApiError } from "@/utils/app-api";
 import { appKeys } from "@/hooks/app/query-keys";
@@ -16,6 +18,7 @@ export function DocumentsStep({
   documents: AppDocumentSummaryDto[];
   onDone: () => void;
 }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [openSlug, setOpenSlug] = React.useState<string | null>(null);
   const [accepted, setAccepted] = React.useState(false);
@@ -36,7 +39,11 @@ export function DocumentsStep({
       if (caught instanceof AppApiError) {
         setError(caught.message);
         if (caught.code === "DOCUMENT_UPDATED") {
+          // The versions on screen are out of date: reload them from the
+          // server and ask for a fresh acceptance.
           void queryClient.invalidateQueries({ queryKey: appKeys.documents });
+          setAccepted(false);
+          router.refresh();
         }
       } else {
         setError("Something went wrong. Please try again.");
@@ -51,19 +58,23 @@ export function DocumentsStep({
         {documents.map((doc) => (
           <li
             key={doc.slug}
-            className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-stroke bg-surface px-4"
+            className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-stroke bg-surface py-2 pr-1 pl-4"
           >
             <span className="flex flex-col">
               <span className="text-ink font-medium">{doc.title}</span>
               <span className="text-muted-foreground text-sm">Version {doc.version}</span>
             </span>
-            {doc.accepted ? (
-              <span className="text-gain text-sm">Accepted</span>
-            ) : (
+            <span className="flex shrink-0 items-center gap-1">
+              {doc.accepted && (
+                <span className="text-gain flex items-center gap-1 text-sm">
+                  <Check className="size-4" aria-hidden="true" />
+                  Accepted
+                </span>
+              )}
               <Button variant="link" size="sm" type="button" onClick={() => setOpenSlug(doc.slug)}>
-                Read
+                Read<span className="sr-only"> {doc.title}</span>
               </Button>
-            )}
+            </span>
           </li>
         ))}
       </ul>

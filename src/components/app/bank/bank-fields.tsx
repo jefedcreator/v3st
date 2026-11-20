@@ -1,6 +1,5 @@
 "use client";
 
-import { CaretDown } from "@phosphor-icons/react/dist/ssr";
 import type { AppBankDto } from "@/types/app";
 import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/primitives";
 
@@ -29,7 +28,6 @@ export function BankFields({
         <Select value={bankCode} onValueChange={(code) => onChange({ bankCode: code, accountNumber })}>
           <SelectTrigger id="bank-select">
             <SelectValue placeholder="Choose your bank" />
-            <CaretDown className="size-5" aria-hidden="true" />
           </SelectTrigger>
           <SelectContent>
             {banks.map((bank) => (

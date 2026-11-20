@@ -25,7 +25,7 @@ export function PinSetupStep({ onDone }: { onDone: () => void }) {
       await appApi.security.setPin({ pin });
       onDone();
     } catch (caught) {
-      if (caught instanceof AppApiError) setError(caught.message);
+      setError(caught instanceof AppApiError ? caught.message : "Something went wrong. Please try again.");
       setPending(false);
     }
   }

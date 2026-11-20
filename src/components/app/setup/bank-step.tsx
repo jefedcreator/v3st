@@ -34,7 +34,7 @@ export function BankStep({
       await appApi.bankAccount.put({ bank_code: bankCode, account_number: accountNumber, pin });
       onDone();
     } catch (caught) {
-      if (caught instanceof AppApiError) setError(caught.message);
+      setError(caught instanceof AppApiError ? caught.message : "Something went wrong. Please try again.");
       setPending(false);
     }
   }

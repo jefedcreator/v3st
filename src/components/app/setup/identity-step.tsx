@@ -23,6 +23,7 @@ export function IdentityStep({
     if (choice === null) return;
     setPending(true);
     setError(null);
+    setStatus(null);
     try {
       const res = await appApi.identity.verify(choice);
       if (!res.verified) {
@@ -32,7 +33,7 @@ export function IdentityStep({
       }
       onDone();
     } catch (caught) {
-      if (caught instanceof AppApiError) setError(caught.message);
+      setError(caught instanceof AppApiError ? caught.message : "Something went wrong. Please try again.");
       setPending(false);
     }
   }
@@ -41,8 +42,12 @@ export function IdentityStep({
   return (
     <form className="flex flex-col gap-4" onSubmit={onSubmit}>
       <div className="flex flex-col gap-3">
-        <Label>Test identity</Label>
+        <p id="identity-label" className="text-foreground text-sm font-medium">
+          Test identity
+        </p>
         <RadioGroup
+          aria-labelledby="identity-label"
+          aria-describedby={statusId}
           name="test-identity"
           value={choice ?? undefined}
           onValueChange={setChoice}
@@ -52,7 +57,7 @@ export function IdentityStep({
             <Label
               key={identity.id}
               htmlFor={`identity-${identity.id}`}
-              className="flex min-h-11 items-center gap-3 rounded-lg border border-stroke bg-surface px-4 font-normal hover:bg-surface-raised"
+              className="has-[[data-state=checked]]:border-signal flex min-h-11 items-center gap-3 rounded-lg border border-stroke bg-surface px-4 py-3 font-normal transition-colors hover:bg-surface-raised"
             >
               <RadioGroupItem id={`identity-${identity.id}`} value={identity.id} />
               <span className="flex flex-col">
