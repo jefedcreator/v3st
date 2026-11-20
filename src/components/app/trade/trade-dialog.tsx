@@ -165,9 +165,12 @@ export function TradeDialog({
         <DialogHeader>
           <DialogTitle>{tradeTitle(side, stock.name)}</DialogTitle>
           <DialogDescription>
-            {side === "buy"
-              ? "Choose how much naira to invest."
-              : "Choose how much naira of shares to sell."}
+            {step === "amount" &&
+              (side === "buy"
+                ? "Choose how much naira to invest."
+                : "Choose how much naira of shares to sell.")}
+            {step === "review" && "Check the price and fees before you confirm."}
+            {step === "pin" && "Confirm with your PIN."}
           </DialogDescription>
         </DialogHeader>
         {step === "amount" && (

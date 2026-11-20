@@ -106,7 +106,9 @@ export function LeaveEarnDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Withdraw from Earn</DialogTitle>
-          <DialogDescription>What you get back from {product.title}.</DialogDescription>
+          <DialogDescription>
+            {step === "review" ? `What you get back from ${product.title}.` : "Confirm with your PIN."}
+          </DialogDescription>
         </DialogHeader>
         {step === "review" && (
           <div className="flex flex-col gap-4">

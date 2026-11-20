@@ -10,6 +10,7 @@ import {
   Button,
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   Label,
@@ -89,6 +90,9 @@ export function EarningsChoiceDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>What happens to your earnings</DialogTitle>
+          <DialogDescription>
+            {step === "choice" ? "Choose where your Friday earnings go." : "Confirm with your PIN."}
+          </DialogDescription>
         </DialogHeader>
         {step === "choice" && (
           <div className="mt-2 flex flex-col gap-4">

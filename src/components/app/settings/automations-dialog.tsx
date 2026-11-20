@@ -77,7 +77,9 @@ export function AutomationsDialog({
         <DialogHeader>
           <DialogTitle>Automatic actions</DialogTitle>
           <DialogDescription>
-            Actions V3ST takes for you, within the limits you agreed to.
+            {renewing === null
+              ? "Actions V3ST takes for you, within the limits you agreed to."
+              : `Renew ${renewing.title} with your PIN.`}
           </DialogDescription>
         </DialogHeader>
         {renewing !== null ? (

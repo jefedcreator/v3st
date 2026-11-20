@@ -62,7 +62,7 @@ export function PinStep({
         if (isValidPin(pin) && !pending) onSubmit(pin);
       }}
     >
-      <h3 className="type-app-heading text-heading">{heading}</h3>
+      <h3 className="sr-only">{heading}</h3>
       <PinInput
         id="confirm-pin"
         label="Your PIN"

@@ -6,7 +6,7 @@ import { appApi, AppApiError } from "@/utils/app-api";
 import { appKeys } from "@/hooks/app/query-keys";
 import type { AppDocumentSlug } from "@/types/app";
 import { DocumentBody } from "@/components/landing/document-body";
-import { parseDocument } from "@/components/landing/markdown-lite";
+import { parseDocument, type DocumentBlock } from "@/components/landing/markdown-lite";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,13 @@ function useDocument(slug: AppDocumentSlug) {
     queryFn: () => appApi.documents.get(slug),
     staleTime: 5 * 60_000,
   });
+}
+
+// The body opens with the document's own title, which the sheet already shows.
+function withoutTitle(blocks: DocumentBlock[], title: string): DocumentBlock[] {
+  const [first, ...rest] = blocks;
+  if (first?.kind === "heading" && first.text.trim() === title.trim()) return rest;
+  return blocks;
 }
 
 // The document body inside the app: the landing's parser and renderer at a
@@ -47,7 +54,7 @@ export function DocumentContent({ slug }: { slug: AppDocumentSlug }) {
   }
   return (
     <div className="text-ink flex flex-col gap-4 text-base leading-[1.7] [&_h3]:type-app-heading [&_h3]:text-heading [&_h3:not(:first-child)]:mt-2 [&_li]:leading-[1.7] [&_strong]:text-heading [&_strong]:font-semibold [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-2 [&_ul]:pl-5">
-      <DocumentBody blocks={parseDocument(data.body)} headingLevel={3} />
+      <DocumentBody blocks={withoutTitle(parseDocument(data.body), data.title)} headingLevel={3} />
     </div>
   );
 }

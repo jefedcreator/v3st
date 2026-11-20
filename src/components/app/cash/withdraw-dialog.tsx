@@ -114,7 +114,11 @@ export function WithdrawDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Withdraw</DialogTitle>
-          <DialogDescription>Money goes to your bank account.</DialogDescription>
+          <DialogDescription>
+            {step === "amount" && "Money goes to your bank account."}
+            {step === "review" && "Check the fee and where the money goes."}
+            {step === "pin" && "Confirm with your PIN."}
+          </DialogDescription>
         </DialogHeader>
         {step === "amount" && (
           <div className="flex flex-col gap-4">
