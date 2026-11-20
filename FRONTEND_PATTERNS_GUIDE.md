@@ -33,7 +33,7 @@ Use the Node version in `.nvmrc` and Yarn 1.22.22. Start setup with `bash script
 ```text
 src/
 ├── app/
-│   ├── layout.tsx                  # root document, Bricolage, static V3ST metadata, noindex
+│   ├── layout.tsx                  # root document, Archivo, static V3ST metadata, noindex
 │   ├── (marketing)/                # anonymous /, /legal/*, /waitlist
 │   │   ├── layout.tsx              # header, footer, LandingMotionProvider, CursorFollower
 │   │   ├── page.tsx                # statically regenerated Server Component (revalidate = 300)
@@ -109,9 +109,9 @@ src/
 
 V3ST's marketing world is dark: `void` ground, `signal` green, one theme. Do not add `.light`, a theme attribute switch, `next-themes`, theme-toggle controls or hydration suppression for a nonexistent theme script.
 
-`DESIGN_SYSTEM.md` defines the semantic palette, Bricolage typography, widths, spacing, radii, focus and layers. Tokens live in `@theme static` in `src/styles/globals.css`; do not add `tailwind.config.ts`. `static` ensures declared tokens are emitted, including those referenced by dynamic style code. Use semantic classes instead of repeating raw colors in components.
+`DESIGN_SYSTEM.md` defines the semantic palette, Archivo typography, widths, spacing, radii, focus and layers. Tokens live in `@theme static` in `src/styles/globals.css`; do not add `tailwind.config.ts`. `static` ensures declared tokens are emitted, including those referenced by dynamic style code. Use semantic classes instead of repeating raw colors in components.
 
-Bricolage Grotesque loads through `next/font` with the `latin-ext` subset; no runtime font CDN. Use tabular financial numerals, intentional wrapping and visible focus. Body text meets 4.5:1 contrast and large text 3:1 on actual surfaces, including during artwork movement.
+Archivo loads through `next/font` with the `latin-ext` subset (the naira sign lives there); no runtime font CDN. The wordmark is an outlined SVG logo, not text. Use tabular financial numerals, intentional wrapping and visible focus. Body text meets 4.5:1 contrast and large text 3:1 on actual surfaces, including during artwork movement.
 
 Server HTML is visible before enhancement. No-JS, reduced motion, unavailable WebGL, short viewports, enlarged text and zoom retain the explanation and actions. Do not globally hide reveal content or clip financial figures to fixed panel heights.
 
@@ -208,7 +208,7 @@ For the marketing routes:
 
 - [ ] Static anonymous routes with visible server HTML; `/` regenerates every 300s and its ticker read is failure-tolerant.
 - [ ] Exact money (BigInt kobo strings), derived figures, no invented claims, crypto vocabulary out of the copy.
-- [ ] Generated/restyled primitives, Phosphor SSR icons, direct `@/utils/cn` imports, one dark theme, Bricolage with `latin-ext`.
+- [ ] Generated/restyled primitives, Phosphor SSR icons, direct `@/utils/cn` imports, one dark theme, Archivo with `latin-ext`.
 - [ ] Local assets with provenance manifests, original artwork, noindex metadata.
 - [ ] Working anchors, skip link, FAQ `<details>`, no-JS form POST with 303 redirect, and a `/waitlist` result page.
 - [ ] No client-side API calls except the waitlist POST; no-JS, reduced-motion, failed-WebGL, mobile/zoom fallbacks.

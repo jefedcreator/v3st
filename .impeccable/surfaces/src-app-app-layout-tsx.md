@@ -25,7 +25,7 @@ Chosen sketch (critique reference): `docs/superpowers/specs/assets/2026-11-19-v3
 
 THESIS: The V3ST app on a phone, where every page does one job and Home is one live line of your money: what is coming sits above Now, what is done sits below. It refuses the category default of a balance card over a grid of shortcut tiles, promo banners and charts.
 
-OWN-WORLD: The landing's world at Operate density: void ground, surface and raised-surface layers, hairline strokes, Bricolage Grotesque on a fixed rem scale (40px weight-300 figures, 24px titles, 16px body, 11px floor), tabular naira. Signal green fills pills, the spine and done nodes, never small text; mint marks gains, focus and waiting halos; coral marks losses and failures. Pill buttons, 16px-radius fields, hairline rows instead of cards, bottom sheets for short jobs.
+OWN-WORLD: The landing's world at Operate density: void ground, surface and raised-surface layers, hairline strokes, Archivo (since 2026-11-20; the wordmark stays the Bricolage logo) on a fixed rem scale (40px weight-300 figures, 24px titles, 16px body, 11px floor), tabular naira. Signal green fills pills, the spine and done nodes, never small text; mint marks gains, focus and waiting halos; coral marks losses and failures. Pill buttons, 16px-radius fields, hairline rows instead of cards, bottom sheets for short jobs.
 
 STORY: A tester opens the app, reads their total and what is moving (an unpaid transfer, a buy waiting for prices, Friday's payout), acts on what needs them, starts the next job in a modal, and trusts that every value on screen is known or plainly marked unknown.
 

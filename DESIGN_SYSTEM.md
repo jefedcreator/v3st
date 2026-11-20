@@ -26,7 +26,7 @@ Browser surfaces are themed: `signal` selection with white text, `gain` caret an
 
 ## Type
 
-Bricolage Grotesque via `next/font` with the `latin-ext` subset; no runtime font CDN. Utilities in `globals.css`: `type-display` (clamp 2.5–6rem, weight 300), `type-h2` (clamp 2.25–3.5rem), `type-figure` (clamp 2.5–4rem), `type-lead` (17–18px), `type-body` (16px), `type-label` (11px tracked uppercase, used only inside data and logo rows, never above a heading). Tabular numerals on `[data-figure]`, `data`, `time`. `text-wrap: balance` on headings, `pretty` on paragraphs.
+Archivo via `next/font` with the `latin-ext` subset, which carries the naira sign (U+20A6); no runtime font CDN. Archivo replaced Bricolage Grotesque on 2026-11-20, chosen from a rendered shortlist (Archivo, Epilogue, Public Sans) because the sibling product Sara uses Bricolage. A replacement face must draw ₦ itself, reach weight 300 and offer tabular figures (`tnum`). The wordmark (`wordmark.tsx`) and the icon stay outlined from Bricolage Grotesque at weight 800: they are the logo, not text. The social image is rendered by `scripts/social-image.mjs`. Utilities in `globals.css`: `type-display` (clamp 2.5–6rem, weight 300), `type-h2` (clamp 2.25–3.5rem), `type-figure` (clamp 2.5–4rem), `type-lead` (17–18px), `type-body` (16px), `type-label` (11px tracked uppercase, used only inside data and logo rows, never above a heading). Tabular numerals on `[data-figure]`, `data`, `time`. `text-wrap: balance` on headings, `pretty` on paragraphs.
 
 ## Shape and layout
 

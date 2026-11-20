@@ -25,7 +25,7 @@ Approved mock: `docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-m
 
 THESIS: A naira-first investing beta that looks and moves like Katana: one near-black field, one green signal, a pinned hero that hands over to living proof. It refuses the category default of a bright fintech page full of phone mockups, invented user counts and stock-photo smiles.
 
-OWN-WORLD: Green-tinted void ground (#020604) with layered surfaces (#08100C) and hairline strokes (#15211B). White Bricolage Grotesque at weight 300 for display. One signal green (#00804D) for filled pills, the fluid glow and the outlines of price rows; mint (#3DDC97) for gains and focus; coral (#FF6B5A) for losses. Pill controls, 28px cards, glowing-outline price rows, and small tracked uppercase labels used only inside data and logo rows, never above a heading.
+OWN-WORLD: Green-tinted void ground (#020604) with layered surfaces (#08100C) and hairline strokes (#15211B). White Archivo at weight 300 for display (Bricolage Grotesque until 2026-11-20; the wordmark stays the Bricolage logo). One signal green (#00804D) for filled pills, the fluid glow and the outlines of price rows; mint (#3DDC97) for gains and focus; coral (#FF6B5A) for losses. Pill controls, 28px cards, glowing-outline price rows, and small tracked uppercase labels used only inside data and logo rows, never above a heading.
 
 STORY: A first-time Nigerian investor understands they can put ₦1,000 into companies they know, sees real beta prices in naira, learns that Earn is optional and can earn nothing, checks the safeguards, and joins the waitlist.
 

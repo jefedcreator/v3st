@@ -29,7 +29,7 @@
     "fluidPalette": ["#0D6A3D", "#0D6A3D", "#008A52"],
     "artworkPalette": ["#0D6A3D", "#008A52", "#00804D", "#3DDC97"],
     "artworkSource": "scripts/landing-art.mjs",
-    "font": "Bricolage Grotesque via next/font, latin-ext subset, weight 300 display"
+    "font": "Archivo via next/font, latin-ext subset (carries the naira sign), weight 300 display; the wordmark stays outlined from Bricolage Grotesque as the logo"
   },
   "layout": {
     "contentWidth": 1200,
