@@ -30,9 +30,10 @@ export function PriceChart({
         value={range}
         onValueChange={(value) => onRangeChange(value as ChartRange)}
       >
-        <TabsList aria-label="Price range">
+        {/* Six 44px targets fit a 320px phone only edge to edge. */}
+        <TabsList aria-label="Price range" className="w-full gap-0.5">
           {RANGES.map((r) => (
-            <TabsTrigger key={r} value={r}>
+            <TabsTrigger key={r} value={r} className="min-w-11 px-0">
               {r}
             </TabsTrigger>
           ))}

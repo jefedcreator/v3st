@@ -1,10 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { appApi } from "@/utils/app-api";
 import { appKeys } from "@/hooks/app/query-keys";
+import { useActivityItemQuery, useDepositQuery } from "@/hooks/app/use-activity";
 import type { AppActivityDetailDto, AppDepositDto } from "@/types/app";
 import { cn } from "@/utils/cn";
 import { BetaLine } from "@/components/app/beta-line";
@@ -17,15 +17,17 @@ import { depositIdOf, isUnpaidTransfer, progressLabel } from "./activity-groups"
 // One receipt. An unpaid transfer puts its bank details first, because
 // finishing it is this page's job until the money arrives.
 export function ReceiptPage({
-  item,
-  deposit,
+  item: initialItem,
+  deposit: initialDeposit,
 }: {
   item: AppActivityDetailDto;
   deposit: AppDepositDto | null;
 }) {
-  const router = useRouter();
   const queryClient = useQueryClient();
-  const payTo = isUnpaidTransfer(item) && deposit !== null ? deposit.pay_to : null;
+  const { data: item } = useActivityItemQuery(initialItem);
+  const depositId = initialItem.id.startsWith("dep_") ? depositIdOf(initialItem.id) : null;
+  const { data: deposit } = useDepositQuery(depositId, initialDeposit);
+  const payTo = isUnpaidTransfer(item) && deposit !== undefined ? deposit.pay_to : null;
 
   async function completeBetaDeposit() {
     await appApi.beta.completeDeposit(depositIdOf(item.id));
@@ -33,7 +35,6 @@ export function ReceiptPage({
     void queryClient.invalidateQueries({ queryKey: ["deposit"] });
     void queryClient.invalidateQueries({ queryKey: appKeys.cash });
     void queryClient.invalidateQueries({ queryKey: appKeys.home });
-    router.refresh();
   }
 
   const progress = progressLabel(item.status);
