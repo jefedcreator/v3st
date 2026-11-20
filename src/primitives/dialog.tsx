@@ -41,15 +41,35 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
+  // The app opens most dialogs from state, without a DialogTrigger, and then
+  // Radix has no trigger to return focus to and leaves it on <body>. The
+  // element that had focus when the dialog opened gets it back on close.
+  const opener = React.useRef<HTMLElement | null>(null);
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        onOpenAutoFocus={(event) => {
+          opener.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (event.defaultPrevented) return;
+          const element = opener.current;
+          if (element?.isConnected === true) {
+            event.preventDefault();
+            element.focus();
+          }
+        }}
         className={cn(
           "bg-surface data-[state=closed]:animate-out data-[state=open]:animate-in fixed z-[51] grid gap-4 overflow-y-auto overscroll-contain ease-out data-[state=closed]:duration-[170ms] data-[state=open]:duration-[260ms]",
           "inset-x-0 bottom-0 max-h-[92dvh] rounded-t-[28px] border-t border-stroke pb-[calc(env(safe-area-inset-bottom)+24px)]",
