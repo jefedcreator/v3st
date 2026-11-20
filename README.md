@@ -6,7 +6,7 @@ The entire application must remain in beta. Every provider must use a verified s
 
 ## Cloud agent entry point
 
-Start with [AGENTS.md](AGENTS.md). The current assignment is the landing page redesign: implement the [redesign plan](docs/superpowers/plans/2026-11-18-v3st-landing-redesign.md) against the [approved design](docs/superpowers/specs/2026-11-17-v3st-landing-redesign-design.md), the [direction contract](.impeccable/surfaces/src-app-marketing-page-tsx.md) and the [approved mock](docs/superpowers/specs/assets/2026-11-17-v3st-landing-approved-mock.png). Also read [CLAUDE.md](CLAUDE.md), [Design.md](Design.md), [BACKEND_PATTERNS.md](BACKEND_PATTERNS.md) and [FRONTEND_PATTERNS_GUIDE.md](FRONTEND_PATTERNS_GUIDE.md).
+Start with [AGENTS.md](AGENTS.md). The current assignment is the customer app pages: implement the [app plan](docs/superpowers/plans/2026-11-19-v3st-customer-app-pages.md) against the [approved design](docs/superpowers/specs/2026-11-19-v3st-customer-app-pages-design.md), the [direction contract](.impeccable/surfaces/src-app-app-layout-tsx.md) and the [chosen Home sketch](docs/superpowers/specs/assets/2026-11-19-v3st-app-money-line-sketch.html). The landing redesign is implemented. Also read [CLAUDE.md](CLAUDE.md), [Design.md](Design.md), [BACKEND_PATTERNS.md](BACKEND_PATTERNS.md) and [FRONTEND_PATTERNS_GUIDE.md](FRONTEND_PATTERNS_GUIDE.md).
 
 The earlier plans (ramps and payouts, onchain stocks and income, real provider integration, customer app backend) are implemented and remain the backend's record. Do not interpret copied starter authentication, documentation examples, or missing provider access as permission to use real services.
 
@@ -97,5 +97,20 @@ node scripts/landing-beta.mjs start
 Open `http://127.0.0.1:3107`. This launcher clears the documented provider environment, uses test-only beta values and an unreachable database, and starts only Next. Stop it before running Playwright, which owns the same port.
 
 Browser suite: `yarn test:e2e` (Chromium installed with `yarn playwright install chromium`, or set `LANDING_CHROMIUM_PATH`). Playwright owns a production server at `http://127.0.0.1:3107`, supplies simulated-only settings and an unreachable database URL, and refuses external/API/RPC/WebSocket requests. It does not start a financial worker. The full `yarn test` suite separately needs isolated local PostgreSQL beta and `_test` databases plus Forge/Anvil. Keep browser reports/screenshots/traces and generated output out of Git. No deployment is included.
+
+The customer app for beta testers lives at `/signin` (the landing links to it): sign in with an `@v3st.test` email in simulated Privy mode, finish setup, and then use `/home`, `/stocks`, `/cash`, `/earn` and `/settings`. Preview it with `yarn dev` (or `yarn start`) connecting a reachable beta database, `APP_STAGE=beta` and `PRIVY_MODE=simulated`.
+
+The app's browser suite needs the isolated `_test` database and the local test chain (`yarn testnet:start`, then `yarn testnet:deploy`):
+
+```bash
+export TEST_DATABASE_URL=postgresql://…/v3st_test   # must end in _test
+export TESTNET_RPC_URL=http://127.0.0.1:8545         # loopback, chain 31337
+yarn app-e2e prepare   # migrates and seeds the TSTA test stock
+yarn test:e2e:app
+```
+
+The relayer key comes from the `.testnet/` keystore that `yarn testnet:deploy` uses, or from `TESTNET_SIGNER_PRIVATE_KEY` when set. Run `yarn testnet:deploy` with `DATABASE_URL` set to the same `_test` database, so the network row lands there. The launcher clears every other provider variable, and keeps the seeded stock's reference price fresh every 20 seconds while it runs.
+
+It builds and serves the app on `http://127.0.0.1:3108` with the worker and simulated Privy.
 
 Waitlist operations: the form posts to `POST /api/v1/waitlist`, rate-limited to 5 requests per 10 minutes per client address (PostgreSQL buckets keyed by an HMAC of the address, never the raw IP). `RATE_LIMIT_SECRET` is required (at least 32 characters): `.env.example` carries a local-only placeholder, and any shared environment needs its own unique value. Export invited testers with the operator-only `GET /api/v1/ops/waitlist?page=&size=`, then add each invited email to `PRIVY_BETA_ALLOWLIST`; see [docs/runbooks/backend-beta.md](docs/runbooks/backend-beta.md) and [docs/api/waitlist.md](docs/api/waitlist.md). Nothing is emailed automatically.

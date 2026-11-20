@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>V3ST · Home · Money line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300..700&display=swap" rel="stylesheet">
+<style>
+:root{--void:#020604;--surface:#08100C;--raised:#0C1712;--stroke:#15211B;--control:#5A6F62;--ink:#E3EBE6;--heading:#FFFFFF;--muted:#93A69B;--subtle:#7F9187;--signal:#00804D;--gain:#3DDC97}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:390px;height:844px;overflow:hidden;background:var(--void);color:var(--ink);font-family:"Archivo",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+a{color:inherit;text-decoration:none}
+.top{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--stroke)}
+.brand{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600;color:var(--heading);letter-spacing:.04em}
+.wm{height:15px;width:auto;display:block;color:var(--heading)}
+.chip{font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:3px 8px}
+.icons{display:flex;gap:4px;align-items:center}
+.ib{width:44px;height:44px;display:grid;place-items:center;position:relative}
+.ib svg{width:22px;height:22px;stroke:var(--ink);fill:none;stroke-width:1.6}
+.dot{position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--gain)}
+.av{width:32px;height:32px;border-radius:50%;background:var(--raised);border:1px solid var(--stroke);display:grid;place-items:center;font-size:13px;font-weight:600;color:var(--heading)}
+.bal{padding:20px 16px 18px}
+.lbl{font-size:13px;color:var(--muted)}
+.fig{font-size:40px;line-height:1.05;font-weight:300;letter-spacing:-.02em;color:var(--heading);margin-top:4px}
+.chg{font-size:14px;color:var(--gain);margin-top:6px}
+.cash{font-size:14px;color:var(--muted);margin-top:2px}
+.acts{display:flex;gap:8px;margin-top:16px}
+.pill{height:44px;padding:0 20px;border-radius:999px;display:inline-flex;align-items:center;font-size:15px;font-weight:600}
+.fill{background:var(--signal);color:#fff}
+.line-btn{border:1px solid var(--control);color:var(--heading)}
+.beta{font-size:12px;color:var(--subtle);margin-top:12px}
+.line{position:relative;padding:4px 16px 0 52px}
+.spine-up{position:absolute;left:27px;top:34px;height:176px;border-left:2px dashed var(--signal)}
+.spine-down{position:absolute;left:27px;top:244px;height:118px;border-left:2px solid var(--signal)}
+.grp{font-size:13px;font-weight:500;color:var(--muted);padding:10px 0 6px}
+.row{position:relative;padding:9px 0 11px;border-bottom:1px solid var(--stroke)}
+.node{position:absolute;left:-30px;top:13px;width:12px;height:12px;border-radius:50%;background:var(--void);border:2px solid var(--signal)}
+.node.wait{border-color:var(--gain);box-shadow:0 0 0 4px rgba(61,220,151,.14)}
+.node.done{background:var(--signal)}
+.t{display:flex;justify-content:space-between;gap:12px;font-size:15px;font-weight:500;color:var(--heading)}
+.t span{font-weight:400;color:var(--ink)}
+.s{font-size:13px;color:var(--muted);margin-top:3px}
+.now{position:relative;margin:12px 0 4px -40px;height:24px;display:flex;align-items:center}
+.now::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px solid var(--signal)}
+.now span{position:relative;background:var(--raised);border:1px solid var(--signal);color:var(--gain);font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;margin-left:4px}
+.all{display:inline-flex;align-items:center;height:44px;font-size:14px;font-weight:600;color:var(--gain)}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:72px;border-top:1px solid var(--stroke);background:var(--void);display:grid;grid-template-columns:repeat(4,1fr);padding-bottom:12px}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;color:var(--muted)}
+.tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6}
+.tab.on{color:var(--heading);font-weight:600}
+.tab.on svg{stroke:var(--gain)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><svg class="wm" viewBox="0 -67.40 231.40 68.80" fill="currentColor" role="img" aria-label="V3ST"><path transform="translate(0.00 0)" d="M42 0L21.20 0L0.40-66L18-66L31.60-13.40L31.90-13.40L45.20-66L62.80-66"/><path transform="translate(64.20 0)" d="M27.70 1.40Q21.10 1.40 16.10 0.10Q11.10-1.20 7.70-3.75Q4.30-6.30 2.65-10.15Q1-14 1.20-19.20L16.40-21.50Q16.30-19.40 16.95-17.55Q17.60-15.70 19.10-14.30Q20.60-12.90 22.90-12.10Q25.20-11.30 28.40-11.30Q31.60-11.30 34.05-12.25Q36.50-13.20 37.85-15.10Q39.20-17 39.20-19.90Q39.20-24 36.65-26.50Q34.10-29 28.45-29.80Q22.80-30.60 13.60-29.60L13.60-39.10L32.80-52.30L32.80-52.70L4.50-52.70L4.50-66.10L52.10-66.10L52.10-53.40L30.70-38.40L30.70-37.90Q39.30-38.40 44.90-35.85Q50.50-33.30 53.25-28.75Q56-24.20 56-18.50Q56-12.50 52.85-8.05Q49.70-3.60 43.45-1.10Q37.20 1.40 27.70 1.40"/><path transform="translate(121.70 0)" d="M29.90 1.40Q22.90 1.40 17.65-0.20Q12.40-1.80 8.90-4.80Q5.40-7.80 3.75-12.05Q2.10-16.30 2.30-21.50L17.30-24.80Q17.50-20.20 19.25-17.35Q21-14.50 24-13.15Q27-11.80 30.70-11.80Q33.70-11.80 36-12.55Q38.30-13.30 39.65-14.65Q41-16 41-17.80Q41-20.20 39.20-21.75Q37.40-23.30 34.25-24.40Q31.10-25.50 27.10-26.60Q22.80-27.80 18.55-29.25Q14.30-30.70 10.80-32.90Q7.30-35.10 5.15-38.60Q3-42.10 3-47.30Q3-53.70 6.25-58.20Q9.50-62.70 15.25-65.05Q21-67.40 28.40-67.40Q36.20-67.40 42.30-64.75Q48.40-62.10 51.70-57Q55-51.90 54.30-44.50L39.50-42.10Q39.60-45.10 38.90-47.40Q38.20-49.70 36.75-51.30Q35.30-52.90 33.10-53.75Q30.90-54.60 27.90-54.60Q24.80-54.60 22.75-53.80Q20.70-53 19.65-51.60Q18.60-50.20 18.60-48.40Q18.60-46.30 20.20-44.90Q21.80-43.50 24.80-42.45Q27.80-41.40 31.90-40.30Q36.20-39.10 40.55-37.65Q44.90-36.20 48.60-33.85Q52.30-31.50 54.55-27.80Q56.80-24.10 56.80-18.40Q56.80-11.80 53.35-7.40Q49.90-3 43.85-0.80Q37.80 1.40 29.90 1.40"/><path transform="translate(181.20 0)" d="M33.90 0L17.70 0L17.70-66L33.90-66L33.90 0M50.20-52.20L1.40-52.20L1.40-66L50.20-66"/></svg><span class="chip">Beta</span></div>
+  <div class="icons">
+    <a class="ib" aria-label="Notifications, 2 unread"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><i class="dot"></i></a>
+    <a class="ib" aria-label="Account"><span class="av">AO</span></a>
+  </div>
+</header>
+<main>
+  <section class="bal">
+    <p class="lbl">Total value</p>
+    <p class="fig">₦184,250.40</p>
+    <p class="chg">+₦2,310.15 · +1.27% today</p>
+    <p class="cash">Cash ₦32,500.00 available</p>
+    <div class="acts"><a class="pill fill">Add money</a><a class="pill line-btn">Invest</a></div>
+    <p class="beta">Beta: test money only. No real naira moves.</p>
+  </section>
+  <section class="line">
+    <i class="spine-up"></i><i class="spine-down"></i>
+    <p class="grp">Coming up</p>
+    <div class="row"><i class="node"></i><p class="t">Friday payout <span>Fri 20 Nov</span></p><p class="s">₦1,240.00 so far · to GTBank ••1234</p></div>
+    <div class="row"><i class="node wait"></i><p class="t">Buy Tesla <span>₦20,000.00</span></p><p class="s">Goes through when prices update · until Sun 22 Nov</p></div>
+    <div class="row"><i class="node wait"></i><p class="t">Add money <span>₦50,000.00</span></p><p class="s">Waiting for your transfer · 23:41 left</p></div>
+    <div class="now"><span>Now · 14:20</span></div>
+    <p class="grp">Earlier</p>
+    <div class="row"><i class="node done"></i><p class="t">Bought NVIDIA <span>₦15,000.00</span></p><p class="s">Today, 11:02 · Completed</p></div>
+    <div class="row"><i class="node done"></i><p class="t">Earnings reinvested <span>+₦980.00</span></p><p class="s">Fri 13 Nov · bought Apple</p></div>
+    <a class="all">See all activity</a>
+  </section>
+</main>
+<nav class="tabs" aria-label="Main">
+  <a class="tab on"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/></svg>Home</a>
+  <a class="tab"><svg viewBox="0 0 24 24"><path d="M4 18l5-6 4 3 7-9"/></svg>Stocks</a>
+  <a class="tab"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M8 12h8"/></svg>Cash</a>
+  <a class="tab"><svg viewBox="0 0 24 24"><path d="M12 20v-8"/><path d="M12 12c0-4 3-7 7-7 0 4-3 7-7 7z"/><path d="M12 14c0-3-2.5-5.5-6-5.5 0 3 2.5 5.5 6 5.5z"/></svg>Earn</a>
+</nav>
+</body>
+</html>

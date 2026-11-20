@@ -11,3 +11,7 @@ it("links the five sections in page order from any route", () => {
     { label: "FAQ", href: "/#faq" },
   ]);
 });
+
+it("keeps sign-in out of the section links", () => {
+  expect(NAV_LINKS.map((l) => l.href)).not.toContain("/signin");
+});

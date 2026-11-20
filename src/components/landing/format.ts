@@ -1,32 +1,15 @@
-// Browser-safe exact formatters. Money is BigInt minor units (kobo) as
-// integer strings; no float ever touches a naira amount.
+// Landing-specific formatters. The exact money and Lagos-time helpers now
+// live in `@/utils/format`; this module re-exports them so landing imports and
+// tests keep working.
+
+import { formatNaira, groupDigits, parseKobo } from "@/utils/format";
 
 import { counterDecimals } from "./motion/contract";
 
-function parseKobo(kobo: string): bigint {
-  if (!/^-?(0|[1-9]\d*)$/.test(kobo)) throw new Error(`invalid kobo amount: ${JSON.stringify(kobo)}`);
-  return BigInt(kobo);
-}
-
-function groupDigits(digits: string): string {
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
+export { formatChangeBps, formatNaira } from "@/utils/format";
 
 const NAIRA = "₦";
 const MINUS = "−";
-
-// Whole naira when divisible by 100, otherwise 2 decimals; true minus sign
-// for negatives.
-export function formatNaira(kobo: string): string {
-  const value = parseKobo(kobo);
-  const negative = value < 0n;
-  const abs = negative ? -value : value;
-  const whole = abs / 100n;
-  const frac = abs % 100n;
-  const wholeText = groupDigits(whole.toString());
-  const body = frac === 0n ? wholeText : `${wholeText}.${frac.toString().padStart(2, "0")}`;
-  return `${negative ? MINUS : ""}${NAIRA}${body}`;
-}
 
 // Ticker prices round half-up to whole naira at ₦1,000 and above; below that
 // they show 2 decimals.
@@ -39,15 +22,6 @@ export function formatTickerPrice(kobo: string): string {
     return `${negative ? MINUS : ""}${NAIRA}${groupDigits(rounded.toString())}`;
   }
   return formatNaira(kobo);
-}
-
-// Signed 24h change with a true minus: "+1.24%", "−0.86%", "0.00%".
-export function formatChangeBps(bps: number): string {
-  const sign = bps > 0 ? "+" : bps < 0 ? MINUS : "";
-  const abs = Math.abs(bps);
-  const whole = Math.floor(abs / 100);
-  const frac = abs % 100;
-  return `${sign}${whole}.${frac.toString().padStart(2, "0")}%`;
 }
 
 const lagosTimeFormat = new Intl.DateTimeFormat("en-GB", {

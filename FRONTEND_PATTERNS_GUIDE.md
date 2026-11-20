@@ -22,9 +22,9 @@ All V3ST operation remains beta. Every external integration uses a verified sand
 | Vitest 5 / Vite 7 / `tsx`               | Existing tests and TypeScript scripts               |
 | `three`                                 | Vendored fluid background only (lazy chunk)         |
 
-The landing adds `radix-ui`, `@phosphor-icons/react`, `class-variance-authority`, `clsx`, `tailwind-merge` and `tw-animate-css`. Resolve compatible versions through Yarn and record actual versions in the review record. The official shadcn CLI generates source; shadcn/ui is not a runtime dependency. Playwright is used for final browser verification.
+The landing adds `radix-ui`, `@phosphor-icons/react`, `class-variance-authority`, `clsx`, `tailwind-merge` and `tw-animate-css`, and the customer app adds `@tanstack/react-query` 5.108.1, `@privy-io/react-auth` 3.52.0 (sandbox sign-in only, dynamically imported) and `input-otp` 1.5.0, all pinned exactly. Resolve compatible versions through Yarn and record actual versions in the review record. The official shadcn CLI generates source; shadcn/ui is not a runtime dependency. Playwright is used for final browser verification.
 
-TanStack Query, Axios, React Hook Form, `@hookform/resolvers`, Zustand, nuqs and sonner are future feature patterns, not baseline installed dependencies. Do not install them merely to satisfy an example. V3ST has one dark theme: no `next-themes` or theme provider/toggle.
+Axios, React Hook Form, `@hookform/resolvers`, Zustand, nuqs, sonner and any chart library remain uninstallable future patterns, not dependencies. V3ST has one dark theme: no `next-themes` or theme provider/toggle.
 
 Use the Node version in `.nvmrc` and Yarn 1.22.22. Start setup with `bash scripts/setup-cloud.sh`. Keep `yarn.lock` as the only committed package-manager lockfile. Generated Prisma output, dependencies and build output stay uncommitted.
 
@@ -33,26 +33,36 @@ Use the Node version in `.nvmrc` and Yarn 1.22.22. Start setup with `bash script
 ```text
 src/
 ├── app/
-│   ├── layout.tsx                  # root document, Bricolage, static V3ST metadata, noindex
+│   ├── layout.tsx                  # root document, Archivo, static V3ST metadata, noindex
 │   ├── (marketing)/                # anonymous /, /legal/*, /waitlist
 │   │   ├── layout.tsx              # header, footer, LandingMotionProvider, CursorFollower
 │   │   ├── page.tsx                # statically regenerated Server Component (revalidate = 300)
 │   │   ├── legal/[slug]/page.tsx   # static reading pages from CUSTOMER_DOCUMENTS
 │   │   └── waitlist/page.tsx       # no-JS waitlist result page (dynamic, noindex)
+│   ├── (auth)/signin/              # /signin: no chrome
+│   ├── (setup)/setup/              # /setup: flow shell
+│   ├── (app)/                      # chrome once in layout.tsx; home, stocks, orders, cash, earn,
+│   │                               # earnings, activity, settings (+ loading/error/not-found)
 │   └── api/v1/                     # existing canonical Route Handlers (+ waitlist, ops/waitlist)
-├── components/landing/             # feature sections and focused client islands
+├── components/landing/             # landing feature sections and focused client islands
 │   ├── motion/contract.ts          # pinned motion numbers (pure, browser-safe)
 │   └── fluid/                      # vendored LiquidEther + gate + lazy background
+├── components/app/                 # customer app features (chrome, home, money, trade, earn, …)
+├── hooks/app/                      # query keys, the event stream, idempotency, per-area queries
 ├── primitives/                     # generated/restyled UI building blocks
 │   └── index.ts                    # public primitive exports
 ├── backend/                        # middleware, validators, services, integrations, workers
 ├── server/
 │   ├── db.ts / prisma.ts / auth/   # existing infrastructure
-│   └── landing.ts                  # request-scoped ticker read (React cache), never throws
+│   ├── landing.ts                  # request-scoped ticker read (React cache), never throws
+│   └── app/                        # session guard, per-page cached reads, money limits
 ├── types/                          # API envelopes, DTOs, operator contracts, landing DTOs
 ├── utils/
 │   ├── index.ts                    # server helpers; imports node:crypto
 │   ├── cn.ts                       # browser-safe classnames
+│   ├── format.ts                   # browser-safe exact naira, shares and Lagos time
+│   ├── app-api.ts                  # typed fetch client for /api/v1/app/* (AppApiError)
+│   ├── app-paths.ts                # safeNext, after-sign-in path, settings ?open= names
 │   ├── money.ts                    # exact server money helpers
 │   └── response.ts                 # server response envelopes
 └── styles/globals.css              # @theme static tokens and base styling
@@ -99,9 +109,9 @@ src/
 
 V3ST's marketing world is dark: `void` ground, `signal` green, one theme. Do not add `.light`, a theme attribute switch, `next-themes`, theme-toggle controls or hydration suppression for a nonexistent theme script.
 
-`DESIGN_SYSTEM.md` defines the semantic palette, Bricolage typography, widths, spacing, radii, focus and layers. Tokens live in `@theme static` in `src/styles/globals.css`; do not add `tailwind.config.ts`. `static` ensures declared tokens are emitted, including those referenced by dynamic style code. Use semantic classes instead of repeating raw colors in components.
+`DESIGN_SYSTEM.md` defines the semantic palette, Archivo typography, widths, spacing, radii, focus and layers. Tokens live in `@theme static` in `src/styles/globals.css`; do not add `tailwind.config.ts`. `static` ensures declared tokens are emitted, including those referenced by dynamic style code. Use semantic classes instead of repeating raw colors in components.
 
-Bricolage Grotesque loads through `next/font` with the `latin-ext` subset; no runtime font CDN. Use tabular financial numerals, intentional wrapping and visible focus. Body text meets 4.5:1 contrast and large text 3:1 on actual surfaces, including during artwork movement.
+Archivo loads through `next/font` with the `latin-ext` subset for the naira sign. Use the shared `ProductLogo` for the grain mark in the landing and app. Use tabular financial numerals, intentional wrapping and visible focus. Body text meets 4.5:1 contrast and large text 3:1 on actual surfaces, including during artwork movement.
 
 Server HTML is visible before enhancement. No-JS, reduced motion, unavailable WebGL, short viewports, enlarged text and zoom retain the explanation and actions. Do not globally hide reveal content or clip financial figures to fixed panel heights.
 
@@ -109,7 +119,7 @@ Server HTML is visible before enhancement. No-JS, reduced motion, unavailable We
 
 `primitives/` holds app-agnostic building blocks; `components/` holds feature compositions. Primitives never import backend services, query hooks or financial feature types.
 
-Use the official shadcn CLI for primitives it provides and record the selected CLI version. The landing needs Button, Badge, Card parts, Tabs parts, Sheet parts and Skeleton. Preserve generated filenames/APIs, restyle in place with project tokens and re-export through `src/primitives/index.ts`. Edit variants/classes instead of creating competing styled wrappers.
+Use the official shadcn CLI for primitives it provides and record the selected CLI version. The landing needs Button, Badge, Card parts, Tabs parts, Sheet parts and Skeleton; the customer app adds Input, Label, Dialog (a bottom sheet below 640px, centred from 640px), Select, RadioGroup, Checkbox, InputOTP and Separator, plus the hand-built `Money`, `KeyValue` and `CopyButton`. Preserve generated filenames/APIs, restyle in place with project tokens and re-export through `src/primitives/index.ts`. Edit variants/classes instead of creating competing styled wrappers.
 
 Use unified `radix-ui` for generated Slot, Tabs and Dialog behavior. Preserve keyboard navigation, labelled panels/dialog titles, Escape, focus trapping/restoration and scroll-lock cleanup. Anchor buttons use `asChild`; never nest an anchor inside a button. Native `details`/`summary` suits the FAQ because it works without JavaScript.
 
@@ -122,6 +132,8 @@ Section parents own their content; children receive props/callbacks. State reset
 The landing's only form is the waitlist, in the closing `#join` panel and on `/waitlist`. The hero holds no form (removed 2026-11-20): its primary pill and the header button link to `/#join` and focus the email field after the jump. `WaitlistForm` renders a native `<form method="post" action="/api/v1/waitlist">` with an email field, a hidden `source` field (`join` or `waitlist_page`; the API still accepts `hero` for rows from the removed hero form) and a honeypot `website` field (visually hidden, `tabindex="-1"`, `autocomplete="off"`). Native validation (`type="email" required`) stays on, so the form works without JavaScript (the route answers url-encoded posts with a 303 to `/waitlist?status=`).
 
 With JavaScript, a client island intercepts the submission and posts JSON with `fetch` to the same route, rendering the states inline without moving layout and announcing results in a polite live region. Error text is the API's `message`, rendered directly. The state machine lives in a pure, unit-tested `waitlist-state.ts`.
+
+The app's money modals follow one pattern: amount → review (with a held-price countdown) → PIN, all inside a single `Dialog`, never two modals at once. The caller creates one idempotency key when the review step opens (`useIdempotencyKey`), reuses it for every retry of that review through `nextIdempotencyKey(key, "retry", …)`, and replaces it only when a new preview is fetched. A `PRICE_CHANGED` or expired preview returns to the review with *Get a new price*.
 
 If a future feature needs a richer form, derive `FormValues = z.input<typeof schema>` from a browser-safe schema. Server validation remains authoritative; do not import a server-only validator dependency graph into the browser. Use `defaultValues` for creation, deliberate resynchronization for editing, `register` for native inputs and `Controller` for non-controlled inputs. Associate field/error descriptions accessibly. Auth inputs use proper autocomplete tokens.
 
@@ -141,7 +153,7 @@ Add typed service-backed read wrappers in `src/server/` only when needed. Use re
 
 Customer screens read through the customer service layer (`src/backend/services/app/*`) via server wrappers and mutate only through `/api/v1/app/*` routes; their response types come from `src/types/app.ts`. Customer screens never call `/api/v1/*` operator endpoints, never see internal event names, and poll or subscribe to `GET /api/v1/app/events` for live updates.
 
-TanStack Query and Axios are optional future additions for client caching/mutations: SSR-safe per-user QueryClient, typed methods, query-key factories, timestamped initial data, invalidation on account changes, canonical `baseURL: "/api/v1"` with cookie credentials. Do not add this stack to the marketing pages.
+This app pattern is now real: the customer app uses TanStack Query (SSR-safe per-browser QueryClient via `src/components/app/app-providers.tsx`, query-key factory in `src/hooks/app/query-keys.ts`, the server read passed as `initialData`) over the typed `appApi` client, and mutates only through `/api/v1/app/*` with the API's own `message` rendered verbatim. One `EventSource` on `GET /api/v1/app/events` invalidates queries by area (`keysForAreas`) with backoff. Do not add this stack to the marketing pages.
 
 Private metadata must not publish balances, personal details or tokens in OG image URLs. The marketing pages use a static public card without account access.
 
@@ -150,6 +162,8 @@ Private metadata must not publish balances, personal details or tokens in OG ima
 Prefer local state. `LandingMotionProvider` shares page-scoped pause/reduced-motion state without persistence and mirrors it onto `[data-landing]` as `data-motion-paused` / `data-reduced-motion` so CSS loops can stop. Native hash anchors support deep-link entry and Back/Forward behavior.
 
 Zustand and nuqs are aspirational for future needs; neither belongs on the marketing pages. Their selections do not survive reload and are not URL state.
+
+The customer app links modals by `?open=`: settings modals open from `/settings?open=<name>` (`src/utils/app-paths.ts`), `/settings/bank` and `/settings/automations` redirect there, and closing a URL-opened modal replaces the URL with bare `/settings`.
 
 ## 10. Animation and motion
 
@@ -194,11 +208,20 @@ For the marketing routes:
 
 - [ ] Static anonymous routes with visible server HTML; `/` regenerates every 300s and its ticker read is failure-tolerant.
 - [ ] Exact money (BigInt kobo strings), derived figures, no invented claims, crypto vocabulary out of the copy.
-- [ ] Generated/restyled primitives, Phosphor SSR icons, direct `@/utils/cn` imports, one dark theme, Bricolage with `latin-ext`.
+- [ ] Generated/restyled primitives, Phosphor SSR icons, direct `@/utils/cn` imports, one dark theme, Archivo with `latin-ext`.
 - [ ] Local assets with provenance manifests, original artwork, noindex metadata.
 - [ ] Working anchors, skip link, FAQ `<details>`, no-JS form POST with 303 redirect, and a `/waitlist` result page.
 - [ ] No client-side API calls except the waitlist POST; no-JS, reduced-motion, failed-WebGL, mobile/zoom fallbacks.
 - [ ] Keyboard/focus, overflow and network-containment assertions authored in `e2e/`.
+
+For the customer app pages:
+
+- [ ] `requireCustomer` on every app page read; server reads cached and failure-tolerant (`null` error body, `notFound()` for missing detail); `loading.tsx` for every page.
+- [ ] Each read becomes TanStack Query initial data; writes go through `appApi` only, with the API's own `message` rendered verbatim and `code` used only to branch.
+- [ ] Unknown money renders "—" (never ₦0); every figure tabular; money stays integer strings until `@/utils/format`.
+- [ ] One responsive `Dialog` per modal, focus trapped and restored; a PIN is never a second modal; one idempotency key per review, reused on retry.
+- [ ] WCAG 2.2 AA: 44px targets, visible focus, polite live regions, labels tied to inputs, no horizontal scroll at 320-390px.
+- [ ] No crypto vocabulary in customer copy (`tests/app-ui/vocabulary-guard.test.ts` and the `e2e/app` crawl).
 
 For later data-driven features, add only necessary validators, wrapped handlers, services, DTOs, service-backed reads, reachable pages/navigation and loading/error states. Introduce query/form/store packages only for an actual requirement. Preserve ownership, private metadata, unavailable-data and session contracts.
 

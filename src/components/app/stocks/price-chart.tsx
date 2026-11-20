@@ -1,0 +1,87 @@
+"use client";
+
+import * as React from "react";
+import { Tabs, TabsList, TabsTrigger } from "@/primitives";
+import type { AppChartDto, ChartRange } from "@/types/app";
+import { cn } from "@/utils/cn";
+import { formatChangeBps, formatNaira } from "@/utils/format";
+import { chartPath } from "./chart-path";
+
+const RANGES: ChartRange[] = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
+
+// The SVG price chart with its range tabs.
+export function PriceChart({
+  range,
+  chart,
+  onRangeChange,
+}: {
+  range: ChartRange;
+  chart: AppChartDto | null;
+  onRangeChange: (range: ChartRange) => void;
+}) {
+  const width = 640;
+  const height = 160;
+  const path = chart === null ? null : chartPath(chart.points, width, height);
+  const up = chart !== null && chart.change_bps !== null ? chart.change_bps >= 0 : true;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Tabs
+        value={range}
+        onValueChange={(value) => onRangeChange(value as ChartRange)}
+      >
+        {/* Six 44px targets fit a 320px phone only edge to edge. */}
+        <TabsList aria-label="Price range" className="w-full gap-0.5">
+          {RANGES.map((r) => (
+            <TabsTrigger key={r} value={r} className="min-w-11 px-0">
+              {r}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {chart === null && (
+        <p className="text-muted-foreground text-sm">The chart isn&apos;t available right now.</p>
+      )}
+      {chart !== null && chart.status === "not_enough_data" && (
+        <p className="text-muted-foreground text-sm">
+          Not enough price history yet for this range.
+        </p>
+      )}
+      {chart !== null && path === null && chart.status === "ok" && (
+        <p className="text-muted-foreground text-sm">
+          Not enough price history yet for this range.
+        </p>
+      )}
+      {chart !== null && path !== null && (
+        <div className="flex flex-col gap-1">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="h-40 w-full"
+            role="img"
+            aria-label={`Price from ${formatNaira(path.first)} to ${formatNaira(path.last)}`}
+            preserveAspectRatio="none"
+          >
+            <path
+              d={path.d}
+              fill="none"
+              strokeWidth={2}
+              className={up ? "stroke-gain" : "stroke-loss"}
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+          <p
+            className={cn(
+              "text-sm tabular-nums",
+              chart.change_bps === null ? "text-muted-foreground" : up ? "text-gain" : "text-loss",
+            )}
+          >
+            {chart.change_bps === null
+              ? "Change unavailable"
+              : `${formatChangeBps(chart.change_bps)} over ${range}`}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+

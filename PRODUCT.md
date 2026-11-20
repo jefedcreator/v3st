@@ -18,9 +18,12 @@ The approved brand (2026-11-17) is dark:
 
 - a green-tinted near-black ground;
 - flag green `#00804D` as the one signal colour;
-- Bricolage Grotesque throughout, which carries the naira sign;
+- Archivo throughout, which carries the naira sign. It replaced Bricolage Grotesque on 2026-11-20 because the sibling product Sara uses Bricolage;
+- the [grain mark](docs/brand/v3st-grain.svg) as the product logo;
 - katana.network's measured scroll and motion behaviour, with accessible fallbacks.
 
 The "Built to work with" row shows official marks of the 12 services V3ST is built around. It asserts no partnership or endorsement, and says that most of those services are in test mode or simulated.
 
-The landing assignment adds a waitlist route and a read-only public ticker. It includes no deployment, no change to financial behaviour, no authenticated dashboards and no live activation.
+The landing assignment adds a waitlist route, a read-only public ticker and a quiet Sign in link in the header and footer that leads to `/signin`. It includes no deployment, no change to financial behaviour and no live activation.
+
+Beyond the landing, V3ST now has a beta customer app: invited testers sign in at `/signin`, finish setup (identity test card, PIN, documents, bank account), and use the phone-first pages the API serves — home as one live money line, stocks with buying and selling, cash with add money and withdraw, Earn, earnings, activity receipts and settings. Everything runs on test money; every job the API supports is reachable from a 390px phone.

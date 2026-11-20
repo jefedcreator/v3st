@@ -1,7 +1,7 @@
 import "@/styles/globals.css";
 
 import { type Metadata } from "next";
-import { Bricolage_Grotesque } from "next/font/google";
+import { Archivo } from "next/font/google";
 import { env } from "@/env";
 
 export const metadata: Metadata = {
@@ -36,10 +36,11 @@ export const metadata: Metadata = {
   },
 };
 
-const bricolage = Bricolage_Grotesque({
+// Archivo is V3ST's face from 2026-11-20 (Bricolage Grotesque is the sibling
+// product Sara's). latin-ext carries the naira sign, U+20A6.
+const archivo = Archivo({
   subsets: ["latin", "latin-ext"],
-  axes: ["opsz"],
-  variable: "--font-bricolage",
+  variable: "--font-archivo",
   display: "swap",
 });
 
@@ -47,7 +48,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={bricolage.variable}>
+    <html lang="en" className={archivo.variable}>
       <body className="bg-background text-foreground antialiased">{children}</body>
     </html>
   );

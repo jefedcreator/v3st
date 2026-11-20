@@ -60,7 +60,9 @@ test("renders every section from server HTML without JavaScript", async ({ brows
   const firstFaq = page.locator("details.faq-item").first();
   await firstFaq.locator("summary").click();
   await expect(firstFaq).toHaveAttribute("open", "");
-  await expect(page.locator(".nojs-nav a")).toHaveCount(NAV_LINKS.length + 1);
+  // The sections, Join the waitlist, and the quiet Sign in link.
+  await expect(page.locator(".nojs-nav a")).toHaveCount(NAV_LINKS.length + 2);
+  await expect(page.locator('.nojs-nav a[href="/signin"]')).toHaveText("Sign in");
   await context.close();
 });
 
@@ -302,3 +304,15 @@ for (const viewport of VIEWPORTS) {
     expect(overflow.clipped).toBe(false);
   });
 }
+
+test("links to sign-in without prefetching it", async ({ page }) => {
+  await page.goto("/");
+  const link = page.locator(".header-signin");
+  await expect(link).toHaveAttribute("href", "/signin");
+  await link.focus();
+  await expect(link).toBeFocused();
+  await expect(page.locator("footer").getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/signin",
+  );
+});
