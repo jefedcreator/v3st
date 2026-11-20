@@ -459,10 +459,11 @@ class AppOrdersService {
 
   async completeBetaTransfer(userId: string, orderId: string): Promise<AppOrderDto> {
     const order = await db.customerOrder.findFirst({ where: { id: orderId, userId } });
-    if (order === null || order.depositOrderId === null) {
+    // Another customer's order, or one paid with cash, has no test transfer.
+    const depositOrderId = order?.depositOrderId ?? null;
+    if (depositOrderId === null) {
       throw new NotFoundException("Order not found");
     }
-    const depositOrderId = order.depositOrderId;
     const deposit = await appCashService.getDeposit(userId, depositOrderId);
     if (deposit.status === "waiting") {
       await appCashService.completeBetaDeposit(userId, depositOrderId);
