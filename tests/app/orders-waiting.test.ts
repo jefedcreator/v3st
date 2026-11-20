@@ -5,6 +5,7 @@ import { POST as ordersPOST } from "@/app/api/v1/app/orders/route";
 import { DELETE as orderDELETE, GET as orderGET } from "@/app/api/v1/app/orders/[id]/route";
 import { POST as betaCompletePOST } from "@/app/api/v1/app/beta/deposits/[id]/complete/route";
 import { POST as betaOrderCompletePOST } from "@/app/api/v1/app/beta/orders/[id]/complete-transfer/route";
+import { GET as activityGET } from "@/app/api/v1/app/activity/route";
 import { POST as depositsPOST } from "@/app/api/v1/app/cash/deposits/route";
 import { GET as cashGET } from "@/app/api/v1/app/cash/route";
 import { POST as withdrawalPreviewPOST } from "@/app/api/v1/app/withdrawals/preview/route";
@@ -646,6 +647,14 @@ describe("customer waiting orders", () => {
     const placed = await placeWith(cookie, p.preview_id, "w-key-bank-order");
     expect(placed.status).toBe(201);
     const order = dataOf<AppOrderDto>(placed.json);
+
+    // The feed has no bank details below its rows, so the waiting order reads
+    // as a summary, not the order page's "the account below".
+    const feed = await callAppRoute(activityGET, { method: "GET", url: `${ORIGIN}/api/v1/app/activity`, cookie });
+    const row = dataOf<{ items: { id: string; subtitle: string }[] }>(feed.json).items.find(
+      (item) => item.id === `ord_${order.id}`,
+    );
+    expect(row?.subtitle).toMatch(/^Transfer of ₦20,000 to buy /);
 
     const res = await callAppRoute(betaOrderCompletePOST, {
       method: "POST",

@@ -122,6 +122,21 @@ function koboOf(microUsd: bigint, rate: Rate | null): bigint | null {
   return rate === null ? null : toKobo(microUsd, rate);
 }
 
+// An order's line in the activity feed. The order page's own detail for a
+// pay-by-transfer order points at bank details shown below it, which the feed
+// and receipts do not show, so those rows get a summary instead (operator
+// decision, 2026-11-20). Copy only: no money behaviour changes.
+function orderSubtitle(
+  view: { status: AppOrderStatus; detail: string },
+  amountKobo: bigint,
+  stock: Parameters<typeof appCatalogService.stockRef>[0],
+): string {
+  if (view.status === "waiting_for_payment") {
+    return `Transfer of ${formatNaira(amountKobo)} to buy ${appCatalogService.stockRef(stock).name}`;
+  }
+  return view.detail;
+}
+
 class AppActivityService {
   private async depositRows(userId: string): Promise<ActivityRow[]> {
     const orders = await db.customerOrder.findMany({
@@ -191,7 +206,7 @@ class AppActivityService {
         id: `ord_${order.id}`,
         kind: buy ? "buy" : "sell",
         title: view.title,
-        subtitle: view.detail,
+        subtitle: orderSubtitle(view, order.amountKobo, stock),
         amountKobo: buy ? order.amountKobo : (order.settledKobo ?? order.amountKobo),
         direction: buy ? "out" : "in",
         status: progressOfOrderStatus(view.status),
@@ -470,7 +485,7 @@ class AppActivityService {
       id: `ord_${order.id}`,
       kind: buy ? "buy" : "sell",
       title: view.title,
-      subtitle: view.detail,
+      subtitle: orderSubtitle(view, order.amountKobo, stock),
       amountKobo: buy ? order.amountKobo : (order.settledKobo ?? order.amountKobo),
       direction: buy ? "out" : "in",
       status: progressOfOrderStatus(view.status),
