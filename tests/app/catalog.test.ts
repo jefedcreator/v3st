@@ -148,13 +148,15 @@ describe("customer catalog", () => {
   it("returns chart points from snapshots and not_enough_data without them", async () => {
     const { cookie } = await signInCustomer("chart@v3st.test");
     const stock = await makeCatalogStock({ displayTicker: "TSTA" });
-    // Aligned to a 15-minute bucket so all three snapshots land in one bucket.
-    const base = new Date("2026-11-17T08:00:00.000Z").getTime();
+    // Inside the last day, so the 1D range holds them whatever today is, and
+    // aligned to a 15-minute bucket so each snapshot lands in its own bucket.
+    const BUCKET_MS = 900_000;
+    const base = Math.floor((Date.now() - 2 * 3_600_000) / BUCKET_MS) * BUCKET_MS;
     for (let i = 0; i < 3; i++) {
       await stockHistory.record(db, stock.id, {
         priceMicroUsd: BigInt(100_000_000 + i * 1_000_000),
         basis: "token_nav",
-        asOf: new Date(base + i * 900_000),
+        asOf: new Date(base + i * BUCKET_MS),
         multiplierWad: 10n ** 18n,
       }, { kobo: 1_550_000n, microUsd: 1_000_000n });
     }

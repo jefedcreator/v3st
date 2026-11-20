@@ -632,91 +632,91 @@ describe("customer waiting orders", () => {
         }),
       ).rejects.toMatchObject({ code: "AUTHORIZATION_EXCEEDED" });
     });
+  });
 
-    it("completes a pay-by-transfer order's test transfer from the order", async () => {
-      const { cookie, handle, stock } = await setupWorld("wait-bank-order@v3st.test");
-      await touchReference(stock.id);
-      const preview = await previewRaw(cookie, stock.id, {
-        side: "buy",
-        amount_kobo: "2000000",
-        pay_with: "bank_transfer",
-      });
-      const p = dataOf<AppOrderPreviewDto>(preview.json);
-      const placed = await placeWith(cookie, p.preview_id, "w-key-bank-order");
-      expect(placed.status).toBe(201);
-      const order = dataOf<AppOrderDto>(placed.json);
-
-      const res = await callAppRoute(betaOrderCompletePOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
-        cookie,
-        params: { id: order.id },
-      });
-      expect(res.status).toBe(200);
-      expect(dataOf<AppOrderDto>(res.json).id).toBe(order.id);
-
-      for (let i = 0; i < 12; i += 1) {
-        await drainJobs();
-        await handle.mine(3);
-      }
-      const done = await getOrder(cookie, order.id);
-      expect(done.status).toBe("completed");
-
-      const again = await callAppRoute(betaOrderCompletePOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
-        cookie,
-        params: { id: order.id },
-      });
-      expect(again.status).toBe(200);
+  it("completes a pay-by-transfer order's test transfer from the order", async () => {
+    const { cookie, handle, stock } = await setupWorld("wait-bank-order@v3st.test");
+    await touchReference(stock.id);
+    const preview = await previewRaw(cookie, stock.id, {
+      side: "buy",
+      amount_kobo: "2000000",
+      pay_with: "bank_transfer",
     });
+    const p = dataOf<AppOrderPreviewDto>(preview.json);
+    const placed = await placeWith(cookie, p.preview_id, "w-key-bank-order");
+    expect(placed.status).toBe(201);
+    const order = dataOf<AppOrderDto>(placed.json);
 
-    it("refuses another customer's order", async () => {
-      const mine = await setupWorld("wait-bank-mine@v3st.test");
-      await touchReference(mine.stock.id);
-      const preview = await previewRaw(mine.cookie, mine.stock.id, {
-        side: "buy",
-        amount_kobo: "2000000",
-        pay_with: "bank_transfer",
-      });
-      const p = dataOf<AppOrderPreviewDto>(preview.json);
-      const placed = await placeWith(mine.cookie, p.preview_id, "w-key-bank-other");
-      const order = dataOf<AppOrderDto>(placed.json);
-
-      const other = await readyCustomer("wait-bank-other@v3st.test");
-      const res = await callAppRoute(betaOrderCompletePOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
-        cookie: other.cookie,
-        params: { id: order.id },
-      });
-      expect(res.status).toBe(404);
-      expect((res.json as { code: string }).code).toBe("NOT_FOUND");
+    const res = await callAppRoute(betaOrderCompletePOST, {
+      method: "POST",
+      url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
+      cookie,
+      params: { id: order.id },
     });
+    expect(res.status).toBe(200);
+    expect(dataOf<AppOrderDto>(res.json).id).toBe(order.id);
 
-    it("refuses an order paid with cash, which has no transfer", async () => {
-      const { cookie, stock } = await setupWorld("wait-cash-order@v3st.test");
-      await addMoneyAndComplete(cookie, "5000000", "w-key-cash-fund");
-      await touchReference(stock.id);
-      const preview = await previewRaw(cookie, stock.id, {
-        side: "buy",
-        amount_kobo: "2000000",
-        pay_with: "cash",
-      });
-      expect(preview.status).toBe(200);
-      const p = dataOf<AppOrderPreviewDto>(preview.json);
-      const placed = await placeWith(cookie, p.preview_id, "w-key-cash-order");
-      expect(placed.status).toBe(201);
-      const order = dataOf<AppOrderDto>(placed.json);
+    for (let i = 0; i < 12; i += 1) {
+      await drainJobs();
+      await handle.mine(3);
+    }
+    const done = await getOrder(cookie, order.id);
+    expect(done.status).toBe("completed");
 
-      const res = await callAppRoute(betaOrderCompletePOST, {
-        method: "POST",
-        url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
-        cookie,
-        params: { id: order.id },
-      });
-      expect(res.status).toBe(404);
-      expect((res.json as { code: string }).code).toBe("NOT_FOUND");
+    const again = await callAppRoute(betaOrderCompletePOST, {
+      method: "POST",
+      url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
+      cookie,
+      params: { id: order.id },
     });
+    expect(again.status).toBe(200);
+  });
+
+  it("refuses another customer's order", async () => {
+    const mine = await setupWorld("wait-bank-mine@v3st.test");
+    await touchReference(mine.stock.id);
+    const preview = await previewRaw(mine.cookie, mine.stock.id, {
+      side: "buy",
+      amount_kobo: "2000000",
+      pay_with: "bank_transfer",
+    });
+    const p = dataOf<AppOrderPreviewDto>(preview.json);
+    const placed = await placeWith(mine.cookie, p.preview_id, "w-key-bank-other");
+    const order = dataOf<AppOrderDto>(placed.json);
+
+    const other = await readyCustomer("wait-bank-other@v3st.test");
+    const res = await callAppRoute(betaOrderCompletePOST, {
+      method: "POST",
+      url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
+      cookie: other.cookie,
+      params: { id: order.id },
+    });
+    expect(res.status).toBe(404);
+    expect((res.json as { code: string }).code).toBe("NOT_FOUND");
+  });
+
+  it("refuses an order paid with cash, which has no transfer", async () => {
+    const { cookie, stock } = await setupWorld("wait-cash-order@v3st.test");
+    await addMoneyAndComplete(cookie, "5000000", "w-key-cash-fund");
+    await touchReference(stock.id);
+    const preview = await previewRaw(cookie, stock.id, {
+      side: "buy",
+      amount_kobo: "2000000",
+      pay_with: "cash",
+    });
+    expect(preview.status).toBe(200);
+    const p = dataOf<AppOrderPreviewDto>(preview.json);
+    const placed = await placeWith(cookie, p.preview_id, "w-key-cash-order");
+    expect(placed.status).toBe(201);
+    const order = dataOf<AppOrderDto>(placed.json);
+
+    const res = await callAppRoute(betaOrderCompletePOST, {
+      method: "POST",
+      url: `${ORIGIN}/api/v1/app/beta/orders/${order.id}/complete-transfer`,
+      cookie,
+      params: { id: order.id },
+    });
+    expect(res.status).toBe(404);
+    expect((res.json as { code: string }).code).toBe("NOT_FOUND");
   });
 });
