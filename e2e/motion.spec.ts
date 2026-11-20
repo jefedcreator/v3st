@@ -330,7 +330,9 @@ test("WebGL unavailable keeps the static artwork", async ({ browser }) => {
 });
 
 test("short viewport falls back to ordinary flow with the hero visible", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 600 });
+  // Without the form the hero copy is short enough to pin at 1440x600, so the
+  // fallback is exercised below the fit line (copy + rail + 190px ≈ 540px).
+  await page.setViewportSize({ width: 1440, height: 480 });
   await page.goto("/");
   await expect
     .poll(() => page.locator("[data-landing]").getAttribute("data-hero-fit"), { timeout: 8_000 })
@@ -362,10 +364,12 @@ for (const viewport of [
     // still waiting for the handover (the blank-hero bug showed the opposite).
     for (const group of GROUPS) await waitOpacity(page, group, 1);
     await expect(root).toHaveAttribute("data-header-cta-hidden", "true");
-    // Pinned and uncropped: the hero's copy fits inside the 100vh stage.
+    // Pinned and uncropped: the copy and the rail fit inside the 100vh stage,
+    // with the rail along the bottom edge below the copy, never over it.
     const fits = await page.evaluate(() => {
-      const inner = document.querySelector(".hero-inner")!.getBoundingClientRect();
-      return inner.top >= -1 && inner.bottom <= window.innerHeight + 1;
+      const copy = document.querySelector(".hero-copy")!.getBoundingClientRect();
+      const rail = document.querySelector('[data-hero-group="rail"]')!.getBoundingClientRect();
+      return copy.top >= -1 && copy.bottom <= rail.top + 1 && rail.bottom <= window.innerHeight + 1;
     });
     expect(fits).toBe(true);
   });

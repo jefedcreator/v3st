@@ -66,25 +66,19 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
     if (prefersReducedMotion()) reducedMotionRef.current = true;
 
     const groups = Array.from(wrap.querySelectorAll<HTMLElement>("[data-hero-group]"));
-    const content = track.querySelector<HTMLElement>(".hero-inner");
+    const copy = track.querySelector<HTMLElement>(".hero-copy");
     const rail = track.querySelector<HTMLElement>('[data-hero-group="rail"]');
 
     let fit = false;
+    // The copy block and the rail are measured on their own: .hero-inner
+    // stretches to the stage, so its height says nothing about the content,
+    // and its padding is what the fit clearance already stands in for
+    // (counting both kept laptops out of the pin).
     const refit = () => {
-      const railHeight = rail?.offsetHeight ?? 0;
-      // The copy's own height: the rail sits inside .hero-inner, so don't count
-      // it twice, and leave out the vertical padding, which the fit clearance
-      // already stands in for (counting both kept laptops out of the pin).
-      let padding = 0;
-      if (content) {
-        const style = window.getComputedStyle(content);
-        padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-      }
-      const contentHeight = Math.max(0, (content?.clientHeight ?? 0) - padding - railHeight);
       fit = heroFits({
         viewportHeight: window.innerHeight,
-        contentHeight,
-        railHeight,
+        contentHeight: copy?.offsetHeight ?? 0,
+        railHeight: rail?.offsetHeight ?? 0,
         reducedMotion: reducedMotionRef.current,
       });
     };
@@ -192,10 +186,13 @@ export function HeroMotion(props: { children: React.ReactNode }): React.JSX.Elem
         state.running = false;
       }
     };
-    // Watch the content, not the track: the track's own height changes when
-    // data-hero-fit flips, and that must not feed back into the fit decision.
+    // Watch the copy and the rail, not the track or the stage: their heights
+    // change when data-hero-fit flips, and that must not feed back into the
+    // fit decision. The copy and the rail keep their content height in either
+    // layout.
     const observer = new ResizeObserver(onResize);
-    if (content) observer.observe(content);
+    if (copy) observer.observe(copy);
+    if (rail) observer.observe(rail);
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);

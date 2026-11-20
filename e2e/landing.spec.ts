@@ -48,9 +48,14 @@ test("renders every section from server HTML without JavaScript", async ({ brows
   for (const [anchor, heading] of SECTION_HEADINGS) {
     await expect(page.locator(`${anchor} h2`).first()).toHaveText(heading);
   }
+  // The hero holds two links and no form; the closing panel holds the only
+  // waitlist form.
   const forms = page.locator('form[method="post"][action="/api/v1/waitlist"]');
-  await expect(forms).toHaveCount(2);
-  await expect(page.locator("#hero-email")).toBeVisible();
+  await expect(forms).toHaveCount(1);
+  await expect(page.locator("#hero-email")).toHaveCount(0);
+  await expect(page.locator(".hero form")).toHaveCount(0);
+  await expect(page.locator('.hero-actions a[href="/#join"]')).toHaveText("Join the waitlist");
+  await expect(page.locator('.hero-actions a[href="/#how-it-works"]')).toHaveText("How it works");
   await expect(page.locator("#join-email")).toBeVisible();
   const firstFaq = page.locator("details.faq-item").first();
   await firstFaq.locator("summary").click();

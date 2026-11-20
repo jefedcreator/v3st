@@ -119,7 +119,7 @@ Section parents own their content; children receive props/callbacks. State reset
 
 ## 7. Forms: the waitlist pattern
 
-The landing's only form is the waitlist. `WaitlistForm` renders a native `<form method="post" action="/api/v1/waitlist">` with an email field, a hidden `source` field (`hero`, `join` or `waitlist_page`) and a honeypot `website` field (visually hidden, `tabindex="-1"`, `autocomplete="off"`). Native validation (`type="email" required`) stays on, so the form works without JavaScript (the route answers url-encoded posts with a 303 to `/waitlist?status=`).
+The landing's only form is the waitlist, in the closing `#join` panel and on `/waitlist`. The hero holds no form (removed 2026-11-20): its primary pill and the header button link to `/#join` and focus the email field after the jump. `WaitlistForm` renders a native `<form method="post" action="/api/v1/waitlist">` with an email field, a hidden `source` field (`join` or `waitlist_page`; the API still accepts `hero` for rows from the removed hero form) and a honeypot `website` field (visually hidden, `tabindex="-1"`, `autocomplete="off"`). Native validation (`type="email" required`) stays on, so the form works without JavaScript (the route answers url-encoded posts with a 303 to `/waitlist?status=`).
 
 With JavaScript, a client island intercepts the submission and posts JSON with `fetch` to the same route, rendering the states inline without moving layout and announcing results in a polite live region. Error text is the API's `message`, rendered directly. The state machine lives in a pure, unit-tested `waitlist-state.ts`.
 
