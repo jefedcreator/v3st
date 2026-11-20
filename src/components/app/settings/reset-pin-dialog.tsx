@@ -3,7 +3,10 @@
 import dynamic from "next/dynamic";
 import * as React from "react";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import { appApi, AppApiError } from "@/utils/app-api";
+import { appKeys } from "@/hooks/app/query-keys";
 import type { PrivyMode } from "@/types/app-ui";
 import { PinInput } from "@/components/app/pin/pin-input";
 import { AppSkeleton } from "@/components/app/app-skeleton";
@@ -29,6 +32,7 @@ export function ResetPinDialog({
   mode: PrivyMode;
   appId: string | null;
 }) {
+  const queryClient = useQueryClient();
   const [tokens, setTokens] = React.useState<{ access_token: string; identity_token: string } | null>(null);
   const [pin, setPin] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
@@ -48,8 +52,16 @@ export function ResetPinDialog({
 
   async function simulatedTokens() {
     if (email === null) return;
-    const next = await appApi.beta.privyTokens(email);
-    setTokens(next);
+    setPending(true);
+    setError(null);
+    try {
+      setTokens(await appApi.beta.privyTokens(email));
+    } catch (caught) {
+      setError(
+        caught instanceof AppApiError ? caught.message : "Something went wrong. Please try again.",
+      );
+    }
+    setPending(false);
   }
 
   async function onReset() {
@@ -57,11 +69,22 @@ export function ResetPinDialog({
     setPending(true);
     setError(null);
     try {
-      await appApi.security.resetPin({ access_token: tokens.access_token, identity_token: tokens.identity_token, pin });
+      await appApi.security.resetPin({
+        access_token: tokens.access_token,
+        identity_token: tokens.identity_token,
+        pin,
+      });
+      void queryClient.invalidateQueries({ queryKey: appKeys.devices });
       setDone(true);
     } catch (caught) {
-      if (caught instanceof AppApiError) setError(caught.message);
-      else setError("Something went wrong. Please try again.");
+      if (caught instanceof AppApiError) {
+        setError(caught.message);
+        // A stale or reused sign-in can't reset the PIN: start the sign-in
+        // step again for a fresh one.
+        if (caught.code === "SIGN_IN_AGAIN" || caught.code === "SIGN_IN_REQUIRED") setTokens(null);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     }
     setPending(false);
   }
@@ -77,7 +100,7 @@ export function ResetPinDialog({
             Your PIN is reset. Other devices were signed out.
           </p>
         ) : (
-          <div className="mt-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             {tokens === null && mode === "simulated" && (
               <>
                 <p className="text-muted-foreground text-sm">
@@ -88,12 +111,13 @@ export function ResetPinDialog({
                 </Button>
               </>
             )}
-            {tokens === null && mode === "sandbox" && appId !== null && (
-              <PrivyReset
-                appId={appId}
-                email={email ?? ""}
-                onTokens={(next) => setTokens(next)}
-              />
+            {tokens === null && mode === "sandbox" && appId !== null && email !== null && (
+              <PrivyReset appId={appId} email={email} onTokens={(next) => setTokens(next)} />
+            )}
+            {tokens === null && mode === "sandbox" && (appId === null || email === null) && (
+              <p className="text-muted-foreground text-sm">
+                Sign-in isn&apos;t set up on this server yet.
+              </p>
             )}
             {tokens !== null && (
               <>
@@ -112,11 +136,9 @@ export function ResetPinDialog({
                 </Button>
               </>
             )}
-            {error !== null && (
-              <p role="status" aria-live="polite" className="text-loss text-sm">
-                {error}
-              </p>
-            )}
+            <p role="status" aria-live="polite" className="text-loss text-sm empty:hidden">
+              {error}
+            </p>
           </div>
         )}
       </DialogContent>

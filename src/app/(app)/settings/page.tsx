@@ -7,7 +7,6 @@ import { parseSettingsOpen } from "@/utils/app-paths";
 
 import { readSettings, readBanks } from "@/server/app/reads";
 import { requireCustomer } from "@/server/app/session";
-import type { PrivyMode } from "@/types/app-ui";
 
 export const metadata: Metadata = {
   title: "Settings · V3ST",

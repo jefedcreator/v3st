@@ -2,17 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import * as React from "react";
+import { CaretRight } from "@phosphor-icons/react/dist/ssr";
 
-import type { AppAutomationDto, AppBankDto, AppProfileDto } from "@/types/app";
+import type {
+  AppAutomationDto,
+  AppBankDto,
+  AppDocumentSlug,
+  AppDocumentSummaryDto,
+  AppProfileDto,
+} from "@/types/app";
 import type { PrivyMode } from "@/types/app-ui";
 import type { SettingsModal } from "@/utils/app-paths";
 import { BetaLine } from "@/components/app/beta-line";
 import { useSignOut } from "@/components/app/signin/use-sign-out";
 import { DocumentDialog } from "@/components/app/documents/document-dialog";
-import { formatLagosDay } from "@/utils/format";
-import type { AppDocumentSummaryDto } from "@/types/app";
+import { useAutomationsQuery, useProfileQuery } from "@/hooks/app/use-settings";
 import { Badge, Button } from "@/primitives";
-import { automationLine, identityLine } from "./settings";
+import { identityLine } from "./settings";
 import { AutomationsDialog } from "./automations-dialog";
 import { BankDialog } from "./bank-dialog";
 import { ChangePinDialog } from "./change-pin-dialog";
@@ -20,10 +26,64 @@ import { DevicesDialog } from "./devices-dialog";
 import { NameDialog } from "./name-dialog";
 import { ResetPinDialog } from "./reset-pin-dialog";
 
+// One settings row: a 44px+ button that opens its modal.
+function Row({
+  label,
+  value,
+  badge,
+  onClick,
+}: {
+  label: string;
+  value?: string;
+  badge?: string;
+  onClick: () => void;
+}) {
+  return (
+    <li className="border-b border-stroke last:border-b-0">
+      <button
+        type="button"
+        onClick={onClick}
+        className="group focus-visible:outline-ring flex min-h-12 w-full items-center gap-3 py-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2"
+      >
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-heading group-hover:text-gain text-[15px] transition-colors">
+            {label}
+          </span>
+          {value !== undefined && (
+            <span className="text-muted-foreground text-sm break-words">{value}</span>
+          )}
+        </span>
+        {badge !== undefined && (
+          <Badge variant="secondary" className="shrink-0">
+            {badge}
+          </Badge>
+        )}
+        <CaretRight className="text-subtle size-4 shrink-0" aria-hidden="true" />
+      </button>
+    </li>
+  );
+}
+
+// A settings group: a card with a heading and hairline rows, never nested.
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  const id = `settings-${title.toLowerCase().replace(/[^a-z]+/g, "-")}`;
+  return (
+    <section
+      aria-labelledby={id}
+      className="flex flex-col rounded-2xl border border-stroke bg-surface px-5 pt-4 pb-1"
+    >
+      <h2 id={id} className="text-muted-foreground text-[13px] font-medium">
+        {title}
+      </h2>
+      <ul className="flex flex-col">{children}</ul>
+    </section>
+  );
+}
+
 // Settings: one modal at a time, each linked by ?open=<name>.
 export function SettingsPage({
-  profile,
-  automations,
+  profile: initialProfile,
+  automations: initialAutomations,
   documents,
   banks,
   open,
@@ -37,142 +97,99 @@ export function SettingsPage({
   privy: { mode: PrivyMode; appId: string | null };
 }) {
   const router = useRouter();
+  const { data: profile } = useProfileQuery(initialProfile);
+  const { data: automations } = useAutomationsQuery(initialAutomations);
   const [modal, setModal] = React.useState<SettingsModal | null>(open);
-  const [documentSlug, setDocumentSlug] = React.useState<string | null>(null);
-  const { signOut } = useSignOut();
-
+  const [documentSlug, setDocumentSlug] = React.useState<AppDocumentSlug | null>(null);
+  const { signOut, pending: signingOut } = useSignOut();
   const fromUrl = React.useRef(open !== null);
 
+  // A backend link can open a modal while the page is already mounted.
+  React.useEffect(() => {
+    if (open !== null) {
+      setModal(open);
+      fromUrl.current = true;
+    }
+  }, [open]);
+
   function onModalChange(next: boolean) {
-    if (!next) {
-      setModal(null);
-      if (fromUrl.current) {
-        router.replace("/settings");
-        fromUrl.current = false;
-      }
+    if (next) return;
+    setModal(null);
+    if (fromUrl.current) {
+      fromUrl.current = false;
+      router.replace("/settings", { scroll: false });
     }
   }
 
-  const openModal = (name: SettingsModal) => {
+  function openModal(name: SettingsModal) {
     fromUrl.current = false;
     setModal(name);
-  };
+  }
 
-  const anyRenewal = automations.some((automation) => automation.needs_renewal);
+  const needsRenewal = automations.some((automation) => automation.needs_renewal);
+  const activeCount = automations.filter((automation) => automation.active).length;
+  const bank = profile.bank_account;
 
   return (
     <div className="flex flex-col gap-6 pt-4">
       <h1 className="type-app-title text-heading">Settings</h1>
 
-      <section aria-label="Profile" className="flex flex-col gap-2 rounded-2xl border border-stroke bg-surface p-5">
-        <p className="text-heading text-[15px] font-medium">
-          {profile.preferred_name ?? profile.first_name}
-        </p>
-        <p className="text-muted-foreground text-sm">{profile.email}</p>
-        <p className="text-muted-foreground text-sm">{identityLine(profile)}</p>
-        <Button variant="link" size="sm" className="self-start px-0" onClick={() => openModal("name")}>
-          Change name
-        </Button>
-      </section>
+      <Group title="Profile">
+        <Row
+          label="Change name"
+          value={[profile.preferred_name ?? profile.first_name, profile.email, identityLine(profile)]
+            .filter((part): part is string => part !== null && part !== "")
+            .join(" · ")}
+          onClick={() => openModal("name")}
+        />
+      </Group>
 
-      <section
-        aria-label="Bank account"
-        className="flex flex-col gap-2 rounded-2xl border border-stroke bg-surface p-5"
-      >
-        <p className="text-ink text-[15px]">
-          {profile.bank_account === null
-            ? "No bank account yet"
-            : `${profile.bank_account.bank_name} ••${profile.bank_account.account_ending} · ${profile.bank_account.account_name}`}
-        </p>
-        <Button
-          variant="link"
-          size="sm"
-          className="self-start px-0"
+      <Group title="Bank account">
+        <Row
+          label={bank === null ? "Add a bank account" : "Change bank account"}
+          value={
+            bank === null
+              ? "No bank account yet"
+              : `${bank.bank_name} ••${bank.account_ending} · ${bank.account_name}`
+          }
           onClick={() => openModal("bank")}
-        >
-          {profile.bank_account === null ? "Add a bank account" : "Change bank account"}
-        </Button>
-      </section>
+        />
+      </Group>
 
-      <section aria-label="Security" className="flex flex-col gap-1 rounded-2xl border border-stroke bg-surface p-5">
-        <p className="text-heading text-[15px] font-medium">Security</p>
-        <Button variant="link" size="sm" className="justify-start px-0" onClick={() => openModal("pin")}>
-          Change PIN
-        </Button>
-        <Button
-          variant="link"
-          size="sm"
-          className="justify-start px-0"
-          onClick={() => openModal("reset-pin")}
-        >
-          Forgot your PIN?
-        </Button>
-        <Button
-          variant="link"
-          size="sm"
-          className="justify-start px-0"
-          onClick={() => openModal("devices")}
-        >
-          Devices
-        </Button>
-      </section>
+      <Group title="Security">
+        <Row label="Change PIN" onClick={() => openModal("pin")} />
+        <Row label="Forgot your PIN?" onClick={() => openModal("reset-pin")} />
+        <Row label="Devices" onClick={() => openModal("devices")} />
+      </Group>
 
-      <section
-        aria-label="Automatic actions"
-        className="flex flex-col gap-2 rounded-2xl border border-stroke bg-surface p-5"
-      >
-        <p className="text-heading flex items-center gap-2 text-[15px] font-medium">
-          Automatic actions
-          {anyRenewal && <Badge variant="secondary">Needs renewal</Badge>}
-        </p>
-        <p className="text-muted-foreground text-sm">
-          {automations.length === 0 ? "No automatic actions yet." : `${automations.length} on your account`}
-        </p>
-        {automations.length > 0 && (
-          <ul className="flex flex-col gap-1">
-            {automations.map((automation) => (
-              <li key={automation.id} className="text-muted-foreground text-sm">
-                {automation.title} · {automationLine(automation)} · until{" "}
-                {formatLagosDay(automation.expires_at)}
-              </li>
-            ))}
-          </ul>
-        )}
-        <Button
-          variant="link"
-          size="sm"
-          className="self-start px-0"
+      <Group title="Automatic actions">
+        <Row
+          label="Automatic actions"
+          value={activeCount === 0 ? "None on yet" : `${activeCount} active`}
+          badge={needsRenewal ? "Needs renewal" : undefined}
           onClick={() => openModal("automations")}
-        >
-          Manage
-        </Button>
-      </section>
+        />
+      </Group>
 
-      <section aria-label="Documents" className="flex flex-col gap-1 rounded-2xl border border-stroke bg-surface p-5">
-        <p className="text-heading text-[15px] font-medium">Documents</p>
+      <Group title="Documents">
         {documents.map((doc) => (
-          <button
+          <Row
             key={doc.slug}
-            type="button"
-            className="text-muted-foreground hover:text-heading flex min-h-11 items-center justify-between gap-3 text-left text-sm transition-colors"
+            label={doc.title}
+            value={`Version ${doc.version}`}
             onClick={() => setDocumentSlug(doc.slug)}
-          >
-            <span>{doc.title}</span>
-            <span className="text-subtle">Version {doc.version}</span>
-          </button>
+          />
         ))}
-      </section>
+      </Group>
 
-      <div className="flex flex-col gap-3">
-        <Button variant="outline" onClick={() => void signOut()}>
-          Sign out
+      <div className="flex flex-col items-start gap-3">
+        <Button variant="outline" disabled={signingOut} onClick={() => void signOut()}>
+          {signingOut ? "Signing out…" : "Sign out"}
         </Button>
         <BetaLine />
       </div>
 
-      {modal === "name" && (
-        <NameDialog open onOpenChange={onModalChange} profile={profile} />
-      )}
+      {modal === "name" && <NameDialog open onOpenChange={onModalChange} profile={profile} />}
       {modal === "bank" && <BankDialog open onOpenChange={onModalChange} banks={banks} />}
       {modal === "pin" && <ChangePinDialog open onOpenChange={onModalChange} />}
       {modal === "reset-pin" && (
@@ -190,7 +207,7 @@ export function SettingsPage({
       )}
       {documentSlug !== null && (
         <DocumentDialog
-          slug={documentSlug as AppDocumentSummaryDto["slug"]}
+          slug={documentSlug}
           open
           onOpenChange={(nextOpen) => {
             if (!nextOpen) setDocumentSlug(null);

@@ -4,6 +4,8 @@ import * as React from "react";
 
 import { useSettingsActions } from "@/hooks/app/use-settings";
 import { AppApiError } from "@/utils/app-api";
+import { settingsHref } from "@/utils/app-paths";
+import { pinErrorAction } from "@/components/app/money/money-job";
 import { PinInput } from "@/components/app/pin/pin-input";
 import { isValidPin, pinsMatch } from "@/components/app/pin/pin";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/primitives";
@@ -20,7 +22,7 @@ export function ChangePinDialog({
   const [current, setCurrent] = React.useState("");
   const [nextPin, setNextPin] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<{ message: string; locked: boolean } | null>(null);
   const [done, setDone] = React.useState(false);
   const [pending, setPending] = React.useState(false);
 
@@ -41,8 +43,13 @@ export function ChangePinDialog({
       await setPin({ pin: nextPin, current_pin: current });
       setDone(true);
     } catch (caught) {
-      if (caught instanceof AppApiError) setError(caught.message);
-      else setError("Something went wrong. Please try again.");
+      if (caught instanceof AppApiError) {
+        const action = pinErrorAction(caught.code);
+        if (action === "clear_pin") setCurrent("");
+        setError({ message: caught.message, locked: action === "locked" });
+      } else {
+        setError({ message: "Something went wrong. Please try again.", locked: false });
+      }
     }
     setPending(false);
   }
@@ -58,7 +65,7 @@ export function ChangePinDialog({
             Your PIN is changed.
           </p>
         ) : (
-          <div className="mt-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             <PinInput id="current-pin" label="Current PIN" value={current} onChange={setCurrent} />
             <PinInput id="new-pin" label="New PIN" value={nextPin} onChange={setNextPin} />
             <PinInput
@@ -78,11 +85,17 @@ export function ChangePinDialog({
             >
               {pending ? "Saving…" : "Change PIN"}
             </Button>
-            {error !== null && (
-              <p role="status" aria-live="polite" className="text-loss text-sm">
-                {error}
-              </p>
-            )}
+            <p role="status" aria-live="polite" className="text-loss text-sm empty:hidden">
+              {error === null ? null : error.message}
+              {error !== null && error.locked && (
+                <>
+                  {" "}
+                  <a className="text-gain underline underline-offset-4" href={settingsHref("reset-pin")}>
+                    Reset your PIN
+                  </a>
+                </>
+              )}
+            </p>
           </div>
         )}
       </DialogContent>

@@ -4,22 +4,25 @@ import * as React from "react";
 import {
   getIdentityToken,
   PrivyProvider,
-  usePrivy,
   useLoginWithEmail,
+  usePrivy,
 } from "@privy-io/react-auth";
 
-import { isValidEmail } from "@/components/app/signin/signin";
-import { Button, Input, Label } from "@/primitives";
+import { Button, InputOTP, InputOTPGroup, InputOTPSlot, Label } from "@/primitives";
 
 export type PrivyResetResult = {
   access_token: string;
   identity_token: string;
 };
 
+const CODE_FAILED = "That code didn't work. Check it and try again.";
+
+// A fresh Privy email sign-in for a PIN reset. Loaded only in sandbox mode,
+// through a dynamic import, inside the Reset PIN modal.
 export default function PrivyReset(props: {
   appId: string;
   email: string;
-  onTokens: (tokens: { access_token: string; identity_token: string }) => void;
+  onTokens: (tokens: PrivyResetResult) => void;
 }) {
   return (
     <PrivyProvider
@@ -29,53 +32,73 @@ export default function PrivyReset(props: {
         embeddedWallets: { ethereum: { createOnLogin: "off" } },
       }}
     >
-      <PrivyResetFlow appId={props.appId} email={props.email} onTokens={props.onTokens} />
+      <PrivyResetFlow email={props.email} onTokens={props.onTokens} />
     </PrivyProvider>
   );
 }
 
-function PrivyResetFlow(props: { appId: string; email: string; onTokens: (tokens: { access_token: string; identity_token: string }) => void }) {
-  const { authenticated, logout, getAccessToken } = usePrivy();
+// The reset needs a session V3ST has not seen: any stored Privy session is
+// logged out once, first; then a code goes to the profile email, and the new
+// session's tokens are handed up exactly once.
+function PrivyResetFlow({
+  email,
+  onTokens,
+}: {
+  email: string;
+  onTokens: (tokens: PrivyResetResult) => void;
+}) {
+  const { ready, authenticated, logout, getAccessToken } = usePrivy();
   const { sendCode, loginWithCode } = useLoginWithEmail();
-  const [email, setEmail] = React.useState("");
+  const [cleared, setCleared] = React.useState(false);
+  const [stage, setStage] = React.useState<"send" | "code">("send");
   const [code, setCode] = React.useState("");
-  const [stage, setStage] = React.useState<"email" | "code" | "done">("email");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
-  const [, setResult] = React.useState<PrivyResetResult | null>(null);
-  const exchanged = React.useRef(false);
+  const handedUp = React.useRef(false);
+  const onTokensRef = React.useRef(onTokens);
+  onTokensRef.current = onTokens;
 
   React.useEffect(() => {
-    if (authenticated) void logout();
-  }, [authenticated, logout]);
+    if (cleared || !ready) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (authenticated) await logout();
+      } finally {
+        if (!cancelled) setCleared(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cleared, ready, authenticated, logout]);
 
   React.useEffect(() => {
-    if (!authenticated || exchanged.current) return;
-    exchanged.current = true;
+    if (!cleared || !authenticated || handedUp.current) return;
+    handedUp.current = true;
     void (async () => {
       const [accessToken, identityToken] = await Promise.all([
         getAccessToken(),
         getIdentityToken(),
       ]);
       if (accessToken === null || identityToken === null) {
-        setError("That code didn&apos;t work. Check it and try again.");
+        handedUp.current = false;
+        setPending(false);
+        setError(CODE_FAILED);
         return;
       }
-      setResult({ access_token: accessToken, identity_token: identityToken });
-      props.onTokens({ access_token: accessToken, identity_token: identityToken });
-      setStage("done");
+      onTokensRef.current({ access_token: accessToken, identity_token: identityToken });
     })();
-  }, [authenticated, getAccessToken, props]);
+  }, [cleared, authenticated, getAccessToken]);
 
-  async function onSend(event: React.FormEvent) {
-    event.preventDefault();
-    if (!isValidEmail(email)) return;
+  async function onSend() {
     setPending(true);
+    setError(null);
     try {
-      await sendCode({ email, disableSignup: true });
+      await sendCode({ email });
       setStage("code");
     } catch {
-      setError("That code didn&apos;t work. Check it and try again.");
+      setError("We couldn't send a code. Please try again.");
     }
     setPending(false);
   }
@@ -84,63 +107,65 @@ function PrivyResetFlow(props: { appId: string; email: string; onTokens: (tokens
     event.preventDefault();
     if (code.length !== 6) return;
     setPending(true);
+    setError(null);
     try {
       await loginWithCode({ code });
     } catch {
-      setError("That code didn&apos;t work. Check it and try again.");
+      setError(CODE_FAILED);
       setPending(false);
     }
   }
 
-  if (stage === "done") {
-    return <p className="text-gain text-sm">You&apos;re signed in again.</p>;
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-muted-foreground text-sm">
-        Sign in again with your email to reset your PIN.
-      </p>
-      {stage === "email" && (
-        <form className="flex flex-col gap-4" onSubmit={onSend} noValidate>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="reset-email">Email</Label>
-            <Input
-              id="reset-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <Button type="submit" disabled={!isValidEmail(email) || pending}>
+      {stage === "send" && (
+        <>
+          <p className="text-muted-foreground text-sm">
+            To reset your PIN, sign in again with a code sent to {email}.
+          </p>
+          <Button disabled={!ready || !cleared || pending} onClick={() => void onSend()}>
             {pending ? "Sending…" : "Send code"}
           </Button>
-        </form>
+        </>
       )}
       {stage === "code" && (
         <form className="flex flex-col gap-4" onSubmit={onCode} noValidate>
           <div className="flex flex-col gap-2">
             <Label htmlFor="reset-code">Code</Label>
-            <Input
+            <InputOTP
               id="reset-code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
               maxLength={6}
+              autoComplete="one-time-code"
               value={code}
-              onChange={(event) => setCode(event.target.value)}
-            />
+              onChange={setCode}
+              aria-invalid={error !== null}
+              aria-describedby={error !== null ? "reset-code-error" : undefined}
+            >
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+              </InputOTPGroup>
+              <InputOTPGroup>
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
           </div>
           <Button type="submit" disabled={code.length !== 6 || pending}>
             {pending ? "Checking…" : "Continue"}
           </Button>
         </form>
       )}
-      {error !== null && (
-        <p role="status" aria-live="polite" className="text-loss text-sm">
-          {error}
-        </p>
-      )}
+      <p
+        id="reset-code-error"
+        role="status"
+        aria-live="polite"
+        className="text-loss text-sm empty:hidden"
+      >
+        {error}
+      </p>
     </div>
   );
 }
