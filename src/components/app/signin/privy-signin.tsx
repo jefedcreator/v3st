@@ -60,16 +60,28 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
     return () => clearInterval(timer);
   }, []);
 
-  // A stored Privy session never signs anyone back in after a V3ST sign-out.
+  // After a V3ST sign-out, a stored Privy session must never sign anyone back
+  // in: log it out first, and only then allow the token exchange. Without the
+  // signed-out flag a stored session is a welcome shortcut back in.
+  const [storedSessionCleared, setStoredSessionCleared] = React.useState(!signedOut);
   React.useEffect(() => {
-    if (signedOut && authenticated) {
-      void logout();
-    }
-  }, [signedOut, authenticated, logout]);
+    if (storedSessionCleared || !ready) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (authenticated) await logout();
+      } finally {
+        if (!cancelled) setStoredSessionCleared(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storedSessionCleared, ready, authenticated, logout]);
 
-  // Exchange both tokens with V3ST exactly once, then leave.
+  // Exchange both tokens with V3ST exactly once per Privy sign-in, then leave.
   React.useEffect(() => {
-    if (!ready || !authenticated || exchanged.current) return;
+    if (!storedSessionCleared || !ready || !authenticated || exchanged.current) return;
     exchanged.current = true;
     void (async () => {
       try {
@@ -79,6 +91,7 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
         ]);
         if (accessToken === null || identityToken === null) {
           exchanged.current = false;
+          setPending(false);
           setError("That code didn't work. Check it and try again.");
           return;
         }
@@ -88,11 +101,18 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
         });
         router.replace(afterSignInPath(res.next_step, next));
       } catch (caught) {
-        exchanged.current = false;
+        // V3ST refused this sign-in (not on the beta list, for one): end the
+        // Privy session too, so another email can be tried.
+        setPending(false);
         setError(signinErrorMessage(caught));
+        try {
+          await logout();
+        } finally {
+          exchanged.current = false;
+        }
       }
     })();
-  }, [ready, authenticated, getAccessToken, next, router]);
+  }, [storedSessionCleared, ready, authenticated, getAccessToken, logout, next, router]);
 
   async function onSendCode(event: React.FormEvent) {
     event.preventDefault();
@@ -100,13 +120,24 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
     setPending(true);
     setError(null);
     try {
-      await sendCode({ email, disableSignup: true });
+      await sendCode({ email });
       setSentAt(Date.now());
       setStage("code");
     } catch (caught) {
       setError(signinErrorMessage(caught));
     }
     setPending(false);
+  }
+
+  async function onResend() {
+    setError(null);
+    setCode("");
+    try {
+      await sendCode({ email });
+      setSentAt(Date.now());
+    } catch (caught) {
+      setError(signinErrorMessage(caught));
+    }
   }
 
   async function onCode(event: React.FormEvent) {
@@ -140,7 +171,10 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
             onChange={(event) => setEmail(event.target.value)}
           />
         </div>
-        <Button type="submit" disabled={!isValidEmail(email) || pending || !ready}>
+        <Button
+          type="submit"
+          disabled={!isValidEmail(email) || pending || !ready || !storedSessionCleared}
+        >
           {pending ? "Sending…" : "Send code"}
         </Button>
         <PrivyError id={errorId} error={error} />
@@ -181,8 +215,8 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
           type="button"
           variant="link"
           size="sm"
-          disabled={sentAt === null || !canResend(sentAt, now)}
-          onClick={() => void sendCode({ email, disableSignup: true })}
+          disabled={sentAt === null || !canResend(sentAt, now) || pending}
+          onClick={() => void onResend()}
         >
           Send a new code
         </Button>
@@ -193,6 +227,7 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
           onClick={() => {
             setStage("email");
             setCode("");
+            setError(null);
           }}
         >
           Use a different email
