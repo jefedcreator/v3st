@@ -25,15 +25,6 @@ function pageFile(group: string): string {
   return path.join(ROOT, "src/app", group, "page.tsx");
 }
 
-function routePatterns(): string[] {
-  const out: string[] = [];
-  for (const { group } of PAGES) out.push(path.join("src/app", group).replace(/\[id\]/g, "[^/]+"));
-  for (const redirect of ["(app)/settings/bank", "(app)/settings/automations"]) {
-    out.push(path.join("src/app", redirect).replace(/\[id\]/g, "[^/]+"));
-  }
-  return out;
-}
-
 describe("the app's route inventory", () => {
   it("resolves every page under its expected group", () => {
     for (const { group } of PAGES) {
@@ -57,7 +48,6 @@ describe("the app's route inventory", () => {
   });
 
   it("resolves every backend link to a page or redirect route", () => {
-    const patterns = routePatterns();
     const services = [
       path.join(ROOT, "src/backend/services/app/home.ts"),
       path.join(ROOT, "src/backend/services/notifications/index.ts"),
@@ -67,50 +57,31 @@ describe("the app's route inventory", () => {
       const source = readFileSync(file, "utf8");
       const matches = [
         ...source.matchAll(/link:\s*(?:"([^"]+)"|`([^`]+)`)/g),
-        ...source.matchAll(/const link = ("([^"]+)"|`([^`]+)`)/g),
+        ...source.matchAll(/const link = (?:"([^"]+)"|`([^`]+)`)/g),
       ];
       for (const match of matches) {
-        const value = match[2] ?? match[3] ?? match[1] ?? "";
-        if (value === "") continue;
-        links.add(value);
+        const value = match[1] ?? match[2] ?? "";
+        if (value !== "") links.add(value);
       }
     }
     expect(links.size).toBeGreaterThan(0);
+
+    // Every route this app serves, as path segments with [id] for a dynamic one.
+    const routes = [
+      ...PAGES.map(({ route }) => route),
+      "/settings/bank",
+      "/settings/automations",
+    ];
+    const resolves = (segments: string[]): boolean =>
+      routes.some((route) => route === `/${segments.join("/")}`);
+
     for (const link of links) {
-      // Normalise a parameterised path to its [id] route shape.
-      let normalised = link.replace(/\$\{[^}]+\}/g, "X");
-      normalised = normalised.replace(/\/(?:dep|wd|pay|ord|inv|eop|wk)_X(?=\/|$)/g, "/[id]");
-      if (/\/[^/]+_X$/.test(normalised)) normalised = normalised.replace(/\/[^/]+$/, "/[id]");
-      let resolved = false;
-      for (const pattern of patterns) {
-        const re = new RegExp(`^/api/v1/${pattern.replace(/[()]/g, "[()]*").replace(/\*/g, "")}$`);
-        void re;
-      }
-      const route = normalised.replace(/^\//, "");
-      const segments = route.split("/");
-      const dynamic = segments
-        .map((segment) => (/^\[id\]$/.test(segment) ? "[id]" : segment))
-        .join("/");
-      for (const { group } of PAGES) {
-        const candidate = path.join("src/app", group);
-        if (candidate.endsWith(dynamic) || candidate.endsWith(dynamic.replace(/^.*?\)\//, ""))) {
-          resolved = true;
-        }
-      }
-      // /settings/bank and /settings/automations are the redirect routes.
-      if (normalised === "/settings/bank" || normalised === "/settings/automations") resolved = true;
-      if (!resolved) {
-        // Try segment-by-segment with [id] replacing a dynamic final segment.
-        const parts = normalised.replace(/^\//, "").split("/");
-        const candidates = [parts.join("/")];
-        if (parts.length >= 2) candidates.push([...parts.slice(0, -1), "[id]"].join("/"));
-        for (const candidate of candidates) {
-          for (const { group } of PAGES) {
-            if (group === candidate || group.endsWith(candidate)) resolved = true;
-          }
-          if (resolved) break;
-        }
-      }
+      // A template placeholder (and an id with its activity prefix) is one segment.
+      const normalised = link.replace(/\$\{[^}]+\}/g, "X");
+      const segments = normalised.replace(/^\//, "").split("/");
+      // Static segments first, then the last segment as [id].
+      const asDynamic = [...segments.slice(0, -1), "[id]"];
+      const resolved = resolves(segments) || (segments.length > 1 && resolves(asDynamic));
       expect(resolved, `unresolved backend link: ${link} (normalised ${normalised})`).toBe(true);
     }
   });

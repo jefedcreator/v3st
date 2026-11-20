@@ -8,7 +8,9 @@ describe("the app's vocabulary", () => {
     const leaks: string[] = [];
     const copy = collectCopy(APP_SOURCE_DIRS);
     for (const value of copy) {
-      leaks.push(...findCustomerLeaks(value, { documents: true }));
+      // No `documents` option: only legal documents may say "tokenized", and
+      // they are rendered from the API, not from this source.
+      leaks.push(...findCustomerLeaks(value).map((leak) => `${value}: ${leak}`));
     }
     expect(leaks).toEqual([]);
   });
