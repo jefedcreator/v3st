@@ -5,6 +5,11 @@
  *   loopback chain 31337, then migrate and seed.
  * start: build, then serve the app on 127.0.0.1:3108 with the worker and a
  *   reference-refresher loop for the seeded stock.
+ *
+ * The local test chain comes from the caller's environment, as for
+ * `yarn testnet:start` and `yarn testnet:deploy`: TESTNET_RPC_URL (loopback),
+ * TESTNET_SIGNER_PRIVATE_KEY and, when not the default `.testnet/`,
+ * TESTNET_STATE_DIR. Nothing else is inherited.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -38,6 +43,20 @@ Object.assign(childEnv, {
   NEXT_TELEMETRY_DISABLED: "1",
 });
 
+// The local test chain's settings, the only chain values the stack inherits.
+const TESTNET_KEYS = [
+  "TESTNET_RPC_URL",
+  "TESTNET_SIGNER_PRIVATE_KEY",
+  "TESTNET_STATE_DIR",
+  "TESTNET_DEPLOYMENT_ID",
+  "TESTNET_NETWORK_ID",
+  "ANVIL_BIN",
+];
+for (const key of TESTNET_KEYS) {
+  if (process.env[key] !== undefined && process.env[key] !== "") childEnv[key] = process.env[key];
+  else delete childEnv[key];
+}
+
 function assertSafeTestDatabase() {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) throw new Error("TEST_DATABASE_URL is required for app e2e");
@@ -49,10 +68,37 @@ function assertSafeTestDatabase() {
 }
 
 function assertLoopbackTestnet() {
-  const rpc = process.env.TESTNET_RPC_URL ?? childEnv.TESTNET_RPC_URL ?? "";
+  const rpc = process.env.TESTNET_RPC_URL ?? "";
   if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(rpc) && !/^http:\/\/localhost:\d+$/.test(rpc)) {
     throw new Error("app e2e needs TESTNET_RPC_URL on loopback (chain 31337)");
   }
+  if (!process.env.TESTNET_SIGNER_PRIVATE_KEY) {
+    throw new Error("app e2e needs TESTNET_SIGNER_PRIVATE_KEY for the local test chain");
+  }
+}
+
+// Test tooling only: keeps the seeded stock's reference price fresh so the
+// app never shows it as "prices updating" mid-run.
+const REFRESH_MS = 20_000;
+function startReferenceRefresher() {
+  const { PrismaClient } = require("../generated/prisma");
+  const prisma = new PrismaClient({ datasources: { db: { url: childEnv.DATABASE_URL } } });
+  const refresh = async () => {
+    try {
+      await prisma.stock.updateMany({
+        where: { displayTicker: "TSTA", chain: "testnet" },
+        data: { referenceAsOf: new Date() },
+      });
+    } catch (error) {
+      console.error("app-e2e: reference refresh failed", error);
+    }
+  };
+  void refresh();
+  const timer = setInterval(() => void refresh(), REFRESH_MS);
+  return async () => {
+    clearInterval(timer);
+    await prisma.$disconnect();
+  };
 }
 
 const mode = process.argv[2];
@@ -75,6 +121,7 @@ if (mode === "prepare") {
 if (mode === "start") {
   if (!process.env.TEST_DATABASE_URL) throw new Error("TEST_DATABASE_URL is required for app e2e");
   assertSafeTestDatabase();
+  assertLoopbackTestnet();
   const children = [];
   const build = spawnSync("yarn", ["build"], { stdio: "inherit", env: childEnv });
   if (build.status !== 0) process.exit(build.status ?? 1);
@@ -86,10 +133,11 @@ if (mode === "start") {
   children.push(server);
   const worker = spawn("yarn", ["worker"], { stdio: "inherit", env: childEnv, shell: true });
   children.push(worker);
+  const stopRefresher = startReferenceRefresher();
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.on(signal, () => {
       for (const child of children) child.kill(signal);
-      process.exit(0);
+      void stopRefresher().finally(() => process.exit(0));
     });
   }
   const any = children.map(

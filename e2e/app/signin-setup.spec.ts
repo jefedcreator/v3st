@@ -52,7 +52,7 @@ test("all four setup steps complete, including Read", async ({ page }) => {
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByText("You're all set")).toBeVisible();
-  await page.getByRole("button", { name: "Go to home" }).click();
+  await page.getByRole("link", { name: "Go to home" }).click();
   await page.waitForURL("**/home");
   await expect(page.getByText("Total value")).toBeVisible();
 });

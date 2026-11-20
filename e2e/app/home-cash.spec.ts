@@ -1,4 +1,4 @@
-import { expect, test, email, PIN, readyAccount } from "./fixtures";
+import { expect, test, email, fundCash, PIN, readyAccount } from "./fixtures";
 
 const address = () => email("homecash");
 
@@ -17,27 +17,21 @@ test("add money goes to the transfer receipt and completes in the beta", async (
   await expect(page.getByText(/Send exactly ₦50,000 to/)).toBeVisible();
 
   await page.getByRole("button", { name: "Complete this test transfer" }).click();
-  await expect(page.getByText(/Money added/i)).toBeVisible({ timeout: 30_000 });
+  // Once paid, the receipt drops the transfer details.
+  await expect(page.getByText(/Send exactly/)).toBeHidden({ timeout: 30_000 });
 
+  // The finished item sits below Now, under Earlier.
   await page.goto("/home");
-  await expect(page.getByText("Earlier")).toBeVisible();
-  await expect(page.getByText(/Money added/i).first()).toBeVisible();
+  await expect(page.getByText("Your first transfer will show up here.")).toBeHidden({
+    timeout: 30_000,
+  });
+  await expect(page.locator('a[href^="/activity/dep_"]').first()).toBeVisible();
 });
 
 test("withdraw goes to its receipt", async ({ page }) => {
   const who = address();
   await readyAccount(page, who);
-  // Seed cash through the deposit API + beta completion through page.request.
-  const cashRes = await page.request.fetch("http://127.0.0.1:3108/api/v1/app/cash/deposits", {
-    method: "POST",
-    headers: { "content-type": "application/json", Origin: "http://127.0.0.1:3108" },
-    data: JSON.stringify({ amount_kobo: "5000000" }),
-  });
-  const deposit = ((await cashRes.json()) as { data: { id: string } }).data;
-  await page.request.fetch(
-    `http://127.0.0.1:3108/api/v1/app/beta/deposits/${deposit.id}/complete`,
-    { method: "POST", headers: { Origin: "http://127.0.0.1:3108" } },
-  );
+  await fundCash(page, "5000000");
   await page.goto("/cash");
   await page.getByRole("button", { name: "Withdraw", exact: true }).click();
   await page.getByLabel("Amount").fill("10000");
@@ -50,16 +44,14 @@ test("withdraw goes to its receipt", async ({ page }) => {
 
 test("the bell opens Notifications and a row lands on its link", async ({ page }) => {
   await readyAccount(page, address());
+  await fundCash(page, "5000000");
+  await page.goto("/home");
   await page.getByRole("button", { name: /Notifications/ }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText(/Money added/i).first()).toBeVisible({ timeout: 30_000 });
-  await dialog
-    .getByRole("button", {
-      name: /Money added/i,
-    })
-    .first()
-    .click();
+  const row = dialog.getByRole("button", { name: /Money added/i }).first();
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.click();
   await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(/\/activity\/dep_/);
+  await expect(page).toHaveURL(/\/cash$/);
 });

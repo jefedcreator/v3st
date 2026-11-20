@@ -1,6 +1,9 @@
-import { expect, test, email, readyAccount } from "./fixtures";
+import type { Page } from "@playwright/test";
+
+import { api, expect, test, email, readyAccount } from "./fixtures";
 
 const PAGES = [
+  "/setup",
   "/home",
   "/stocks",
   "/cash",
@@ -10,21 +13,24 @@ const PAGES = [
   "/settings",
 ];
 
+async function firstHref(page: Page, list: string, prefix: string): Promise<string> {
+  await page.goto(list);
+  const href = await page.locator(`a[href^="${prefix}"]`).first().getAttribute("href");
+  if (href === null) throw new Error(`no ${prefix} links on ${list}`);
+  return href;
+}
+
 const LONG_NAME = "A".repeat(40);
 
-test("no page scrolls sideways at 320px", async ({ page, context }) => {
+test("no page scrolls sideways at 320px", async ({ page }) => {
   const who = email("layout");
   await readyAccount(page, who);
-  await page.request.fetch("http://127.0.0.1:3108/api/v1/app/profile", {
-    method: "PATCH",
-    headers: { "content-type": "application/json", Origin: "http://127.0.0.1:3108" },
-    data: JSON.stringify({ preferred_name: LONG_NAME }),
-  });
+  await api(page, "PATCH", "/profile", { data: { preferred_name: LONG_NAME } });
   await page.setViewportSize({ width: 320, height: 720 });
-  const visited: string[] = [];
-  for (const route of PAGES) {
+  const stock = await firstHref(page, "/stocks", "/stocks/");
+  const earn = await firstHref(page, "/earn", "/earn/");
+  for (const route of [...PAGES, stock, earn]) {
     await page.goto(route);
-    visited.push(route);
     const overflow = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
@@ -34,8 +40,6 @@ test("no page scrolls sideways at 320px", async ({ page, context }) => {
       `${route} scrolls sideways (${overflow.scrollWidth} > ${overflow.innerWidth})`,
     ).toBeLessThanOrEqual(overflow.innerWidth);
   }
-  void visited;
-  void context;
 });
 
 test("every modal traps focus and Escape returns it to the trigger", async ({ page }) => {
@@ -52,6 +56,17 @@ test("every modal traps focus and Escape returns it to the trigger", async ({ pa
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(bell).toBeFocused();
+
+  // The Add money modal from Home's pill.
+  await page.goto("/home");
+  const addMoney = page.getByRole("button", { name: "Add money" }).first();
+  await addMoney.click();
+  const addDialog = page.getByRole("dialog");
+  await expect(addDialog).toBeVisible();
+  await expect(page.getByLabel("Amount")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(addDialog).toBeHidden();
+  await expect(addMoney).toBeFocused();
 
   // A settings modal from its row.
   await page.goto("/settings");

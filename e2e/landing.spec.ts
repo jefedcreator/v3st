@@ -55,7 +55,9 @@ test("renders every section from server HTML without JavaScript", async ({ brows
   const firstFaq = page.locator("details.faq-item").first();
   await firstFaq.locator("summary").click();
   await expect(firstFaq).toHaveAttribute("open", "");
-  await expect(page.locator(".nojs-nav a")).toHaveCount(NAV_LINKS.length + 1);
+  // The sections, Join the waitlist, and the quiet Sign in link.
+  await expect(page.locator(".nojs-nav a")).toHaveCount(NAV_LINKS.length + 2);
+  await expect(page.locator('.nojs-nav a[href="/signin"]')).toHaveText("Sign in");
   await context.close();
 });
 

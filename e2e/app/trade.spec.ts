@@ -1,18 +1,9 @@
 import type { Page } from "@playwright/test";
-import { expect, test, email, PIN, readyAccount } from "./fixtures";
+import { expect, test, email, fundCash, PIN, readyAccount } from "./fixtures";
 
 async function fundAndGo(page: Page) {
   await readyAccount(page, email("trade"));
-  const cashRes = await page.request.fetch("http://127.0.0.1:3108/api/v1/app/cash/deposits", {
-    method: "POST",
-    headers: { "content-type": "application/json", Origin: "http://127.0.0.1:3108" },
-    data: JSON.stringify({ amount_kobo: "10000000" }),
-  });
-  const deposit = ((await cashRes.json()) as { data: { id: string } }).data;
-  await page.request.fetch(
-    `http://127.0.0.1:3108/api/v1/app/beta/deposits/${deposit.id}/complete`,
-    { method: "POST", headers: { Origin: "http://127.0.0.1:3108" } },
-  );
+  await fundCash(page, "10000000");
 }
 
 async function stock(page: Page): Promise<string> {

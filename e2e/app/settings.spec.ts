@@ -1,4 +1,4 @@
-import { expect, test, email, PIN, readyAccount } from "./fixtures";
+import { expect, test, email, fundCash, joinFirstEarn, PIN, readyAccount } from "./fixtures";
 
 test("changes the display name", async ({ page }) => {
   await readyAccount(page, email("name"));
@@ -30,13 +30,13 @@ test("/settings/bank lands on /settings?open=bank with the dialog open", async (
 
 test("automations renew with the PIN", async ({ page }) => {
   await readyAccount(page, email("automations"));
+  await fundCash(page, "10000000");
+  await joinFirstEarn(page, "600000");
   await page.goto("/settings?open=automations");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  const renew = dialog.getByRole("button", { name: "Renew" });
-  if (await renew.count()) {
-    await renew.first().click();
-    await dialog.getByLabel("Your PIN").fill(PIN);
-    await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
-  }
+  await dialog.getByRole("button", { name: "Renew" }).first().click();
+  await dialog.getByLabel("Your PIN").fill(PIN);
+  await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect(dialog.getByText(/is renewed\./)).toBeVisible();
 });

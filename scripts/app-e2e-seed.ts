@@ -1,8 +1,8 @@
 /** Seeds the app e2e database: the testnet network, the treasury and TSTA. */
+// Uses only the Vitest-free helpers (testnet, factories); never
+// tests/helpers/{db,app,journey,time}.ts.
 import { db } from "../src/server/db";
 import { now } from "../src/backend/clock";
-import { publicClientFor } from "../src/backend/services/onchain/testnet";
-import { setNow } from "../tests/helpers/time";
 import { seedTreasury } from "../tests/helpers/factories";
 import { ensureTestnetNetwork, makeTestnetStock, testnet } from "../tests/helpers/testnet";
 
@@ -24,8 +24,6 @@ async function main() {
       referenceBasis: "share_price",
     },
   });
-  const block = await publicClientFor().getBlock({ blockTag: "latest" });
-  setNow(new Date(Math.max(Date.now(), Number(block.timestamp) * 1000)).toISOString());
   console.log("Seeded TSTA", stock.id);
   process.exit(0);
 }

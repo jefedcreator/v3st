@@ -1,18 +1,9 @@
 import type { Page } from "@playwright/test";
-import { expect, test, email, PIN, readyAccount } from "./fixtures";
+import { expect, test, email, fundCash, PIN, readyAccount } from "./fixtures";
 
 async function fundAndGo(page: Page) {
   await readyAccount(page, email("earn"));
-  const cashRes = await page.request.fetch("http://127.0.0.1:3108/api/v1/app/cash/deposits", {
-    method: "POST",
-    headers: { "content-type": "application/json", Origin: "http://127.0.0.1:3108" },
-    data: JSON.stringify({ amount_kobo: "10000000" }),
-  });
-  const deposit = ((await cashRes.json()) as { data: { id: string } }).data;
-  await page.request.fetch(
-    `http://127.0.0.1:3108/api/v1/app/beta/deposits/${deposit.id}/complete`,
-    { method: "POST", headers: { Origin: "http://127.0.0.1:3108" } },
-  );
+  await fundCash(page, "10000000");
 }
 
 test("join stays disabled until the risks are ticked, then completes", async ({ page }) => {
@@ -54,7 +45,8 @@ test("withdraw works once the position is active", async ({ page }) => {
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
   await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 90_000 });
-  await page.getByRole("button", { name: /Withdraw/i }).click();
+  await page.getByRole("button", { name: "Withdraw", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm with PIN" }).click();
   await page.getByLabel("Your PIN").fill(PIN);
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(page.getByText(/Withdrawing|Withdrawn/i).first()).toBeVisible({ timeout: 90_000 });

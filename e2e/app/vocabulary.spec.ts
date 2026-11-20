@@ -1,21 +1,42 @@
+import type { Page } from "@playwright/test";
+
 import { expect, test, email, readyAccount } from "./fixtures";
 
 import { findCustomerLeaks } from "../../src/backend/services/app/vocabulary";
 
-const PAGES = ["/home", "/stocks", "/stocks-x", "/cash", "/earn", "/earnings", "/activity", "/settings"];
+const PAGES = ["/home", "/stocks", "/cash", "/earn", "/earnings", "/activity", "/settings"];
+
+async function firstHref(page: Page, list: string, prefix: string): Promise<string> {
+  await page.goto(list);
+  const href = await page.locator(`a[href^="${prefix}"]`).first().getAttribute("href");
+  if (href === null) throw new Error(`no ${prefix} links on ${list}`);
+  return href;
+}
 
 // Every page's rendered copy survives the customer vocabulary check.
 test("no rendered page leaks the internal vocabulary", async ({ page }) => {
   await readyAccount(page, email("vocab"));
   const leaks: string[] = [];
-  for (const route of PAGES) {
-    if (route.endsWith("-x")) continue;
+  const stock = await firstHref(page, "/stocks", "/stocks/");
+  const earn = await firstHref(page, "/earn", "/earn/");
+  for (const route of [...PAGES, stock, earn]) {
     await page.goto(route);
     const text = await page.evaluate(() => document.body.innerText);
     leaks.push(
-      ...findCustomerLeaks(text, { documents: true }).map((leak) => `${route}: ${leak}`),
+      ...findCustomerLeaks(text).map((leak) => `${route}: ${leak}`),
     );
   }
+  expect(leaks).toEqual([]);
+});
+
+test("the home, cash and notification modals' copy survives the check", async ({ page }) => {
+  await readyAccount(page, email("vocab-home"));
+  const leaks: string[] = [];
+  await page.getByRole("button", { name: "Add money" }).first().click();
+  leaks.push(...findCustomerLeaks(await page.getByRole("dialog").innerText()));
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /Notifications/ }).click();
+  leaks.push(...findCustomerLeaks(await page.getByRole("dialog").innerText()));
   expect(leaks).toEqual([]);
 });
 
@@ -28,7 +49,7 @@ test("every open modal's copy survives the check", async ({ page }) => {
     if (await dialog.isVisible().catch(() => false)) {
       const text = await dialog.innerText();
       leaks.push(
-        ...findCustomerLeaks(text, { documents: true }).map((leak) => `?open=${open}: ${leak}`),
+        ...findCustomerLeaks(text).map((leak) => `?open=${open}: ${leak}`),
       );
     }
   }
