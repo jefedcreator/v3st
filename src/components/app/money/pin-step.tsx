@@ -3,13 +3,17 @@
 import * as React from "react";
 
 import { settingsHref } from "@/utils/app-paths";
+import type { AppApiError } from "@/utils/app-api";
 import { pinErrorAction } from "./money-job";
 import { isValidPin } from "@/components/app/pin/pin";
 import { PinInput } from "@/components/app/pin/pin-input";
 import { Button } from "@/primitives";
-import type { AppApiError } from "@/utils/app-api";
 
-// The last step of a money modal: the PIN, and the error branching.
+type PinAction = ReturnType<typeof pinErrorAction>;
+
+// The last step of a money modal: the PIN, and the error branching. Each
+// error object is handled once, when it arrives; a parent re-render (a
+// countdown ticking every second) never clears the PIN again.
 export function PinStep({
   heading,
   pending,
@@ -26,54 +30,65 @@ export function PinStep({
   backLabel?: string;
 }) {
   const [pin, setPin] = React.useState("");
-  const [message, setMessage] = React.useState<string | null>(null);
-  const [action, setAction] = React.useState<"clear_pin" | "locked" | "new_price" | "show">("show");
+  const [shown, setShown] = React.useState<{ message: string; action: PinAction } | null>(null);
+  const onBackRef = React.useRef(onBack);
+  onBackRef.current = onBack;
+  const handled = React.useRef<AppApiError | null>(null);
 
   React.useEffect(() => {
-    if (error === null) return;
-    const next = pinErrorAction(error.code);
-    setMessage(error.message);
-    setAction(next);
-    if (next === "clear_pin") setPin("");
-    if (next === "new_price") onBack();
-  }, [error, onBack]);
+    if (error === null) {
+      handled.current = null;
+      setShown(null);
+      return;
+    }
+    if (handled.current === error) return;
+    handled.current = error;
+    const action = pinErrorAction(error.code);
+    if (action === "new_price") {
+      onBackRef.current();
+      return;
+    }
+    if (action === "clear_pin") setPin("");
+    setShown({ message: error.message, action });
+  }, [error]);
 
   const errorId = "pin-step-error";
 
   return (
-    <div className="flex flex-col gap-4">
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (isValidPin(pin) && !pending) onSubmit(pin);
+      }}
+    >
       <h3 className="type-app-heading text-heading">{heading}</h3>
       <PinInput
         id="confirm-pin"
         label="Your PIN"
         value={pin}
         onChange={setPin}
-        invalid={error !== null}
-        describedBy={message !== null ? errorId : undefined}
+        invalid={shown !== null}
+        describedBy={shown !== null ? errorId : undefined}
         autoFocus
       />
-      <Button
-        onClick={() => onSubmit(pin)}
-        disabled={!isValidPin(pin) || pending}
-      >
+      <Button type="submit" disabled={!isValidPin(pin) || pending}>
         {pending ? "Confirming…" : "Confirm"}
       </Button>
-      {message !== null && (
-        <p id={errorId} role="status" aria-live="polite" className="text-loss text-sm">
-          {message}
-          {action === "locked" && (
-            <>
-              {" "}
-              <a className="text-gain underline" href={settingsHref("reset-pin")}>
-                Reset your PIN
-              </a>
-            </>
-          )}
-        </p>
-      )}
-      <Button variant="ghost" size="sm" onClick={onBack}>
+      <p id={errorId} role="status" aria-live="polite" className="text-loss text-sm empty:hidden">
+        {shown === null ? null : shown.message}
+        {shown !== null && shown.action === "locked" && (
+          <>
+            {" "}
+            <a className="text-gain underline underline-offset-4" href={settingsHref("reset-pin")}>
+              Reset your PIN
+            </a>
+          </>
+        )}
+      </p>
+      <Button type="button" variant="ghost" onClick={onBack}>
         {backLabel}
       </Button>
-    </div>
+    </form>
   );
 }

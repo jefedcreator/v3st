@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import type { AppOrderDto } from "@/types/app";
-import { formatLagosDateTime, formatNaira, formatShares } from "@/utils/format";
+import { formatLagosDateTime, formatShares } from "@/utils/format";
 import { PageHeader } from "@/components/app/page-header";
 import { Timeline } from "@/components/app/timeline";
 import { TransferCard } from "@/components/app/money/transfer-card";
@@ -17,10 +17,9 @@ export function OrderPage({ order: initial }: { order: AppOrderDto }) {
   const { data: order } = useOrderQuery(initial.id, initial);
   const { completeTransfer } = useOrderActions(order.id);
   const [cancelOpen, setCancelOpen] = React.useState(false);
-  const [transferError, setTransferError] = React.useState<string | null>(null);
 
   const rows = [
-    { label: "Amount", value: formatNaira(order.amount_kobo ?? "0") },
+    { label: "Amount", value: <Money kobo={order.amount_kobo} /> },
     { label: "Shares", value: order.shares_micro === null ? "—" : formatShares(order.shares_micro) },
     { label: "Price", value: <Money kobo={order.price_kobo} /> },
     { label: "Placed", value: formatLagosDateTime(order.created_at) },
@@ -45,12 +44,7 @@ export function OrderPage({ order: initial }: { order: AppOrderDto }) {
         <TransferCard
           payTo={order.pay_to}
           onCompleteBeta={async () => {
-            try {
-              await completeTransfer();
-              setTransferError(null);
-            } catch {
-              setTransferError("That didn't go through. Please try again.");
-            }
+            await completeTransfer();
           }}
         />
       )}
@@ -71,11 +65,6 @@ export function OrderPage({ order: initial }: { order: AppOrderDto }) {
         </div>
       )}
       <CancelOrderDialog order={order} open={cancelOpen} onOpenChange={setCancelOpen} />
-      {transferError !== null && (
-        <p role="status" aria-live="polite" className="text-loss text-sm">
-          {transferError}
-        </p>
-      )}
     </div>
   );
 }

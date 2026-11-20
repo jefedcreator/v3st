@@ -5,16 +5,19 @@ import Link from "next/link";
 import type { AppEarningsDto, AppEarnProductDto } from "@/types/app";
 import { formatNaira } from "@/utils/format";
 import { Badge } from "@/primitives";
+import { useEarnProductsQuery } from "@/hooks/app/use-earn";
 import { positionView } from "./earn";
 
 // The Earn tab: one card per product, and the earnings link once there is one.
 export function EarnListPage({
-  products,
+  products: initial,
   earnings,
 }: {
   products: AppEarnProductDto[];
   earnings: AppEarningsDto | null;
 }) {
+  const { data } = useEarnProductsQuery(initial);
+  const products = data ?? initial;
   return (
     <div className="flex flex-col gap-6 pt-4">
       <div className="flex flex-col gap-2">
@@ -37,7 +40,11 @@ export function EarnListPage({
             <span className="text-heading text-[15px] font-medium">{product.title}</span>
             <span className="text-muted-foreground text-sm">{product.summary}</span>
             <span className="text-subtle text-sm">From {formatNaira(product.minimum_kobo)}</span>
-            {view.statusText !== null && <Badge variant="secondary">{view.statusText}</Badge>}
+            {view.statusText !== null && (
+              <Badge variant="secondary" className="self-start">
+                {view.statusText}
+              </Badge>
+            )}
           </Link>
         );
       })}

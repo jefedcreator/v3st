@@ -22,7 +22,14 @@ import {
   DialogTitle,
 } from "@/primitives";
 
-// Withdraw: amount, review with a held price, then the PIN.
+function asApiError(caught: unknown): AppApiError {
+  if (caught instanceof AppApiError) return caught;
+  return new AppApiError("Something went wrong. Please try again.", 0, "SOMETHING_WENT_WRONG");
+}
+
+// Withdraw: amount, review with a held preview, then the PIN. The
+// Idempotency-Key is renewed only when a new preview is fetched, so every
+// retry of one review sends the same key.
 export function WithdrawDialog({
   open,
   onOpenChange,
@@ -31,6 +38,7 @@ export function WithdrawDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   availableKobo: string | null;
+  // The saved account; the review shows the preview's own `to`.
   bankAccount: AppBankAccountDto;
 }) {
   const router = useRouter();
@@ -38,6 +46,7 @@ export function WithdrawDialog({
   const [step, setStep] = React.useState<"amount" | "review" | "pin">("amount");
   const [kobo, setKobo] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<AppWithdrawalPreviewDto | null>(null);
+  const [stale, setStale] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [pinError, setPinError] = React.useState<AppApiError | null>(null);
   const [pending, setPending] = React.useState(false);
@@ -48,25 +57,31 @@ export function WithdrawDialog({
       setStep("amount");
       setKobo(null);
       setPreview(null);
+      setStale(false);
       setError(null);
       setPinError(null);
-      renew();
+      setPending(false);
     }
-  }, [open, renew]);
+  }, [open]);
 
-  async function onContinue() {
-    if (kobo === null || amountCheck(kobo, { availableKobo }) !== "ok") return;
+  const amountOk = amountCheck(kobo, { availableKobo }) === "ok";
+  const expired = stale || countdownState?.done === true;
+
+  async function fetchPreview() {
+    if (kobo === null || !amountOk) return;
     setPending(true);
     setError(null);
     try {
       const next = await appApi.withdrawals.preview(kobo);
       setPreview(next);
+      setStale(false);
+      setPinError(null);
       renew();
       setStep("review");
     } catch (caught) {
-      if (caught instanceof AppApiError) setError(caught.message);
-      setPending(false);
+      setError(asApiError(caught).message);
     }
+    setPending(false);
   }
 
   async function onPin(pin: string) {
@@ -74,29 +89,35 @@ export function WithdrawDialog({
     setPending(true);
     setPinError(null);
     try {
-      const withdrawal = await appApi.withdrawals.create({ preview_id: preview.preview_id, pin }, key);
+      const withdrawal = await appApi.withdrawals.create(
+        { preview_id: preview.preview_id, pin },
+        key,
+      );
       onOpenChange(false);
       router.push(`/activity/wd_${withdrawal.id}`);
     } catch (caught) {
-      if (caught instanceof AppApiError) setPinError(caught);
-      else setPinError(new AppApiError("Something went wrong. Please try again.", 0, "NETWORK"));
+      setPinError(asApiError(caught));
       setPending(false);
     }
   }
 
-  const expired = countdownState?.done === true;
+  // PinStep calls this for Back, and for a changed or expired preview, which
+  // the review then offers to replace.
+  function backToReview() {
+    if (pinError?.code === "PRICE_CHANGED") setStale(true);
+    setPinError(null);
+    setStep("review");
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Withdraw</DialogTitle>
-          {step === "amount" && (
-            <DialogDescription>Money goes to your bank account.</DialogDescription>
-          )}
+          <DialogDescription>Money goes to your bank account.</DialogDescription>
         </DialogHeader>
         {step === "amount" && (
-          <div className="mt-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             <AmountField
               id="withdraw-amount"
               label="Amount"
@@ -104,31 +125,37 @@ export function WithdrawDialog({
               onKoboChange={setKobo}
               availableKobo={availableKobo}
             />
-            <div>
-              <Button variant="link" size="sm" onClick={() => setKobo(availableKobo)}>
+            {availableKobo !== null && availableKobo !== "0" && (
+              <Button
+                variant="link"
+                size="sm"
+                className="self-start px-0"
+                onClick={() => setKobo(availableKobo)}
+              >
                 All available
               </Button>
-            </div>
-            <Button onClick={() => void onContinue()} disabled={kobo === null || pending}>
+            )}
+            <Button onClick={() => void fetchPreview()} disabled={!amountOk || pending}>
               {pending ? "Checking…" : "Continue"}
             </Button>
-            {error !== null && (
-              <p role="status" aria-live="polite" className="text-loss text-sm">
-                {error}
-              </p>
-            )}
+            <p role="status" aria-live="polite" className="text-loss text-sm empty:hidden">
+              {error}
+            </p>
           </div>
         )}
         {step === "review" && preview !== null && (
-          <div className="mt-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             {expired ? (
               <>
                 <p role="status" className="text-muted-foreground text-sm">
-                  This price expired.
+                  This preview expired.
                 </p>
-                <Button variant="outline" onClick={() => void onContinue()}>
-                  Get a new preview
+                <Button disabled={pending} onClick={() => void fetchPreview()}>
+                  {pending ? "Checking…" : "Get a new preview"}
                 </Button>
+                <p role="status" aria-live="polite" className="text-loss text-sm empty:hidden">
+                  {error}
+                </p>
               </>
             ) : (
               <>
@@ -148,26 +175,27 @@ export function WithdrawDialog({
                   ]}
                 />
                 {countdownState !== null && (
-                  <p className="text-muted-foreground text-sm" suppressHydrationWarning>
+                  <p className="text-muted-foreground text-sm tabular-nums" suppressHydrationWarning>
                     Held for {countdownState.text}
                   </p>
                 )}
                 <BetaLine />
                 <Button onClick={() => setStep("pin")}>Confirm with PIN</Button>
+                <Button variant="ghost" onClick={() => setStep("amount")}>
+                  Change amount
+                </Button>
               </>
             )}
           </div>
         )}
         {step === "pin" && (
-          <div className="mt-2">
-            <PinStep
-              heading="Confirm with your PIN"
-              pending={pending}
-              error={pinError}
-              onSubmit={(pin) => void onPin(pin)}
-              onBack={() => setStep("review")}
-            />
-          </div>
+          <PinStep
+            heading="Confirm with your PIN"
+            pending={pending}
+            error={pinError}
+            onSubmit={(pin) => void onPin(pin)}
+            onBack={backToReview}
+          />
         )}
       </DialogContent>
     </Dialog>

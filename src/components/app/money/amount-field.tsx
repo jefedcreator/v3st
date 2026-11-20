@@ -6,8 +6,14 @@ import { formatNaira, parseNairaInput } from "@/utils/format";
 import { amountCheck, amountMessage, type AmountCheck } from "./amount";
 import { Input, Label } from "@/primitives";
 
-// A naira amount field: fixed ₦ prefix, exact kobo parsing, and the
-// policy/availability messages once it has been touched.
+// The digits a kobo amount is typed as, without the fixed ₦ prefix.
+function typedNaira(kobo: string): string {
+  return formatNaira(kobo).replace("₦", "");
+}
+
+// A naira amount field: a fixed ₦ prefix at amount size, exact kobo parsing,
+// and the policy/availability messages once it has been touched. A value set
+// from outside (All available) shows in the field.
 export function AmountField({
   id,
   label,
@@ -27,15 +33,24 @@ export function AmountField({
   availableKobo?: string | null;
   disabled?: boolean;
 }) {
-  const [text, setText] = React.useState("");
+  const [text, setText] = React.useState(() => (kobo === null ? "" : typedNaira(kobo)));
   const [touched, setTouched] = React.useState(false);
-  const [focused, setFocused] = React.useState(false);
+
+  React.useEffect(() => {
+    if (parseNairaInput(text) === kobo) return;
+    setText(kobo === null ? "" : typedNaira(kobo));
+    if (kobo !== null) setTouched(true);
+    // Only an outside change of `kobo` resyncs the text.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kobo]);
 
   const check: AmountCheck = amountCheck(kobo, { minKobo, maxKobo, availableKobo });
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const message = touched ? amountMessage(check, { minKobo, maxKobo }) : null;
-  const describedBy = [hintId, message !== null ? errorId : null].filter(Boolean).join(" ");
+  const message = touched && !disabled ? amountMessage(check, { minKobo, maxKobo }) : null;
+  const describedBy: string[] = [];
+  if (minKobo !== undefined) describedBy.push(hintId);
+  if (message !== null) describedBy.push(errorId);
 
   function onChange(event: React.ChangeEvent<HTMLInputElement>) {
     const next = event.target.value;
@@ -49,25 +64,21 @@ export function AmountField({
       <div className="relative">
         <span
           aria-hidden="true"
-          className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-base"
+          className="type-app-amount text-muted-foreground pointer-events-none absolute top-1/2 left-4 -translate-y-1/2"
         >
           ₦
         </span>
         <Input
           id={id}
-          className="pl-9 text-base tabular-nums"
+          className="type-app-amount h-16 pl-11 tabular-nums"
           inputMode="decimal"
           autoComplete="off"
-          placeholder="0.00"
+          placeholder="0"
           value={text}
           disabled={disabled}
-          aria-describedby={describedBy}
+          aria-describedby={describedBy.length > 0 ? describedBy.join(" ") : undefined}
           aria-invalid={message !== null && check !== "empty"}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            setTouched(true);
-          }}
+          onBlur={() => setTouched(true)}
           onChange={onChange}
         />
       </div>
@@ -76,11 +87,9 @@ export function AmountField({
           Minimum {formatNaira(minKobo)}
         </p>
       )}
-      {message !== null && (
-        <p id={errorId} role={focused ? "status" : undefined} aria-live="polite" className="text-loss text-sm">
-          {message}
-        </p>
-      )}
+      <p id={errorId} aria-live="polite" className="text-loss text-sm empty:hidden">
+        {message}
+      </p>
     </div>
   );
 }

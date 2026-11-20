@@ -66,7 +66,7 @@ export function EarnProductPage({ product: initial }: { product: AppEarnProductD
               },
             ]}
           />
-       </section>
+        </section>
       )}
       <div className="flex flex-wrap items-center gap-3">
         {view.statusText !== null && <Badge variant="secondary">{view.statusText}</Badge>}
@@ -76,9 +76,11 @@ export function EarnProductPage({ product: initial }: { product: AppEarnProductD
           </SetupGate>
         )}
         {view.canLeave && (
-          <Button variant="outline" onClick={() => setLeaveOpen(true)}>
-            Withdraw
-          </Button>
+          <SetupGate>
+            <Button variant="outline" onClick={() => setLeaveOpen(true)}>
+              Withdraw
+            </Button>
+          </SetupGate>
         )}
       </div>
       <DocumentDialog

@@ -9,10 +9,12 @@ import { formatNaira, formatShares } from "@/utils/format";
 import { useIdempotencyKey } from "@/hooks/app/use-idempotency-key";
 import { useCashQuery } from "@/hooks/app/use-cash";
 import { AmountField } from "@/components/app/money/amount-field";
+import { amountCheck } from "@/components/app/money/amount";
 import { PinStep } from "@/components/app/money/pin-step";
 import { ReviewList } from "@/components/app/money/review-list";
 import { useCountdown } from "@/components/app/money/use-countdown";
 import { BetaLine } from "@/components/app/beta-line";
+import { moneyText } from "@/primitives/money-text";
 import {
   Button,
   Checkbox,
@@ -25,10 +27,18 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/primitives";
-import { defaultPayWith, executesSentence, previewExpired, tradeTitle } from "./trade";
+import { defaultPayWith, executesSentence, tradeTitle } from "./trade";
+
+type PayWith = "cash" | "bank_transfer";
+
+function asApiError(caught: unknown): AppApiError {
+  if (caught instanceof AppApiError) return caught;
+  return new AppApiError("Something went wrong. Please try again.", 0, "SOMETHING_WENT_WRONG");
+}
 
 // The trade job: amount (or Sell all), review, PIN. One Dialog, never a
-// second modal on top.
+// second modal on top. The Idempotency-Key is renewed only with a new
+// preview, so retrying a dropped Confirm can never place a second order.
 export function TradeDialog({
   open,
   onOpenChange,
@@ -43,85 +53,68 @@ export function TradeDialog({
   minKobo: string;
 }) {
   const router = useRouter();
+  const { key, renew } = useIdempotencyKey();
+  const { data: cash } = useCashQuery();
   const [step, setStep] = React.useState<"amount" | "review" | "pin">("amount");
   const [kobo, setKobo] = React.useState<string | null>(null);
   const [sellAll, setSellAll] = React.useState(false);
-  const [payWith, setPayWith] = React.useState<"cash" | "bank_transfer">("cash");
+  const [chosenPayWith, setChosenPayWith] = React.useState<PayWith | null>(null);
   const [preview, setPreview] = React.useState<AppOrderPreviewDto | null>(null);
+  const [stale, setStale] = React.useState(false);
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [pinError, setPinError] = React.useState<AppApiError | null>(null);
-  const [statusError, setStatusError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
-  const { key, renew } = useIdempotencyKey();
-  const { data: cash } = useCashQuery();
-  const [expired, setExpired] = React.useState(false);
-  const [nowTick, setNowTick] = React.useState(() => new Date());
-
-  React.useEffect(() => {
-    const timer = setInterval(() => setNowTick(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const countdownState = useCountdown(preview !== null ? preview.expires_at : null);
 
   React.useEffect(() => {
     if (open) {
       setStep("amount");
       setKobo(null);
       setSellAll(false);
+      setChosenPayWith(null);
       setPreview(null);
+      setStale(false);
       setPreviewError(null);
       setPinError(null);
-      setStatusError(null);
-      setExpired(false);
-      renew();
+      setPending(false);
     }
-  }, [open, renew]);
+  }, [open]);
 
-  const countdownState = useCountdown(preview !== null ? preview.expires_at : null);
-
-  // Pay with defaults to cash when the cash query is loaded and covers the
-  // amount; the customer can always switch.
+  // Cash pays when it covers the amount, until the customer picks for
+  // themselves.
   const availableKobo = cash?.available_kobo ?? null;
-  const paidWithCash = side === "buy" && cash !== undefined;
-  React.useEffect(() => {
-    if (paidWithCash) {
-      setPayWith(defaultPayWith(availableKobo, kobo));
-    }
-  }, [paidWithCash, availableKobo, kobo]);
+  const payWith: PayWith = chosenPayWith ?? defaultPayWith(availableKobo, kobo);
+  const amountOk = sellAll || amountCheck(kobo, { minKobo }) === "ok";
+  const expired = stale || countdownState?.done === true;
 
-  function buildPreviewBody(): OrderPreviewBody {
+  function previewBody(): OrderPreviewBody {
     const body: OrderPreviewBody = { stock_id: stock.id, side };
-    if (side === "buy") {
-      body.amount_kobo = kobo ?? undefined;
-      body.pay_with = payWith;
-    } else if (sellAll) {
+    if (side === "sell" && sellAll) {
       body.sell_all = true;
-    } else {
-      body.amount_kobo = kobo ?? undefined;
+    } else if (kobo !== null) {
+      body.amount_kobo = kobo;
+    }
+    if (side === "buy") {
+      body.pay_with = payWith;
     }
     return body;
   }
 
-  async function runPreview() {
+  async function fetchPreview() {
+    if (!amountOk) return;
     setPending(true);
     setPreviewError(null);
     try {
-      const next = await appApi.orders.preview(buildPreviewBody());
+      const next = await appApi.orders.preview(previewBody());
       setPreview(next);
-      setExpired(false);
+      setStale(false);
+      setPinError(null);
       renew();
       setStep("review");
     } catch (caught) {
-      if (caught instanceof AppApiError) setPreviewError(caught.message);
-      else setPreviewError("Something went wrong. Please try again.");
+      setPreviewError(asApiError(caught).message);
     }
     setPending(false);
-  }
-
-  function onBackFromPin() {
-    if (preview !== null && previewExpired(preview.expires_at, new Date())) {
-      setExpired(true);
-    }
-    setStep("review");
   }
 
   async function onPin(pin: string) {
@@ -133,48 +126,52 @@ export function TradeDialog({
       onOpenChange(false);
       router.push(`/orders/${order.id}`);
     } catch (caught) {
-      if (caught instanceof AppApiError) setPinError(caught);
-      else setPinError(new AppApiError("Something went wrong. Please try again.", 0, "NETWORK"));
+      setPinError(asApiError(caught));
       setPending(false);
     }
   }
 
-  React.useEffect(() => {
-    if (preview === null) return;
-    if (previewExpired(preview.expires_at, nowTick)) setExpired(true);
-  }, [preview, nowTick]);
+  // PinStep calls this for Back, and for PRICE_CHANGED: the review then asks
+  // for a new price instead of resending the stale preview.
+  function backToReview() {
+    if (pinError?.code === "PRICE_CHANGED") setStale(true);
+    setPinError(null);
+    setStep("review");
+  }
 
-  const reviewRows =
-    preview === null
-      ? []
-      : [
-          { label: "Amount", value: formatNaira(preview.amount_kobo) },
-          { label: "About", value: formatShares(preview.shares_micro) },
-          { label: "Price", value: formatNaira(preview.price_kobo) },
-          ...preview.fees.map((fee) => ({
-            label: fee.label,
-            value: fee.kobo === null ? (fee.note ?? "—") : formatNaira(fee.kobo),
-          })),
-          ...(preview.you_receive_kobo !== null
-            ? [{ label: "You receive", value: formatNaira(preview.you_receive_kobo), emphasis: true }]
-            : []),
-        ];
+  const reviewRows: { label: string; value: React.ReactNode; emphasis?: boolean }[] = [];
+  if (preview !== null) {
+    reviewRows.push({ label: "Amount", value: formatNaira(preview.amount_kobo) });
+    reviewRows.push({ label: "Shares", value: `About ${formatShares(preview.shares_micro)}` });
+    reviewRows.push({ label: "Price", value: formatNaira(preview.price_kobo) });
+    for (const fee of preview.fees) {
+      reviewRows.push({
+        label: fee.label,
+        value: fee.kobo === null ? (fee.note ?? "—") : formatNaira(fee.kobo),
+      });
+    }
+    if (preview.you_receive_kobo !== null) {
+      reviewRows.push({
+        label: "You receive",
+        value: formatNaira(preview.you_receive_kobo),
+        emphasis: true,
+      });
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{tradeTitle(side, stock.name)}</DialogTitle>
-          {step === "amount" && (
-            <DialogDescription>
-              {side === "buy"
-                ? "Choose how much naira to invest."
-                : "Choose how much naira of shares to sell."}
-            </DialogDescription>
-          )}
+          <DialogDescription>
+            {side === "buy"
+              ? "Choose how much naira to invest."
+              : "Choose how much naira of shares to sell."}
+          </DialogDescription>
         </DialogHeader>
         {step === "amount" && (
-          <div className="mt-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             <AmountField
               id="trade-amount"
               label="Amount"
@@ -184,10 +181,7 @@ export function TradeDialog({
               disabled={sellAll}
             />
             {side === "sell" && (
-              <Label
-                htmlFor="sell-all"
-                className="flex min-h-11 items-center gap-3 font-normal"
-              >
+              <Label htmlFor="sell-all" className="flex min-h-11 items-center gap-3 font-normal">
                 <Checkbox
                   id="sell-all"
                   checked={sellAll}
@@ -198,26 +192,31 @@ export function TradeDialog({
             )}
             {side === "buy" && (
               <>
-                <p className="text-muted-foreground text-sm">
-                  Cash available {cash === undefined ? "—" : formatNaira(cash.available_kobo ?? "0")}
+                <p className="text-muted-foreground text-sm tabular-nums">
+                  Cash available {cash === undefined ? "—" : moneyText(cash.available_kobo)}
                 </p>
                 <div className="flex flex-col gap-2">
-                  <Label>Pay with</Label>
+                  <p id="pay-with-label" className="text-foreground text-sm font-medium">
+                    Pay with
+                  </p>
                   <RadioGroup
+                    aria-labelledby="pay-with-label"
                     name="pay-with"
                     value={payWith}
-                    onValueChange={(value) => setPayWith(value === "bank_transfer" ? "bank_transfer" : "cash")}
+                    onValueChange={(value) =>
+                      setChosenPayWith(value === "bank_transfer" ? "bank_transfer" : "cash")
+                    }
                     className="gap-2"
                   >
                     <Label
                       htmlFor="pay-cash"
-                      className="flex min-h-11 items-center gap-3 rounded-lg border border-stroke bg-surface px-4 font-normal"
+                      className="has-[[data-state=checked]]:border-signal flex min-h-11 items-center gap-3 rounded-lg border border-stroke bg-surface px-4 font-normal transition-colors"
                     >
                       <RadioGroupItem id="pay-cash" value="cash" /> Cash
                     </Label>
                     <Label
                       htmlFor="pay-bank"
-                      className="flex min-h-11 items-center gap-3 rounded-lg border border-stroke bg-surface px-4 font-normal"
+                      className="has-[[data-state=checked]]:border-signal flex min-h-11 items-center gap-3 rounded-lg border border-stroke bg-surface px-4 font-normal transition-colors"
                     >
                       <RadioGroupItem id="pay-bank" value="bank_transfer" /> Bank transfer
                     </Label>
@@ -225,65 +224,59 @@ export function TradeDialog({
                 </div>
               </>
             )}
-            <Button
-              disabled={pending || (sellAll ? false : kobo === null)}
-              onClick={() => void runPreview()}
-            >
+            <Button disabled={!amountOk || pending} onClick={() => void fetchPreview()}>
               {pending ? "Getting a price…" : "Continue"}
             </Button>
-            {previewError !== null && (
-              <p role="status" aria-live="polite" className="text-loss text-sm">
-                {previewError}
-              </p>
-            )}
+            <p role="status" aria-live="polite" className="text-loss text-sm empty:hidden">
+              {previewError}
+            </p>
           </div>
         )}
         {step === "review" && preview !== null && (
-          <div className="mt-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             {expired ? (
               <>
                 <p role="status" className="text-muted-foreground text-sm">
                   This price expired.
                 </p>
-                <Button variant="outline" onClick={() => void runPreview()}>
-                  Get a new price
+                <Button disabled={pending} onClick={() => void fetchPreview()}>
+                  {pending ? "Getting a price…" : "Get a new price"}
                 </Button>
+                <p role="status" aria-live="polite" className="text-loss text-sm empty:hidden">
+                  {previewError}
+                </p>
               </>
             ) : (
               <>
                 <ReviewList rows={reviewRows} />
-                <p className="text-muted-foreground text-[15px]">{executesSentence(preview)}</p>
+                <p className="text-ink text-[15px]">{executesSentence(preview)}</p>
                 {preview.notes.map((note) => (
                   <p key={note} className="text-muted-foreground text-sm">
                     {note}
                   </p>
                 ))}
                 {countdownState !== null && (
-                  <p className="text-muted-foreground text-sm" suppressHydrationWarning>
+                  <p className="text-muted-foreground text-sm tabular-nums" suppressHydrationWarning>
                     Price held for {countdownState.text}
                   </p>
                 )}
                 <BetaLine />
                 <Button onClick={() => setStep("pin")}>Confirm with PIN</Button>
+                <Button variant="ghost" onClick={() => setStep("amount")}>
+                  Change amount
+                </Button>
               </>
             )}
           </div>
         )}
         {step === "pin" && (
-          <div className="mt-2">
-            <PinStep
-              heading="Confirm with your PIN"
-              pending={pending}
-              error={pinError}
-              onSubmit={(pin) => void onPin(pin)}
-              onBack={onBackFromPin}
-            />
-          </div>
-        )}
-        {statusError !== null && (
-          <p className="text-loss text-sm" role="status">
-            {statusError}
-          </p>
+          <PinStep
+            heading="Confirm with your PIN"
+            pending={pending}
+            error={pinError}
+            onSubmit={(pin) => void onPin(pin)}
+            onBack={backToReview}
+          />
         )}
       </DialogContent>
     </Dialog>

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { appApi, AppApiError } from "@/utils/app-api";
@@ -33,7 +32,6 @@ export function EarningsChoiceDialog({
   onOpenChange: (o: boolean) => void;
   earnings: AppEarningsDto;
 }) {
-  const router = useRouter();
   const { setPreference } = useEarningsActions();
   const [step, setStep] = React.useState<"choice" | "pin">("choice");
   const [choice, setChoice] = React.useState<"payout" | "reinvest">(
@@ -43,13 +41,14 @@ export function EarningsChoiceDialog({
     earnings.reinvest_stock?.id ?? null,
   );
   const [stocks, setStocks] = React.useState<{ id: string; name: string; trading: string }[]>([]);
-  const [error, setError] = React.useState<string | null>(null);
+  const [pinError, setPinError] = React.useState<AppApiError | null>(null);
   const [pending, setPending] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
       setStep("choice");
-      setError(null);
+      setPinError(null);
+      setPending(false);
       return;
     }
     void (async () => {
@@ -64,7 +63,7 @@ export function EarningsChoiceDialog({
 
   async function onPin(pin: string) {
     setPending(true);
-    setError(null);
+    setPinError(null);
     const body: { choice: "payout" | "reinvest" | "unset"; stock_id?: string; pin: string } = {
       choice,
       pin,
@@ -75,10 +74,12 @@ export function EarningsChoiceDialog({
     try {
       await setPreference(body);
       onOpenChange(false);
-      router.refresh();
     } catch (caught) {
-      if (caught instanceof AppApiError) setError(caught.message);
-      else setError("Something went wrong. Please try again.");
+      setPinError(
+        caught instanceof AppApiError
+          ? caught
+          : new AppApiError("Something went wrong. Please try again.", 0, "SOMETHING_WENT_WRONG"),
+      );
       setPending(false);
     }
   }
@@ -92,6 +93,7 @@ export function EarningsChoiceDialog({
         {step === "choice" && (
           <div className="mt-2 flex flex-col gap-4">
             <RadioGroup
+              aria-label="What happens to your earnings"
               name="earnings-choice"
               value={choice}
               onValueChange={(value) => setChoice(value === "reinvest" ? "reinvest" : "payout")}
@@ -135,7 +137,7 @@ export function EarningsChoiceDialog({
               </p>
             ))}
             <Button
-              disabled={choice === "reinvest" && stocks.length === 0}
+              disabled={choice === "reinvest" && stockId === null}
               onClick={() => setStep("pin")}
             >
               Continue
@@ -143,20 +145,16 @@ export function EarningsChoiceDialog({
           </div>
         )}
         {step === "pin" && (
-          <div className="mt-2">
-            <PinStep
-              heading="Confirm with your PIN"
-              pending={pending}
-              error={null}
-              onSubmit={(pin) => void onPin(pin)}
-              onBack={() => setStep("choice")}
-            />
-            {error !== null && (
-              <p role="status" aria-live="polite" className="text-loss text-sm">
-                {error}
-              </p>
-            )}
-          </div>
+          <PinStep
+            heading="Confirm with your PIN"
+            pending={pending}
+            error={pinError}
+            onSubmit={(pin) => void onPin(pin)}
+            onBack={() => {
+              setPinError(null);
+              setStep("choice");
+            }}
+          />
         )}
       </DialogContent>
     </Dialog>

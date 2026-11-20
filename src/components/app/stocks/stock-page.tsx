@@ -20,8 +20,8 @@ import { priceCaption } from "./price-status";
 import { StockMark } from "./stock-mark";
 import { WatchlistButton } from "./watchlist-button";
 
-// Understand one stock: price, chart, position, actions and about.
-// Task 13 wires the Buy and Sell pills; they land disabled here.
+// Understand one stock: price, chart, position, actions and about. Buy and
+// Sell open the trade modal; trading paused disables both.
 export function StockPage({
   stock: initial,
   chart: initialChart,
@@ -85,11 +85,11 @@ export function StockPage({
       <div className="flex flex-wrap items-center gap-3">
         <SetupGate label="Finish setting up to invest">
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" disabled={paused} onClick={() => setTrade("buy")}>
+            <Button disabled={paused} onClick={() => setTrade("buy")}>
               Buy
             </Button>
             {stock.your_position !== null && (
-              <Button disabled={paused} onClick={() => setTrade("sell")}>
+              <Button variant="outline" disabled={paused} onClick={() => setTrade("sell")}>
                 Sell
               </Button>
             )}
