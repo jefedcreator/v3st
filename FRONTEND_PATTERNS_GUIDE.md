@@ -22,7 +22,7 @@ All V3ST operation remains beta. Every external integration uses a verified sand
 | Vitest 5 / Vite 7 / `tsx`               | Existing tests and TypeScript scripts               |
 | `three`                                 | Vendored fluid background only (lazy chunk)         |
 
-The landing adds `radix-ui`, `@phosphor-icons/react`, `class-variance-authority`, `clsx`, `tailwind-merge` and `tw-animate-css`, and the customer app adds `@tanstack/react-query`, `@privy-io/react-auth` and `input-otp`. Resolve compatible versions through Yarn and record actual versions in the review record. The official shadcn CLI generates source; shadcn/ui is not a runtime dependency. Playwright is used for final browser verification.
+The landing adds `radix-ui`, `@phosphor-icons/react`, `class-variance-authority`, `clsx`, `tailwind-merge` and `tw-animate-css`, and the customer app adds `@tanstack/react-query` 5.108.1, `@privy-io/react-auth` 3.52.0 (sandbox sign-in only, dynamically imported) and `input-otp` 1.5.0, all pinned exactly. Resolve compatible versions through Yarn and record actual versions in the review record. The official shadcn CLI generates source; shadcn/ui is not a runtime dependency. Playwright is used for final browser verification.
 
 Axios, React Hook Form, `@hookform/resolvers`, Zustand, nuqs, sonner and any chart library remain uninstallable future patterns, not dependencies. V3ST has one dark theme: no `next-themes` or theme provider/toggle.
 
@@ -38,15 +38,17 @@ src/
 │   │   ├── layout.tsx              # header, footer, LandingMotionProvider, CursorFollower
 │   │   ├── page.tsx                # statically regenerated Server Component (revalidate = 300)
 │   │   ├── legal/[slug]/page.tsx   # static reading pages from CUSTOMER_DOCUMENTS
-│   │   │   └── waitlist/page.tsx       # no-JS waitlist result page (dynamic, noindex)
-│   ├── (auth)/                      # /signin: no chrome
-│   ├── (setup)/                     # /setup: flow shell
-│   ├── (app)/                       # home, stocks, orders, cash, earn, earnings, activity, settings
-│   └── api/v1/                      # existing canonical Route Handlers (+ waitlist, ops/waitlist)
+│   │   └── waitlist/page.tsx       # no-JS waitlist result page (dynamic, noindex)
+│   ├── (auth)/signin/              # /signin: no chrome
+│   ├── (setup)/setup/              # /setup: flow shell
+│   ├── (app)/                      # chrome once in layout.tsx; home, stocks, orders, cash, earn,
+│   │                               # earnings, activity, settings (+ loading/error/not-found)
+│   └── api/v1/                     # existing canonical Route Handlers (+ waitlist, ops/waitlist)
 ├── components/landing/             # landing feature sections and focused client islands
-├── components/app/                 # customer app features (chrome, money, trade, earn, settings, …)
 │   ├── motion/contract.ts          # pinned motion numbers (pure, browser-safe)
 │   └── fluid/                      # vendored LiquidEther + gate + lazy background
+├── components/app/                 # customer app features (chrome, home, money, trade, earn, …)
+├── hooks/app/                      # query keys, the event stream, idempotency, per-area queries
 ├── primitives/                     # generated/restyled UI building blocks
 │   └── index.ts                    # public primitive exports
 ├── backend/                        # middleware, validators, services, integrations, workers
@@ -58,6 +60,9 @@ src/
 ├── utils/
 │   ├── index.ts                    # server helpers; imports node:crypto
 │   ├── cn.ts                       # browser-safe classnames
+│   ├── format.ts                   # browser-safe exact naira, shares and Lagos time
+│   ├── app-api.ts                  # typed fetch client for /api/v1/app/* (AppApiError)
+│   ├── app-paths.ts                # safeNext, after-sign-in path, settings ?open= names
 │   ├── money.ts                    # exact server money helpers
 │   └── response.ts                 # server response envelopes
 └── styles/globals.css              # @theme static tokens and base styling

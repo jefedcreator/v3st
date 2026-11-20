@@ -53,3 +53,60 @@ Disposition at the real scope: no mechanical detector findings were run (tool ab
 - The spec's §Open risks stand: Privy's SDK names were checked against the installed 3.52.0 types (`usePrivy`, `useLoginWithEmail`, `getAccessToken`, `getIdentityToken`) and wired accordingly, but only the simulated issuer path can be exercised without a sandbox app id.
 - The browser suite is unexecuted in this environment; its first real run may surface timing (block mining waits, the 60s order completion) or selector drift that only a live run can show.
 - `yarn build`'s memory ceiling means the first real CI run is the definitive compile check.
+
+## Audit against the plan (2026-11-20)
+
+A second agent checked the committed build task by task against the plan, the spec, the surface brief and the sketch, then fixed the shortfalls on the same branch. Superpowers was installed for this pass; the review was done inline, without subagents. Impeccable 4.x was installed, so its detector ran (below).
+
+### Shortfalls found and fixed
+
+Blocking defects (a money job or sign-in could not finish):
+
+- **Withdraw could never be confirmed.** The amount step left `pending` set after the preview loaded, so the PIN step's *Confirm* stayed disabled.
+- **The PIN cleared itself every second after a wrong PIN.** `PinStep` re-ran its error effect on every parent render (the review countdown re-renders each second). It now handles each error once.
+- **`PRICE_CHANGED` trapped the customer.** The stale error bounced every return to the PIN step straight back to the review, which still offered the old preview. Trade, withdraw, Join Earn and Leave Earn now mark the preview stale and offer *Get a new price* / *Get a new preview* (Review Focus 2).
+- **A stored Privy session could sign a signed-out customer straight back in.** The token exchange raced `logout()`. The exchange now waits until the stored session is cleared. `sendCode` also passed `disableSignup: true`, which blocked every first-time tester.
+- **Any 401 redirected to `/signin`, including the sign-in exchange itself** (a reload loop with a stored Privy session) and a stale PIN-reset sign-in. Those calls now show the API's message where the customer is.
+- **The PIN-reset Privy flow logged out right after the new sign-in** and asked for the email again. It now logs out once, first, sends the code to the profile email, and hands up fresh tokens. Its error copy printed a literal `&apos;`.
+- **The browser-suite launcher blanked every `TESTNET_*` variable**, so the seed, server and worker could not reach the chain. The plan's 20-second price-refresh loop was missing. The seed imported `tests/helpers/time` (Vitest), which the plan forbids. Fixture deposits sent no `Idempotency-Key`, statuses went unchecked, and `fixtures.ts` used a conditional object spread (`CLAUDE.md`).
+
+- **`yarn build` failed** (the first time it ran to completion anywhere): `@privy-io/react-auth` 3.52.0 lazy-loads `@stripe/crypto` for its fiat onramp, whose peer `@stripe/stripe-js` Yarn 1 does not install. The onramp never opens in an email-only, wallets-off sign-in, so `next.config.js` aliases `@stripe/crypto` to `src/stubs/stripe-crypto.js` (webpack and Turbopack) instead of adding a fourth runtime package. The stub throws if it is ever called.
+
+Plan and spec misses:
+
+- Home's money line was one dashed `stroke` border with no gutter. It is now the sketch's 2px signal spine in a 44px gutter: dashed above *Now*, solid below, with the *Now* pill on a signal hairline. *Add money to get started.* now sits under *Now* with an *Add money* action. Action rows show *Needs you*, and the Friday node shows its payout date. An order keeps one crossing id above and below *Now*, so the signature slide actually happens, and reduced motion fades in 200ms.
+- `useAppSession` read the cache without subscribing, so the bell count and the setup gate never updated live.
+- The desktop `Dialog` was half the viewport tall (its `bottom-0` was never reset from `sm:`), and `Select` menus opened beneath dialogs (`z-50` under `z-[51]`).
+- Glass blur on the top and tab bars (a craft-floor ban). The column was 768px instead of at most 720px.
+- `₦0` shown for unknown values: order amount, and cash available in the trade modal.
+- Stocks: the switch did a server navigation that dropped the search, the search never reached the URL, and a new search showed the first list as its data for 30s.
+- Settings never re-read after a change. Rows were link-sized text rather than 44px row buttons. Automations' *Renew* did not swap the dialog body, and was shown only inside the renewal window.
+- Setup's desktop step list was `aria-hidden`, above the step rather than down the left, with no heading. Accepted documents lost *Read*. `DOCUMENT_UPDATED` could never recover.
+- Documents rendered unstyled in the app, with no loading or error state.
+- The amount field was not at `type-app-amount`, and ignored *All available*.
+- The six-digit code input overflowed a 320px screen (376px of slots).
+- API `message`s replaced by generic copy in several places (name, devices, automations, transfer card).
+- `error.tsx`'s *Try again* never reset the boundary.
+- An unused `cn@^0.5.2` runtime dependency (not exact, not allowed by the plan).
+- Task 3's third route case (an order with no transfer → `NOT_FOUND`) was missing.
+- The vocabulary guard passed `{ documents: true }`, which allows "tokenized" in app copy.
+- `use-home.ts` was outside `src/hooks/app/`. The `FRONTEND_PATTERNS_GUIDE.md` tree was broken.
+
+Recorded deviations (kept):
+
+- The holdings empty state reads "You don't have any stocks yet." instead of the pinned "You don't own any stocks yet.": the copy rule "Invest in, never own" wins over the pinned string.
+- *Add money to get started.* shows only when the line is empty and setup is complete (spec §Home), not whenever nothing is upcoming.
+- The landing's no-JavaScript test still counted six `.nojs-nav` links; Task 17 rightly added *Sign in* there (seven). The assertion now expects it.
+
+### Gates run in this pass (2026-11-20, macOS, Node 24.15.0, Yarn 1.22.22)
+
+| Command | Result |
+| --- | --- |
+| `yarn typecheck` | Pass, 0 errors. |
+| `yarn lint` (full repository) | Pass: 0 errors, 8 warnings. One warning is the app's `<img>` in `StockMark` (local hashed marks, kept); the rest predate this work. The first full run found 2 errors (Task 3's service and one fixed here), which the earlier targeted lint had missed. |
+| `yarn build` | Pass, after the `@stripe/crypto` stub. Needs `NODE_OPTIONS=--max-old-space-size=4608`: the default ~2 GB heap runs out, Privy's tree being large. |
+| `tests/app-ui/**` plus the landing format and nav-links tests | 27 files, 71 tests passed. Run through a temporary Vitest config without the database global setup. |
+| `yarn test:e2e` (landing) | 38 of 38 passed (37, then the no-JS nav test after its fix). Uses the cached Chromium 1194 via `LANDING_CHROMIUM_PATH`; the headless shell was not installed. |
+| `impeccable detect --json` on `src/app/(app)`, `(auth)`, `(setup)`, `src/components/app`, `src/primitives` | 0 findings. |
+| `yarn test:contracts`, `yarn test` (DB and chain suites, including the three Task 3 route cases), `yarn app-e2e prepare && yarn test:e2e:app` | **Not run: Foundry (Forge and Anvil) is not installed on this machine.** An isolated PostgreSQL 14 cluster was ready, but `tests/global-setup.ts` needs `forge build` and Anvil. These assertions have not executed, so they have not passed. |
+| Impeccable finish review, captures and documenter | **Not run.** Screenshots of every page with real stocks and Earn products need the app stack on the local chain, which needs Foundry too. The `DESIGN_SYSTEM.md` "Customer app" section from the first pass stands; its Home bullet now matches the rebuilt line. |

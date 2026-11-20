@@ -100,12 +100,17 @@ Browser suite: `yarn test:e2e` (Chromium installed with `yarn playwright install
 
 The customer app for beta testers lives at `/signin` (the landing links to it): sign in with an `@v3st.test` email in simulated Privy mode, finish setup, and then use `/home`, `/stocks`, `/cash`, `/earn` and `/settings`. Preview it with `yarn dev` (or `yarn start`) connecting a reachable beta database, `APP_STAGE=beta` and `PRIVY_MODE=simulated`.
 
-The app's browser suite needs the isolated `_test` database and the local test chain:
+The app's browser suite needs the isolated `_test` database and the local test chain (`yarn testnet:start`, then `yarn testnet:deploy`):
 
 ```bash
-yarn app-e2e prepare   # refuses unless TEST_DATABASE_URL ends in _test and the RPC is loopback 31337
+export TEST_DATABASE_URL=postgresql://…/v3st_test   # must end in _test
+export TESTNET_RPC_URL=http://127.0.0.1:8545         # loopback, chain 31337
+export TESTNET_SIGNER_PRIVATE_KEY=0x…                # the local chain's test signer
+yarn app-e2e prepare   # migrates and seeds the TSTA test stock
 yarn test:e2e:app
 ```
+
+The launcher clears every other provider variable, and keeps the seeded stock's reference price fresh every 20 seconds while it runs.
 
 It builds and serves the app on `http://127.0.0.1:3108` with the worker and simulated Privy.
 
