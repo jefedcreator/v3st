@@ -16,13 +16,13 @@ export function totalLines(home: AppHomeDto): {
     figure = formatNaira(home.total_kobo);
     note = home.total_status === "partial" ? "Some prices are unavailable, so this total leaves them out." : null;
   }
-  const change =
-    home.change_24h_kobo === null || home.total_kobo === null
-      ? null
-      : `${
-          BigInt(home.change_24h_kobo) < 0n
-            ? formatNaira(home.change_24h_kobo)
-            : formatSignedNaira(home.change_24h_kobo, "in")
-        } today`;
+  // A null change drops the line (spec §Home); zero is not a gain, so it
+  // carries no sign.
+  let change: string | null = null;
+  if (home.change_24h_kobo !== null && home.total_kobo !== null) {
+    const value = BigInt(home.change_24h_kobo);
+    const text = value > 0n ? formatSignedNaira(home.change_24h_kobo, "in") : formatNaira(home.change_24h_kobo);
+    change = `${text} today`;
+  }
   return { figure, note, change };
 }

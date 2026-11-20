@@ -41,3 +41,7 @@ it("never shows ₦0 for an unknown total", () => {
     totalLines(home({ total_kobo: "18425040", change_24h_kobo: "-231015" })).change,
   ).toBe("−₦2,310.15 today");
 });
+
+it("gives a zero change no sign", () => {
+  expect(totalLines(home({ total_kobo: "18425040", change_24h_kobo: "0" })).change).toBe("₦0 today");
+});

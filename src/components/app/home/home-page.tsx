@@ -29,13 +29,13 @@ export function HomePage({
   const { data: activityData } = useActivityPreviewQuery(activity);
   const now = useNow(60_000);
   const [addOpen, setAddOpen] = React.useState(false);
-  const model = buildMoneyLine(homeData, activityData.items, now);
+  const model = buildMoneyLine(homeData, activityData.items, now, limits.minPayoutKobo);
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="sr-only">Home</h1>
       <TotalBand home={homeData} onAddMoney={() => setAddOpen(true)} />
-      <MoneyLine model={model} complete={complete} onAddMoney={() => setAddOpen(true)} />
+      <MoneyLine model={model} complete={complete} />
       <HoldingsList home={homeData} />
       <AddMoneyDialog open={addOpen} onOpenChange={setAddOpen} limits={limits} />
     </div>

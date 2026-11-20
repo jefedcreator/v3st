@@ -14,7 +14,12 @@ import { totalLines } from "./total";
 // cash available, the two pills and the API's beta line.
 export function TotalBand({ home, onAddMoney }: { home: AppHomeDto; onAddMoney: () => void }) {
   const { figure, note, change } = totalLines(home);
-  const falling = home.change_24h_kobo?.startsWith("-") === true;
+  const changeTone =
+    home.change_24h_kobo === null || BigInt(home.change_24h_kobo) === 0n
+      ? "text-muted-foreground"
+      : BigInt(home.change_24h_kobo) < 0n
+        ? "text-loss"
+        : "text-gain";
   return (
     <section aria-labelledby="total-value-label" className="flex flex-col pt-5">
       <p id="total-value-label" className="text-muted-foreground text-[13px]">
@@ -26,7 +31,7 @@ export function TotalBand({ home, onAddMoney }: { home: AppHomeDto; onAddMoney: 
       </p>
       {note !== null && <p className="text-muted-foreground mt-1.5 text-sm">{note}</p>}
       {change !== null && (
-        <p className={cn("mt-1.5 text-sm tabular-nums", falling ? "text-loss" : "text-gain")}>
+        <p className={cn("mt-1.5 text-sm tabular-nums", changeTone)}>
           {change}
         </p>
       )}

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { buildMoneyLine, crossingId } from "@/components/app/home/line-model";
+import { buildMoneyLine, crossingId, timeLeft } from "@/components/app/home/line-model";
 import type {
   AppActionItemDto,
   AppActivityItemDto,
@@ -169,4 +169,24 @@ it("dates the Friday payout node", () => {
     earnings: { this_week_kobo: "124000", next_payout_on: "2026-11-20", choice: "payout" },
   });
   expect(buildMoneyLine(h, [], NOW).upcoming[0]!.amountText).toBe("Fri 20 Nov");
+});
+
+it("dates finished rows and counts down a transfer's deadline", () => {
+  const done = act({ id: "dep_9", subtitle: "Transfer of ₦100,000", occurred_at: "2026-11-19T12:02:00Z" });
+  expect(buildMoneyLine(home(), [done], NOW).earlier[0]!.detail).toBe("Today, 13:02 · Transfer of ₦100,000");
+  const waiting = order({ id: "W", status: "waiting_for_payment", pay_to: payTo("2026-11-19T17:18:00Z") });
+  expect(buildMoneyLine(home({ open_orders: [waiting] }), [], NOW).upcoming[0]!.detail).toMatch(/ · 3h 58m left$/);
+  expect(timeLeft("2026-11-19T13:44:00Z", NOW)).toBe("24 min left");
+  expect(timeLeft("2026-11-19T13:00:00Z", NOW)).toBeNull();
+});
+
+it("never promises a Friday payout below the minimum", () => {
+  const h = home({
+    earn_kobo: "580363",
+    earnings: { this_week_kobo: "0", next_payout_on: "2026-11-20", choice: "payout" },
+  });
+  expect(buildMoneyLine(h, [], NOW, "200000").upcoming[0]!.detail).toBe(
+    "₦0 so far this week · payouts start at ₦2,000",
+  );
+  expect(buildMoneyLine(h, [], NOW).upcoming[0]!.detail).toBe("₦0 so far this week · paid to your bank");
 });

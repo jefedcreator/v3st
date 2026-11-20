@@ -1,4 +1,11 @@
-import { formatLagosDateTime, formatLagosDay, formatNaira, formatSignedNaira } from "@/utils/format";
+import {
+  formatLagosDateTime,
+  formatLagosDay,
+  formatLagosTime,
+  formatNaira,
+  formatSignedNaira,
+  lagosDayLabel,
+} from "@/utils/format";
 import type {
   AppActivityItemDto,
   AppHomeDto,
@@ -42,10 +49,27 @@ const PROGRESS_TONES: Record<AppProgress, LineTone> = {
 };
 const EARLIER_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
-function orderItem(order: AppOrderDto): LineItem {
+// Time left on a deadline at the minute the line was drawn, or null once due.
+export function timeLeft(due: string, now: Date): string | null {
+  const minutes = Math.ceil((new Date(due).getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) return null;
+  if (minutes < 60) return `${minutes} min left`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m left`;
+}
+
+// When it happened, in Lagos: "Today, 19:09", "Yesterday, 08:15", "Mon 16 Nov, 12:00".
+function happenedAt(iso: string, now: Date): string {
+  return `${lagosDayLabel(iso, now)}, ${formatLagosTime(iso)}`;
+}
+
+function orderItem(order: AppOrderDto, now: Date): LineItem {
   let detail = order.title;
   if (order.status === "waiting_for_price" && order.valid_until !== null) {
     detail = `${detail} · until ${formatLagosDateTime(order.valid_until)}`;
+  }
+  if (order.status === "waiting_for_payment" && order.pay_to?.expires_at) {
+    const left = timeLeft(order.pay_to.expires_at, now);
+    if (left !== null) detail = `${detail} · ${left}`;
   }
   const tone: LineTone = WAITING_ORDER_STATUSES.has(order.status) ? "waiting" : "processing";
   const due = order.valid_until ?? order.pay_to?.expires_at ?? null;
@@ -60,11 +84,17 @@ function orderItem(order: AppOrderDto): LineItem {
   };
 }
 
-function activityItem(item: AppActivityItemDto): LineItem {
+// An activity row; a finished one says when it happened before what it was.
+function activityItem(item: AppActivityItemDto, now: Date, finished: boolean): LineItem {
+  let detail = item.subtitle;
+  if (finished) {
+    const when = happenedAt(item.occurred_at, now);
+    detail = detail === "" ? when : `${when} · ${detail}`;
+  }
   return {
     key: `activity:${item.id}`,
     title: item.title,
-    detail: item.subtitle,
+    detail,
     amountText:
       item.amount_kobo === null ? null : formatSignedNaira(item.amount_kobo, item.direction),
     tone: PROGRESS_TONES[item.status],
@@ -86,14 +116,15 @@ function actionItem(item: AppActionItemDto): LineItem {
 }
 
 // Home's money line, exactly: what is coming above Now, what is done below.
-// `now` is part of the contract so a caller re-derives the line each minute;
-// the API's statuses, not the clock, decide which side an item is on.
+// The API's statuses decide which side an item is on; `now` dates finished
+// rows and counts down deadlines. `minPayoutKobo` (policy) keeps the Friday
+// node from promising a payout that will roll over.
 export function buildMoneyLine(
   home: AppHomeDto,
   activity: AppActivityItemDto[],
   now: Date,
+  minPayoutKobo?: string,
 ): MoneyLineModel {
-  void now;
   const upcoming: LineItem[] = [];
 
   // 1. The Friday payout node is always first when there is Earn value.
@@ -106,6 +137,12 @@ export function buildMoneyLine(
       detail = "This week's earnings aren't available right now";
     } else if (home.earnings.choice === "unset") {
       detail = "Choose what happens to your earnings";
+    } else if (
+      home.earnings.choice === "payout" &&
+      minPayoutKobo !== undefined &&
+      BigInt(home.earnings.this_week_kobo) < BigInt(minPayoutKobo)
+    ) {
+      detail = `${formatNaira(home.earnings.this_week_kobo)} so far this week · payouts start at ${formatNaira(minPayoutKobo)}`;
     } else {
       const marker = home.earnings.choice === "payout" ? "paid to your bank" : "reinvested";
       detail = `${formatNaira(home.earnings.this_week_kobo)} so far this week · ${marker}`;
@@ -133,7 +170,7 @@ export function buildMoneyLine(
   const inProgress: LineItem[] = [];
   for (const order of home.open_orders) {
     if (WAITING_ORDER_STATUSES.has(order.status) || order.status === "processing") {
-      inProgress.push(orderItem(order));
+      inProgress.push(orderItem(order, now));
     }
   }
   for (const item of activity) {
@@ -142,7 +179,7 @@ export function buildMoneyLine(
       const orderId = item.id.slice("ord_".length);
       if (listedOrders.has(orderId)) continue;
     }
-    inProgress.push(activityItem(item));
+    inProgress.push(activityItem(item, now, false));
   }
   inProgress.sort((a, b) => {
     if (a.due === null && b.due === null) return 0;
@@ -168,7 +205,7 @@ export function buildMoneyLine(
   const earlier: LineItem[] = [];
   for (const item of activity) {
     if (!EARLIER_STATUSES.has(item.status)) continue;
-    earlier.push(activityItem(item));
+    earlier.push(activityItem(item, now, true));
     if (earlier.length === 5) break;
   }
 

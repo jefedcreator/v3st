@@ -9,15 +9,7 @@ import { NowMarker } from "./now-marker";
 
 // The money line: a 2px signal spine in a 44px gutter, dashed above the Now
 // marker and solid below it, with Coming up above and Earlier below.
-export function MoneyLine({
-  model,
-  complete,
-  onAddMoney,
-}: {
-  model: MoneyLineModel;
-  complete: boolean;
-  onAddMoney: () => void;
-}) {
+export function MoneyLine({ model, complete }: { model: MoneyLineModel; complete: boolean }) {
   const empty = model.upcoming.length === 0 && model.earlier.length === 0;
   return (
     <section aria-labelledby="money-line-heading" className="flex flex-col">
@@ -37,22 +29,14 @@ export function MoneyLine({
             ))}
           </AnimatePresence>
         </ul>
+        {/* What comes next sits above Now; the Add money pill is right above. */}
+        {empty && complete && (
+          <p className="text-muted-foreground pb-3 text-sm">Add money to get started.</p>
+        )}
       </div>
       <NowMarker />
       <div className="relative pl-11">
         <span aria-hidden="true" className="bg-signal absolute top-0 bottom-0 left-[13px] w-0.5" />
-        {empty && complete && (
-          <p className="text-muted-foreground py-3 text-sm">
-            Add money to get started.{" "}
-            <button
-              type="button"
-              onClick={onAddMoney}
-              className="text-gain inline-flex min-h-11 items-center font-semibold underline-offset-4 hover:underline"
-            >
-              Add money
-            </button>
-          </p>
-        )}
         <p className="text-muted-foreground pt-2.5 pb-1.5 text-[13px] font-medium">Earlier</p>
         <ul className="flex flex-col">
           <AnimatePresence initial={false}>
