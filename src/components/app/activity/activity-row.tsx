@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cn } from "@/utils/cn";
 import { moneyText } from "@/primitives/money-text";
+import { formatLagosTime } from "@/utils/format";
 import type { AppActivityItemDto } from "@/types/app";
 import { progressLabel } from "./activity-groups";
 
@@ -15,11 +16,10 @@ export function ActivityRow({ item }: { item: AppActivityItemDto }) {
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="text-ink truncate text-[15px]">{item.title}</span>
         <span className="text-muted-foreground truncate text-sm">{item.subtitle}</span>
-        {progress !== null && (
-          <span className={cn("text-sm", item.status === "failed" ? "text-loss" : "text-subtle")}>
-            {progress}
-          </span>
-        )}
+        <span className={cn("text-[13px]", item.status === "failed" ? "text-loss" : "text-subtle")}>
+          <time dateTime={item.occurred_at}>{formatLagosTime(item.occurred_at)}</time>
+          {progress !== null && ` · ${progress}`}
+        </span>
       </span>
       <span className="text-ink shrink-0 text-[15px] tabular-nums">
         {moneyText(item.amount_kobo, item.direction)}

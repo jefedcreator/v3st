@@ -46,7 +46,9 @@ export function EarningsPage({ earnings: initial }: { earnings: AppEarningsDto }
       ) : (
         <Button onClick={() => setOpen(true)}>Choose what happens to your earnings</Button>
       )}
-      <p className="text-subtle text-sm">{minimumPayoutLine(earnings.minimum_payout_kobo)}</p>
+      {!earnings.limits.some((line) => line.includes(formatNaira(earnings.minimum_payout_kobo))) && (
+        <p className="text-subtle text-sm">{minimumPayoutLine(earnings.minimum_payout_kobo)}</p>
+      )}
       {earnings.limits.map((line) => (
         <p key={line} className="text-subtle text-sm">
           {line}

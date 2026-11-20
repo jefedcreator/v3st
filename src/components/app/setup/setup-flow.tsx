@@ -99,11 +99,21 @@ export function SetupFlow({
         </ol>
       </nav>
       <div className="flex min-w-0 flex-col gap-6">
-        <div className="flex flex-col gap-2" aria-live="polite">
-          <p className="text-subtle text-[13px] md:hidden">
-            Step {index + 1} of {total} · {current.title}
-          </p>
+        <div className="flex flex-col gap-3" aria-live="polite">
           <h1 className="type-app-title text-heading">{current.title}</h1>
+          <div className="flex items-center gap-3 md:hidden">
+            <span aria-hidden="true" className="flex flex-1 gap-1">
+              {onboarding.steps.map((step, stepIndex) => (
+                <span
+                  key={step.key}
+                  className={cn("h-0.5 flex-1 rounded-full", stepIndex <= index ? "bg-signal" : "bg-stroke")}
+                />
+              ))}
+            </span>
+            <span className="text-subtle shrink-0 text-[13px] tabular-nums">
+              Step {index + 1} of {total}
+            </span>
+          </div>
         </div>
         {current.key === "identity" && (
           <IdentityStep identities={testIdentities} onDone={afterSuccess} />

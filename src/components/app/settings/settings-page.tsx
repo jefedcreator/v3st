@@ -164,8 +164,8 @@ export function SettingsPage({
 
       <Group title="Automatic actions">
         <Row
-          label="Automatic actions"
-          value={activeCount === 0 ? "None on yet" : `${activeCount} active`}
+          label={activeCount === 0 ? "None on yet" : `${activeCount} active`}
+          value="Renew or turn off"
           badge={needsRenewal ? "Needs renewal" : undefined}
           onClick={() => openModal("automations")}
         />
