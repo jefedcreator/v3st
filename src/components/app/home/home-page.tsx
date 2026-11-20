@@ -6,7 +6,7 @@ import type { AppActivityPageDto, AppHomeDto } from "@/types/app";
 import type { MoneyLimits } from "@/types/app-ui";
 import { useOnboardingComplete } from "@/components/app/app-providers";
 import { AddMoneyDialog } from "@/components/app/cash/add-money-dialog";
-import { useActivityPreviewQuery, useHomeQuery } from "@/hooks/app/use-home";
+import { useActivityPreviewQuery, useHomeQuery, useTransferDeadlines } from "@/hooks/app/use-home";
 import { useNow } from "@/hooks/app/use-now";
 import { buildMoneyLine } from "./line-model";
 import { HoldingsList } from "./holdings-list";
@@ -29,7 +29,8 @@ export function HomePage({
   const { data: activityData } = useActivityPreviewQuery(activity);
   const now = useNow(60_000);
   const [addOpen, setAddOpen] = React.useState(false);
-  const model = buildMoneyLine(homeData, activityData.items, now, limits.minPayoutKobo);
+  const deadlines = useTransferDeadlines(activityData.items);
+  const model = buildMoneyLine(homeData, activityData.items, now, limits.minPayoutKobo, deadlines);
 
   return (
     <div className="flex flex-col gap-6">

@@ -84,12 +84,21 @@ function orderItem(order: AppOrderDto, now: Date): LineItem {
   };
 }
 
-// An activity row; a finished one says when it happened before what it was.
-function activityItem(item: AppActivityItemDto, now: Date, finished: boolean): LineItem {
+// An activity row; a finished one says when it happened before what it was,
+// and one still waiting on a transfer counts down to its deadline.
+function activityItem(
+  item: AppActivityItemDto,
+  now: Date,
+  finished: boolean,
+  deadline: string | null = null,
+): LineItem {
   let detail = item.subtitle;
   if (finished) {
     const when = happenedAt(item.occurred_at, now);
     detail = detail === "" ? when : `${when} · ${detail}`;
+  } else if (deadline !== null) {
+    const left = timeLeft(deadline, now);
+    if (left !== null) detail = detail === "" ? left : `${detail} · ${left}`;
   }
   return {
     key: `activity:${item.id}`,
@@ -99,7 +108,7 @@ function activityItem(item: AppActivityItemDto, now: Date, finished: boolean): L
       item.amount_kobo === null ? null : formatSignedNaira(item.amount_kobo, item.direction),
     tone: PROGRESS_TONES[item.status],
     href: `/activity/${item.id}`,
-    due: null,
+    due: finished ? null : deadline,
   };
 }
 
@@ -118,12 +127,15 @@ function actionItem(item: AppActionItemDto): LineItem {
 // Home's money line, exactly: what is coming above Now, what is done below.
 // The API's statuses decide which side an item is on; `now` dates finished
 // rows and counts down deadlines. `minPayoutKobo` (policy) keeps the Friday
-// node from promising a payout that will roll over.
+// node from promising a payout that will roll over. `transferDeadlines` maps
+// an unpaid transfer's activity id to its deposit's `pay_to.expires_at`,
+// which the activity feed itself does not carry.
 export function buildMoneyLine(
   home: AppHomeDto,
   activity: AppActivityItemDto[],
   now: Date,
   minPayoutKobo?: string,
+  transferDeadlines: Readonly<Record<string, string>> = {},
 ): MoneyLineModel {
   const upcoming: LineItem[] = [];
 
@@ -179,7 +191,7 @@ export function buildMoneyLine(
       const orderId = item.id.slice("ord_".length);
       if (listedOrders.has(orderId)) continue;
     }
-    inProgress.push(activityItem(item, now, false));
+    inProgress.push(activityItem(item, now, false, transferDeadlines[item.id] ?? null));
   }
   inProgress.sort((a, b) => {
     if (a.due === null && b.due === null) return 0;

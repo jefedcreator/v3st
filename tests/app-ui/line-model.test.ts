@@ -190,3 +190,13 @@ it("never promises a Friday payout below the minimum", () => {
   );
   expect(buildMoneyLine(h, [], NOW).upcoming[0]!.detail).toBe("₦0 so far this week · paid to your bank");
 });
+
+it("counts down an unpaid transfer from its deposit's deadline", () => {
+  const waiting = act({ id: "dep_7", status: "waiting", subtitle: "Transfer of ₦50,000" });
+  const line = buildMoneyLine(home(), [waiting], NOW, undefined, { dep_7: "2026-11-19T17:20:00Z" });
+  expect(line.upcoming[0]).toMatchObject({
+    key: "activity:dep_7",
+    detail: "Transfer of ₦50,000 · 4h 0m left",
+    due: "2026-11-19T17:20:00Z",
+  });
+});
