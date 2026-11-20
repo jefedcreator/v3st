@@ -37,8 +37,7 @@ export const metadata: Metadata = {
 };
 
 // Archivo is V3ST's face from 2026-11-20 (Bricolage Grotesque is the sibling
-// product Sara's). latin-ext carries the naira sign, U+20A6. The wordmark
-// stays outlined from Bricolage as the logo.
+// product Sara's). latin-ext carries the naira sign, U+20A6.
 const archivo = Archivo({
   subsets: ["latin", "latin-ext"],
   variable: "--font-archivo",

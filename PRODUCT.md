@@ -18,7 +18,8 @@ The approved brand (2026-11-17) is dark:
 
 - a green-tinted near-black ground;
 - flag green `#00804D` as the one signal colour;
-- Archivo throughout, which carries the naira sign. It replaced Bricolage Grotesque on 2026-11-20 because the sibling product Sara uses Bricolage; the V3ST wordmark and icon stay outlined from Bricolage as the logo;
+- Archivo throughout, which carries the naira sign. It replaced Bricolage Grotesque on 2026-11-20 because the sibling product Sara uses Bricolage;
+- the [grain mark](docs/brand/v3st-grain.svg) as the product logo;
 - katana.network's measured scroll and motion behaviour, with accessible fallbacks.
 
 The "Built to work with" row shows official marks of the 12 services V3ST is built around. It asserts no partnership or endorsement, and says that most of those services are in test mode or simulated.

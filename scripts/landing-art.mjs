@@ -179,8 +179,8 @@ const PIECES = [
   },
   {
     id: "footer-glow",
-    name: "Footer wordmark glow",
-    use: "Static radial glow behind the giant footer wordmark",
+    name: "Footer logo glow",
+    use: "Static radial glow behind the footer grain mark",
     width: 1600,
     height: 600,
     build: (w, h) => {

@@ -111,7 +111,7 @@ V3ST's marketing world is dark: `void` ground, `signal` green, one theme. Do not
 
 `DESIGN_SYSTEM.md` defines the semantic palette, Archivo typography, widths, spacing, radii, focus and layers. Tokens live in `@theme static` in `src/styles/globals.css`; do not add `tailwind.config.ts`. `static` ensures declared tokens are emitted, including those referenced by dynamic style code. Use semantic classes instead of repeating raw colors in components.
 
-Archivo loads through `next/font` with the `latin-ext` subset (the naira sign lives there); no runtime font CDN. The wordmark is an outlined SVG logo, not text. Use tabular financial numerals, intentional wrapping and visible focus. Body text meets 4.5:1 contrast and large text 3:1 on actual surfaces, including during artwork movement.
+Archivo loads through `next/font` with the `latin-ext` subset for the naira sign. Use the shared `ProductLogo` for the grain mark in the landing and app. Use tabular financial numerals, intentional wrapping and visible focus. Body text meets 4.5:1 contrast and large text 3:1 on actual surfaces, including during artwork movement.
 
 Server HTML is visible before enhancement. No-JS, reduced motion, unavailable WebGL, short viewports, enlarged text and zoom retain the explanation and actions. Do not globally hide reveal content or clip financial figures to fixed panel heights.
 

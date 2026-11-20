@@ -1,7 +1,8 @@
 import Link from "next/link";
 
+import { ProductLogo } from "@/components/product-logo";
+
 import { NAV_LINKS } from "./nav-links";
-import { Wordmark } from "./wordmark";
 
 const LEARN_LINKS: readonly { label: string; href: string }[] = [
   { label: "Risks of investing", href: "/legal/risks" },
@@ -62,7 +63,7 @@ export function SiteFooter(): React.JSX.Element {
           Company names and logos identify the companies whose prices the beta shares track and the
           services V3ST is built to work with. V3ST isn&apos;t affiliated with or endorsed by them.
         </p>
-        <div className="footer-wordmark-wrap" aria-hidden="true">
+        <div className="footer-mark-wrap" aria-hidden="true">
           <div className="footer-glow">
             <picture>
               <source srcSet="/art/footer-glow.avif" type="image/avif" />
@@ -77,7 +78,7 @@ export function SiteFooter(): React.JSX.Element {
               />
             </picture>
           </div>
-          <Wordmark className="footer-wordmark" />
+          <ProductLogo className="footer-mark" decorative />
         </div>
         <p className="footer-copy">© 2026 V3ST</p>
       </div>

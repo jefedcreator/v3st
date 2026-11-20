@@ -1,10 +1,11 @@
 /**
- * Draws three V3ST logo options, each grown from a plant, and writes docs/brand/:
+ * Draws three V3ST logo options in docs/brand/ and the grain favicon:
  *
  *   v3st-sprout.svg         Growth: a seedling breaks the ground, its two leaves opening into a V
  *   v3st-grain.svg          Harvest: an ear of grain whose kernels pair into three Vs, rising from a V of leaves
  *   v3st-crop.svg           Yield: three seedlings climb like a chart, each opening into a V
  *   v3st-logo-options.png   the three side by side: on signal green, on void, small, as an app icon and beside the wordmark
+ *   src/app/icon.svg        the grain mark in mint on void
  *
  *   node scripts/logo.mjs
  *
@@ -15,9 +16,9 @@
  * draw if any two come closer than 2.8, since lens tips may sit a little inside
  * the gap. Each file's viewBox is cropped to its drawing.
  *
- * The lockup in the preview reads the wordmark from wordmark.tsx, as
- * scripts/social-image.mjs does. Chromium measures the drawings and renders the
- * preview; set LANDING_CHROMIUM_PATH to use a specific one.
+ * The preview keeps the former wordmark as a comparison. Chromium measures
+ * the drawings and renders the preview; set LANDING_CHROMIUM_PATH to use a
+ * specific one.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
@@ -26,6 +27,7 @@ const root = new URL("../", import.meta.url);
 const out = new URL("docs/brand/", root);
 
 const SIGNAL = "#00804D";
+const MINT = "#3DDC97";
 const WHITE = "#FFFFFF";
 const VOID = "#020604";
 const GAP = 3.5;
@@ -107,11 +109,7 @@ const MARKS = {
   },
 };
 
-const wordmarkSource = readFileSync(new URL("src/components/landing/wordmark.tsx", root), "utf8");
-const wordmark = [...wordmarkSource.matchAll(/<path transform="([^"]+)" d="([^"]+)"/g)]
-  .map(([, transform, d]) => `<path transform="${transform}" d="${d}"/>`)
-  .join("");
-if (wordmark === "") throw new Error("No wordmark paths found in wordmark.tsx");
+const wordmark = readFileSync(new URL("v3st-wordmark.svg", out), "utf8").replace("<svg ", '<svg height="38" ');
 
 const browser = await chromium.launch({ executablePath: process.env.LANDING_CHROMIUM_PATH || undefined });
 try {
@@ -160,6 +158,11 @@ try {
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" role="img" aria-label="${title}"><title>${title}</title><path fill="${SIGNAL}" d="${d}"/></svg>\n`,
     );
   }
+  const { d, viewBox } = drawn.grain;
+  writeFileSync(
+    new URL("src/app/icon.svg", root),
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="24" fill="${VOID}"/><svg x="4" y="4" width="92" height="92" viewBox="${viewBox}"><path fill="${MINT}" d="${d}"/></svg></svg>\n`,
+  );
 
   // Preview: one column per option.
   const art = ({ d, viewBox }, fill, attrs) => `<svg viewBox="${viewBox}" ${attrs}><path fill="${fill}" d="${d}"/></svg>`;
@@ -171,9 +174,9 @@ try {
   const column = (mark) => `<div class="col">
     <div class="tile" style="background:${SIGNAL}">${art(mark, WHITE, 'class="big"')}</div>
     <div class="tile" style="background:${VOID}">${art(mark, SIGNAL, 'class="big"')}</div>
-    <div class="row">${[48, 32, 24, 16].map((s) => art(mark, "#3DDC97", `height="${s}" width="${s}"`)).join("")}</div>
+    <div class="row">${[48, 32, 24, 16].map((s) => art(mark, MINT, `height="${s}" width="${s}"`)).join("")}</div>
     <div class="row">${[96, 48, 32].map((s) => icon(mark, s)).join("")}</div>
-    <div class="row lockup">${art(mark, SIGNAL, 'height="58"')}<svg viewBox="0 -67.40 231.40 68.80" height="38" fill="${WHITE}">${wordmark}</svg></div>
+    <div class="row lockup">${art(mark, SIGNAL, 'height="58"')}${wordmark}</div>
   </div>`;
   await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>
     html, body { margin: 0; width: 1600px; background: #050B08; }

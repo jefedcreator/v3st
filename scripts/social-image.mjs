@@ -1,8 +1,7 @@
 /**
  * Renders the 1200×630 social image, src/app/opengraph-image.png: the V3ST
- * wordmark (the logo, outlined from Bricolage Grotesque in wordmark.tsx), the
- * headline in Archivo at weight 300, and the beta line, on the void ground
- * with the flag-green glow. No third-party marks and no figures.
+ * grain logo, the headline in Archivo at weight 300, and the beta line, on
+ * the void ground with the flag-green glow. No third-party marks or figures.
  *
  *   node scripts/social-image.mjs
  *
@@ -14,11 +13,8 @@ import { readFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
 const root = new URL("../", import.meta.url);
-const wordmarkSource = readFileSync(new URL("src/components/landing/wordmark.tsx", root), "utf8");
-const paths = [...wordmarkSource.matchAll(/<path transform="([^"]+)" d="([^"]+)"/g)]
-  .map(([, transform, d]) => `<path transform="${transform}" d="${d}"/>`)
-  .join("");
-if (paths === "") throw new Error("No wordmark paths found in wordmark.tsx");
+const grain = readFileSync(new URL("docs/brand/v3st-grain.svg", root), "utf8")
+  .replace('fill="#00804D"', 'fill="#3DDC97"');
 
 const html = `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -35,7 +31,7 @@ const html = `<!doctype html>
   p { margin: 6px 0 0; font-weight: 500; font-size: 21px; letter-spacing: 0.18em; text-transform: uppercase; color: #3DDC97; }
 </style></head>
 <body>
-  <svg viewBox="0 -67.40 231.40 68.80" fill="currentColor" role="img" aria-label="V3ST">${paths}</svg>
+  ${grain}
   <h1>Invest. Earn. Harvest.</h1>
   <p>Beta · test money only</p>
 </body></html>`;
@@ -45,7 +41,9 @@ try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: "networkidle" });
   await page.evaluate(() => document.fonts.ready);
-  const loaded = await page.evaluate(() => document.fonts.check('300 92px "Archivo"'));
+  const loaded = await page.evaluate(() =>
+    [...document.fonts].some((font) => font.family === "Archivo" && font.weight === "300" && font.status === "loaded"),
+  );
   if (!loaded) throw new Error("Archivo did not load; refusing to render with a fallback face");
   const out = new URL("src/app/opengraph-image.png", root);
   await page.screenshot({ path: out.pathname, type: "png" });

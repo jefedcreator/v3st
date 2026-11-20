@@ -1,6 +1,6 @@
-# V3ST logo options
+# V3ST logo
 
-**Three options, drawn 2026-11-20. None is in the product yet.** The favicon (`src/app/icon.svg`) and every header still use the Bricolage V and wordmark. Once one is chosen, it gets its own files (white and reversed versions, app icon, favicon, lockup) and adopting it is a separate change.
+Grain is the product logo. The landing and app use its mint treatment, as do the favicon and social image. The original green artwork is in [v3st-grain.svg](v3st-grain.svg). The preview records the three options drawn on 2026-11-20, alongside the former [V3ST wordmark](v3st-wordmark.svg).
 
 ![The three options on signal green and on void, small, as app icons and beside the wordmark](v3st-logo-options.png)
 
@@ -30,4 +30,4 @@ Each mark is drawn on a 100-unit square. Each file's viewBox is cropped to the d
 node scripts/logo.mjs
 ```
 
-The script renders in Playwright's Chromium. Set `LANDING_CHROMIUM_PATH` to use a specific one, as with `scripts/social-image.mjs`.
+The script also generates the grain favicon. Both this generator and `scripts/social-image.mjs` render in Playwright's Chromium. Set `LANDING_CHROMIUM_PATH` to use a specific browser binary.

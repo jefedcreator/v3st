@@ -247,10 +247,10 @@
   opacity: var(--nav-cue, 1);
   transform: translateY(calc((1 - var(--nav-cue, 1)) * -160%));
 }
-.header-wordmark {
-  height: 1.5rem;
+.header-mark {
+  height: 2rem;
   width: auto;
-  color: var(--color-heading);
+  color: var(--color-gain);
 }
 .desktop-nav {
   display: flex;
@@ -398,7 +398,7 @@
   font-size: 0.875rem;
   line-height: 1.7;
 }
-.footer-wordmark-wrap {
+.footer-mark-wrap {
   position: relative;
   margin-top: 4rem;
   display: grid;
@@ -414,11 +414,11 @@
   height: 100%;
   object-fit: cover;
 }
-.footer-wordmark {
+.footer-mark {
   position: relative;
-  width: 100%;
-  height: auto;
-  color: var(--color-heading);
+  width: auto;
+  height: clamp(8rem, 24vw, 18rem);
+  color: var(--color-gain);
 }
 .footer-copy {
   margin-top: 2rem;
