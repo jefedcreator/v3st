@@ -1,4 +1,5 @@
-// Outlined from Bricolage Grotesque at weight 800, optical size 96.
+// The V3ST logo: outlined from Bricolage Grotesque at weight 800, optical size
+// 96, and kept when the text face moved to Archivo on 2026-11-20.
 // Font source: google/fonts repository, ofl/bricolagegrotesque/BricolageGrotesque[opsz,wdth,wght].ttf
 // at commit b9f6c712059d72742282ebdf06eadfc264c827f3, licensed under the SIL Open Font License 1.1.
 export function Wordmark(props: { className?: string; title?: string }): React.JSX.Element {

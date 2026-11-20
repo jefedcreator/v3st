@@ -3,7 +3,7 @@
 
 @theme static {
   --font-sans:
-    var(--font-bricolage), ui-sans-serif, system-ui, sans-serif,
+    var(--font-archivo), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
   --color-void: #020604;
