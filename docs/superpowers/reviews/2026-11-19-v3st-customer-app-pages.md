@@ -131,3 +131,4 @@ V3ST and the sibling product Sara both used Bricolage Grotesque. Sara adopted it
 - The social image had been rendered with a generic system face, not the brand face. It is regenerated with an Archivo 300 headline by the new `scripts/social-image.mjs`, which records its provenance.
 - The Home sketch, the finish review's critique reference, is re-rendered in Archivo with the real wordmark.
 - `PRODUCT.md`, `DESIGN_SYSTEM.md`, `FRONTEND_PATTERNS_GUIDE.md`, `.impeccable/design.json` and both surface briefs name Archivo. The dated 2026-11-17 landing spec and its approved mock stay as the record of that approval.
+- Verified in Archivo: `yarn typecheck` and lint clean; `yarn test:e2e` (landing) 38 of 38, including the naira fallback check and no overflow or clipped figures at 360, 390, 768 and 1440px; `e2e/app/layout.spec.ts` and `e2e/app/signin-setup.spec.ts` 4 of 4, including no sideways scroll on any app page at 320px.
