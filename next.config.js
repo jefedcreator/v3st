@@ -15,6 +15,12 @@ const privyAliases = {
 
 /** @type {import("next").NextConfig} */
 const config = {
+  experimental: {
+    // Custom webpack aliases disable Next's default build worker. Restore it
+    // so compilation memory is released before lint and type checks run.
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
   turbopack: {
     resolveAlias: privyAliases,
   },
