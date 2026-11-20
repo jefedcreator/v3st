@@ -80,6 +80,7 @@ export function createAppApi(deps: AppApiDeps) {
     query?: Query,
     body?: unknown,
     key?: string,
+    signInFlow = false,
   ): Promise<T> {
     const init: RequestInit = {
       method,
@@ -120,9 +121,11 @@ export function createAppApi(deps: AppApiDeps) {
           ? ""
           : "Something went wrong. Please try again.";
     if (!response.ok) {
-      if (code === "SIGN_IN_REQUIRED" || code === "SIGN_IN_AGAIN" || response.status === 401) {
-        deps.onSignInRequired();
-      }
+      // An ended session sends the browser to sign-in. The sign-in and PIN
+      // reset exchanges answer 401 for a bad or stale Privy token instead, so
+      // they show the API's message where the customer is.
+      const ended = code === "SIGN_IN_REQUIRED" || code === "SIGN_IN_AGAIN" || response.status === 401;
+      if (ended && !signInFlow) deps.onSignInRequired();
       throw new AppApiError(message, response.status, code);
     }
     return (envelope?.data ?? (json as T));
@@ -136,6 +139,8 @@ export function createAppApi(deps: AppApiDeps) {
           "/auth/privy",
           undefined,
           body,
+          undefined,
+          true,
         ),
       logout: () => request<unknown>("POST", "/auth/logout"),
     },
@@ -146,6 +151,8 @@ export function createAppApi(deps: AppApiDeps) {
           "/beta/privy-tokens",
           undefined,
           { email },
+          undefined,
+          true,
         ),
       completeDeposit: (id: string) =>
         request<AppDepositDto>("POST", `/beta/deposits/${id}/complete`),
@@ -181,7 +188,7 @@ export function createAppApi(deps: AppApiDeps) {
       setPin: (body: { pin: string; current_pin?: string }) =>
         request<Record<string, unknown>>("PUT", "/security/pin", undefined, body),
       resetPin: (body: { access_token: string; identity_token: string; pin: string }) =>
-        request<unknown>("POST", "/security/pin/reset", undefined, body),
+        request<unknown>("POST", "/security/pin/reset", undefined, body, undefined, true),
       sessions: () => request<AppDeviceSessionDto[]>("GET", "/security/sessions"),
       revokeSession: (id: string) => request("DELETE", `/security/sessions/${id}`),
       signOutOthers: () => request("POST", "/security/sessions/sign-out-others"),
@@ -299,6 +306,7 @@ function codeFor(status: number): string {
 
 function defaultOnSignInRequired() {
   if (typeof window === "undefined") return;
+  if (window.location.pathname === "/signin") return;
   window.location.assign("/signin?next=" + encodeURIComponent(location.pathname + location.search));
 }
 

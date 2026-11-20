@@ -72,6 +72,22 @@ describe("the app API client", () => {
     expect(signIns()).toBe(1);
   });
 
+  it("keeps a failed sign-in or PIN reset exchange where the customer is", async () => {
+    const { api, signIns } = fakeApi(401, {
+      status: 401,
+      message: "Please sign in again to continue.",
+      code: "SIGN_IN_AGAIN",
+      data: null,
+    });
+    await expect(
+      api.auth.privy({ access_token: "a", identity_token: "i" }),
+    ).rejects.toMatchObject({ code: "SIGN_IN_AGAIN" });
+    await expect(
+      api.security.resetPin({ access_token: "a", identity_token: "i", pin: "1357" }),
+    ).rejects.toMatchObject({ code: "SIGN_IN_AGAIN" });
+    expect(signIns()).toBe(0);
+  });
+
   it("falls back to generic copy for non-JSON failures and network errors", async () => {
     const html = createAppApi({
       fetch: async () =>

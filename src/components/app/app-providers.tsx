@@ -16,8 +16,10 @@ function makeQueryClient(): QueryClient {
       queries: {
         staleTime: 30_000,
         refetchOnWindowFocus: true,
+        // A dropped connection (status 0) and server errors retry twice; an
+        // answered client error never does.
         retry: (failureCount, error) => {
-          if (error instanceof AppApiError && error.status < 500) return false;
+          if (error instanceof AppApiError && error.status > 0 && error.status < 500) return false;
           return failureCount < 2;
         },
       },
@@ -35,15 +37,35 @@ function getQueryClient(): QueryClient {
   return browserQueryClient;
 }
 
+// Frames that arrive together (a resumed stream replays its backlog) are
+// coalesced so each key is invalidated once per burst.
+const INVALIDATE_BATCH_MS = 150;
+
 // Opens the live stream and invalidates queries by area, keeping the session
 // query fresh while the app is mounted.
 function LiveStream({ session }: { session: AppSessionDto | null }) {
   const queryClient = useQueryClient();
+  const pending = React.useRef(new Set<string>());
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    };
+  }, []);
+
   const onAreas = React.useCallback(
     (areas: string[]) => {
-      for (const key of keysForAreas(areas)) {
-        void queryClient.invalidateQueries({ queryKey: key });
-      }
+      for (const area of areas) pending.current.add(area);
+      if (timer.current !== null) return;
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        const batch = [...pending.current];
+        pending.current.clear();
+        for (const key of keysForAreas(batch)) {
+          void queryClient.invalidateQueries({ queryKey: key });
+        }
+      }, INVALIDATE_BATCH_MS);
     },
     [queryClient],
   );
@@ -77,9 +99,16 @@ export function AppProviders({
   );
 }
 
+// The session as the live stream keeps it. This subscribes to the session
+// query (LiveStream owns its fetching), so the unread count and the setup
+// gate update the moment the session is refetched.
 export function useAppSession(): AppSessionDto | null {
-  const queryClient = useQueryClient();
-  return queryClient.getQueryData<AppSessionDto>([...appKeys.session]) ?? null;
+  const { data } = useQuery<AppSessionDto | null>({
+    queryKey: appKeys.session,
+    queryFn: () => appApi.session.get(),
+    enabled: false,
+  });
+  return data ?? null;
 }
 
 export function useOnboardingComplete(): boolean {
