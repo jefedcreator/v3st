@@ -52,7 +52,12 @@ test("every modal traps focus and Escape returns it to the trigger", async ({ pa
   await bell.click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(page.getByRole("button", { name: /Notifications/ })).not.toBeFocused();
+  // Radix hides everything outside an open modal, so check focus from the DOM.
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement)),
+    )
+    .toBe(true);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(bell).toBeFocused();

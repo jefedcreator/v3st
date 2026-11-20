@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test, email, fundCash, PIN, readyAccount } from "./fixtures";
+import { api, expect, test, email, fundCash, PIN, readyAccount } from "./fixtures";
 
 async function fundAndGo(page: Page) {
   await readyAccount(page, email("trade"));
@@ -67,12 +67,17 @@ test("double confirm places one order", async ({ page }) => {
   await page.getByLabel("Amount").fill("2000");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Confirm with PIN" }).click();
-  const confirm = page.getByRole("button", { name: "Confirm", exact: true });
   await page.getByLabel("Your PIN").fill(PIN);
-  await confirm.click();
-  const secondClick = confirm.click({ force: true, noWaitAfter: true });
-  await secondClick.catch(() => undefined);
+  // Two taps in the same tick, before React re-renders the pending state:
+  // both submissions carry the same Idempotency-Key.
+  await page.evaluate(() => {
+    const confirm = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Confirm",
+    );
+    confirm?.click();
+    confirm?.click();
+  });
   await page.waitForURL("**/orders/*");
-  await page.goto("/activity");
-  await expect(page.getByRole("link", { name: /Buy / })).toHaveCount(1);
+  const activity = await api<{ items: { id: string }[] }>(page, "GET", "/activity");
+  expect(activity.items.filter((item) => item.id.startsWith("ord_"))).toHaveLength(1);
 });

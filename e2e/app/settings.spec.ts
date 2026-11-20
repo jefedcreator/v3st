@@ -13,7 +13,7 @@ test("changes the display name", async ({ page }) => {
 test("devices lists this device", async ({ page }) => {
   await readyAccount(page, email("devices"));
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Devices" }).click();
+  await page.getByRole("button", { name: "Devices", exact: true }).click();
   await expect(page.getByText("This device")).toBeVisible();
 });
 

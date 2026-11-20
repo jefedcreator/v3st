@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test as base, type APIResponse, type Page } from "@playwright/test";
+import { expect, test as base, type Page } from "@playwright/test";
 
 export const ORIGIN = "http://127.0.0.1:3108";
 
@@ -38,35 +38,38 @@ export { expect };
 
 type Verb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-// One customer API call through the page's cookie jar. It fails the test
-// unless the API answers 2xx, so a broken setup step never passes silently.
+// One customer API call made by the page itself, so the browser's own cookie
+// rules apply: the production session cookie is Secure, which the browser
+// sends to 127.0.0.1 but Playwright's request client does not. The page must
+// be on the app's origin. It fails the test unless the API answers 2xx, so a
+// broken setup step never passes silently.
 export async function api<T = unknown>(
   page: Page,
   verb: Verb,
   path: string,
   options: { data?: unknown; idempotencyKey?: string } = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { Origin: ORIGIN, accept: "application/json" };
-  const init: { method: Verb; headers: Record<string, string>; data?: string } = {
-    method: verb,
-    headers,
-  };
-  if (options.data !== undefined) {
-    headers["content-type"] = "application/json";
-    init.data = JSON.stringify(options.data);
-  }
-  if (options.idempotencyKey !== undefined) {
-    headers["idempotency-key"] = options.idempotencyKey;
-  }
-  const res: APIResponse = await page.request.fetch(`${ORIGIN}/api/v1/app${path}`, init);
-  const body = (await res.json().catch(() => null)) as { data?: T; message?: string } | null;
-  expect(res.ok(), `${verb} ${path} → ${res.status()} ${body?.message ?? ""}`).toBe(true);
-  return body?.data as T;
+  const result = await page.evaluate(
+    async ({ verb, url, data, idempotencyKey }) => {
+      const headers: Record<string, string> = { accept: "application/json" };
+      const init: RequestInit = { method: verb, headers, credentials: "same-origin" };
+      if (data !== undefined) {
+        headers["content-type"] = "application/json";
+        init.body = JSON.stringify(data);
+      }
+      if (idempotencyKey !== undefined) headers["idempotency-key"] = idempotencyKey;
+      const res = await fetch(url, init);
+      const body = (await res.json().catch(() => null)) as { data?: unknown; message?: string } | null;
+      return { ok: res.ok, status: res.status, body };
+    },
+    { verb, url: `/api/v1/app${path}`, data: options.data, idempotencyKey: options.idempotencyKey },
+  );
+  expect(result.ok, `${verb} ${path} → ${result.status} ${result.body?.message ?? ""}`).toBe(true);
+  return result.body?.data as T;
 }
 
 // An anonymous beta customer, signed in through the simulated issuer and left
-// on /setup. `page.request` shares the browser context's cookie jar, so the
-// API session lands in the browser too.
+// on /setup, the app origin the `api` helper calls from.
 export async function signedIn(page: Page, address: string): Promise<void> {
   await page.goto("/signin");
   await page.getByLabel("Email").fill(address);
@@ -95,7 +98,8 @@ export async function readyAccount(page: Page, address: string): Promise<void> {
   await page.goto("/home");
 }
 
-// Adds test money and waits until it is available cash (the worker settles it).
+// Adds test money and waits until the worker has settled it into cash (the
+// bank-transfer fee comes off, so available cash ends below the amount sent).
 export async function fundCash(page: Page, amountKobo: string): Promise<void> {
   const deposit = await api<{ id: string }>(page, "POST", "/cash/deposits", {
     data: { amount_kobo: amountKobo },
@@ -104,13 +108,10 @@ export async function fundCash(page: Page, amountKobo: string): Promise<void> {
   await api(page, "POST", `/beta/deposits/${deposit.id}/complete`);
   await expect
     .poll(
-      async () => {
-        const cash = await api<{ available_kobo: string | null }>(page, "GET", "/cash");
-        return BigInt(cash.available_kobo ?? "0") >= BigInt(amountKobo);
-      },
+      async () => (await api<{ status: string }>(page, "GET", `/cash/deposits/${deposit.id}`)).status,
       { timeout: 60_000, intervals: [1_000] },
     )
-    .toBe(true);
+    .toBe("completed");
 }
 
 // Joins the first Earn product through the API, which creates its standing

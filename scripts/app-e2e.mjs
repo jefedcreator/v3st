@@ -8,8 +8,9 @@
  *
  * The local test chain comes from the caller's environment, as for
  * `yarn testnet:start` and `yarn testnet:deploy`: TESTNET_RPC_URL (loopback),
- * TESTNET_SIGNER_PRIVATE_KEY and, when not the default `.testnet/`,
- * TESTNET_STATE_DIR. Nothing else is inherited.
+ * and, when they are not the defaults, TESTNET_SIGNER_PRIVATE_KEY (otherwise
+ * the relayer keystore in the state directory) and TESTNET_STATE_DIR
+ * (otherwise `.testnet/`). Nothing else is inherited.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -20,7 +21,9 @@ const PORT = 3108;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 
 const childEnv = {};
-for (const key of ["PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "CI", "FORCE_COLOR"])
+// NODE_OPTIONS carries a larger heap for `next build` (Privy's tree outgrows
+// the default); it is never a credential.
+for (const key of ["PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "CI", "FORCE_COLOR", "NODE_OPTIONS"])
   if (process.env[key] !== undefined) childEnv[key] = process.env[key];
 
 // Blank even optional variables before Next loads dotenv.
@@ -32,6 +35,7 @@ for (const line of readFileSync(new URL("../.env.example", import.meta.url), "ut
 Object.assign(childEnv, {
   NODE_ENV: "production",
   APP_STAGE: "beta",
+  YELLOWCARD_MODE: "simulated",
   PRIVY_MODE: "simulated",
   APP_CUSTOMER_CHAIN: "testnet",
   NEXT_PUBLIC_APP_URL: ORIGIN,
@@ -72,14 +76,13 @@ function assertLoopbackTestnet() {
   if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(rpc) && !/^http:\/\/localhost:\d+$/.test(rpc)) {
     throw new Error("app e2e needs TESTNET_RPC_URL on loopback (chain 31337)");
   }
-  if (!process.env.TESTNET_SIGNER_PRIVATE_KEY) {
-    throw new Error("app e2e needs TESTNET_SIGNER_PRIVATE_KEY for the local test chain");
-  }
 }
 
 // Test tooling only: keeps the seeded stock's reference price fresh so the
-// app never shows it as "prices updating" mid-run.
+// app never shows it as "prices updating" mid-run, and keeps the local chain
+// mining.
 const REFRESH_MS = 20_000;
+const MINE_MS = 2_000;
 function startReferenceRefresher() {
   const { PrismaClient } = require("../generated/prisma");
   const prisma = new PrismaClient({ datasources: { db: { url: childEnv.DATABASE_URL } } });
@@ -95,8 +98,26 @@ function startReferenceRefresher() {
   };
   void refresh();
   const timer = setInterval(() => void refresh(), REFRESH_MS);
+  // Anvil mines only on transactions; onchain steps wait for confirmations
+  // (two on chain 31337), so an idle chain would hold them forever. An empty
+  // block every two seconds keeps confirmations coming, as the Vitest suites
+  // do by mining after each step.
+  const rpc = process.env.TESTNET_RPC_URL;
+  const mine = async () => {
+    try {
+      await fetch(rpc, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "evm_mine", params: [] }),
+      });
+    } catch (error) {
+      console.error("app-e2e: evm_mine failed", error);
+    }
+  };
+  const miner = setInterval(() => void mine(), MINE_MS);
   return async () => {
     clearInterval(timer);
+    clearInterval(miner);
     await prisma.$disconnect();
   };
 }
@@ -112,7 +133,7 @@ if (mode === "prepare") {
   });
   if (migrated.status !== 0) process.exit(migrated.status ?? 1);
   const seed = spawnSync(process.execPath, [
-    require.resolve("tsx/dist/cli.mts"),
+    require.resolve("tsx/cli"),
     "scripts/app-e2e-seed.ts",
   ], { stdio: "inherit", env: childEnv });
   process.exit(seed.status ?? 1);

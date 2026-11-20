@@ -22,6 +22,7 @@ export default defineConfig({
     command: "node scripts/app-e2e.mjs start",
     url: "http://127.0.0.1:3108",
     reuseExistingServer: false,
-    timeout: 240_000,
+    // `start` runs a full `next build` first; on a laptop that takes minutes.
+    timeout: 1_200_000,
   },
 });
