@@ -6,18 +6,24 @@ import { fileURLToPath } from "node:url";
 
 import "./src/env.js";
 
-// Privy's fiat onramp is never used; see src/stubs/stripe-crypto.js.
-const STRIPE_CRYPTO_STUB = "./src/stubs/stripe-crypto.js";
+// The beta uses Privy for email sign-in and PIN reset. Its optional Farcaster
+// wallet and Stripe onramp integrations still need to resolve at build time.
+const privyAliases = {
+  "@farcaster/mini-app-solana": "./src/stubs/farcaster-mini-app-solana.js",
+  "@stripe/crypto": "./src/stubs/stripe-crypto.js",
+};
 
 /** @type {import("next").NextConfig} */
 const config = {
   turbopack: {
-    resolveAlias: { "@stripe/crypto": STRIPE_CRYPTO_STUB },
+    resolveAlias: privyAliases,
   },
   webpack(webpackConfig) {
-    webpackConfig.resolve.alias["@stripe/crypto"] = fileURLToPath(
-      new URL(STRIPE_CRYPTO_STUB, import.meta.url),
-    );
+    for (const [name, path] of Object.entries(privyAliases)) {
+      webpackConfig.resolve.alias[name] = fileURLToPath(
+        new URL(path, import.meta.url),
+      );
+    }
     return webpackConfig;
   },
   async rewrites() {
