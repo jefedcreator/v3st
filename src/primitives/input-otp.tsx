@@ -15,7 +15,7 @@ function InputOTP({
   return (
     <OTPInput
       data-slot="input-otp"
-      containerClassName={cn("has-disabled:opacity-50 flex items-center gap-2", containerClassName)}
+      containerClassName={cn("has-disabled:opacity-50 flex w-full items-center gap-2", containerClassName)}
       className={cn("disabled:cursor-not-allowed", className)}
       {...props}
     />
@@ -26,7 +26,7 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="input-otp-group"
-      className={cn("flex items-center gap-2", className)}
+      className={cn("flex min-w-0 flex-1 items-center gap-2", className)}
       {...props}
     />
   );
@@ -47,7 +47,7 @@ function InputOTPSlot({
       data-slot="input-otp-slot"
       data-active={isActive}
       className={cn(
-        "border-input bg-surface relative flex size-14 items-center justify-center rounded-md border text-2xl tabular-nums transition-[border-color] outline-none first:rounded-l-md last:rounded-r-md aria-invalid:border-loss data-[active=true]:border-gain data-[active=true]:outline-2 data-[active=true]:-outline-offset-2 data-[active=true]:outline-gain",
+        "border-input bg-surface relative flex h-14 max-w-14 min-w-0 flex-1 items-center justify-center rounded-md border text-2xl tabular-nums transition-[border-color] outline-none first:rounded-l-md last:rounded-r-md aria-invalid:border-loss data-[active=true]:border-gain data-[active=true]:outline-2 data-[active=true]:-outline-offset-2 data-[active=true]:outline-gain",
         className,
       )}
       {...props}
@@ -55,7 +55,7 @@ function InputOTPSlot({
       {char}
       {hasFakeCaret && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="bg-foreground h-5 w-px animate-caret-blink duration-1000" />
+          <div className="bg-gain h-6 w-px motion-safe:animate-caret-blink" />
         </div>
       )}
     </div>

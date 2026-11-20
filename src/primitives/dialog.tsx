@@ -55,7 +55,7 @@ function DialogContent({
           "inset-x-0 bottom-0 max-h-[92dvh] rounded-t-[28px] border-t border-stroke pb-[calc(env(safe-area-inset-bottom)+24px)]",
           "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
           "motion-reduce:data-[state=closed]:slide-out-to-bottom-0 motion-reduce:data-[state=open]:slide-in-from-bottom-0",
-          "sm:left-1/2 sm:top-1/2 sm:max-h-[92dvh] sm:w-[calc(100%-2rem)] sm:max-w-[480px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[28px] sm:border",
+          "sm:top-1/2 sm:right-auto sm:bottom-auto sm:left-1/2 sm:max-h-[92dvh] sm:w-[calc(100%-2rem)] sm:max-w-[480px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[28px] sm:border sm:pb-6",
           "sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=open]:slide-in-from-bottom-0",
           "p-6 pt-5",
           className,
