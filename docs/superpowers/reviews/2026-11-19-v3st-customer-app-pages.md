@@ -120,7 +120,7 @@ Recorded deviations (kept):
 | `yarn test` findings fixed | Task 3's three route tests sat **inside** the previous `it(...)`, so Vitest refused to run them; they are now at `describe` level and pass. `tests/app/catalog.test.ts` hard-coded its chart snapshots at 2026-11-17, so its 1D range only passed that day; the snapshots are now anchored to the current time (test-only). |
 | `yarn test` prerequisite | Export `APP_STAGE=beta`. The global setup's `rpcRequest` asserts the beta stage, and `.env` is not loaded into the setup process, so without it the setup reports "Local testnet RPC … did not become ready". |
 | `yarn test:e2e:app` (after `yarn app-e2e prepare`) | 21 of 22 pass on the final full run (18.2 min; private Anvil on 18545, state in a scratch `TESTNET_STATE_DIR`, `v3st_e2e_test` database). The failure is "withdraw works once the position is active": its Earn join reverted on chain with `insufficient balance`, so the position went to `needs_review`. The same test passes when run alone (22.5s), so this is a **backend follow-up**: a second customer's join, seconds after another on the same Hydrex pool, can revert at the liquidity deposit even though its spot buy finalized first. `tests/app/earn.test.ts` mints settlement straight into each account, which hides this path. Not changed here: the assignment forbids changing financial behaviour. |
-| Impeccable finish review, captures and documenter | **Not run in this pass**: the operator asked for the gates. The app stack now runs locally (above), so the captures and the fresh-context finish review against the sketch can follow. The `DESIGN_SYSTEM.md` "Customer app" section from the first pass stands, and its Home bullet matches the rebuilt line. |
+| Impeccable finish review, captures and documenter | Run; see "Impeccable finish review" below. Final disposition `ship`, scoped to the review's fixes. |
 
 ## Typeface change (2026-11-20, operator decision)
 
@@ -132,3 +132,29 @@ V3ST and the sibling product Sara both used Bricolage Grotesque. Sara adopted it
 - The Home sketch, the finish review's critique reference, is re-rendered in Archivo with the real wordmark.
 - `PRODUCT.md`, `DESIGN_SYSTEM.md`, `FRONTEND_PATTERNS_GUIDE.md`, `.impeccable/design.json` and both surface briefs name Archivo. The dated 2026-11-17 landing spec and its approved mock stay as the record of that approval.
 - Verified in Archivo: `yarn typecheck` and lint clean; `yarn test:e2e` (landing) 38 of 38, including the naira fallback check and no overflow or clipped figures at 360, 390, 768 and 1440px; `e2e/app/layout.spec.ts` and `e2e/app/signin-setup.spec.ts` 4 of 4, including no sideways scroll on any app page at 320px.
+
+## Backend follow-ups found while capturing for the finish review (2026-11-20)
+
+Not changed here: the assignment forbids changing financial behaviour.
+
+- **Concurrent on-chain jobs collide on one customer's account nonce.** A cash buy placed seconds before an Earn join made two spot steps run at once; the second reverted with `bad nonce`, the strategy step failed with `PREPARATORY_FAILED`, and the position went to `needs_review`. The earlier browser-suite revert (`insufficient balance`) is likely the same family. Each customer's operations should be serialised per account.
+- **Leave Earn's preview can return pool-wide amounts.** In one capture run, a ₦6,000 position's exit quote (`minimum_outputs`) gave "999,975.075621 shares … plus ₦3,100,088,875.06" (`appEarnService.withdrawPreview` → `strategyService.quote(…, { action: "exit" })`), while the position's value (₦5,803.63) was right. A later run on a pool with more positions quoted a sane "1.599937 shares … plus ₦4,960.21", so it depends on the pool's state. The app formats what the API returns.
+
+## Impeccable finish review (2026-11-20)
+
+Impeccable 4.x was installed for this pass. The direction was locked by the operator's surface round (`seed:bc21f5b0c062fffb`, confirmed with `concept-seed --check-seed`); the build was code-led.
+
+- **Captures.** The app ran locally on the e2e stack (isolated PostgreSQL, private Anvil, the worker). Two synthetic beta accounts were used: one with settled cash, a completed buy, an Earn position, a payout choice, a pending pay-by-transfer order and an unpaid deposit; and one fresh after setup. All 13 pages were captured at 390×844 and 1440×900, the 18 modals at 390, and the landing as the world's reference, into `.impeccable/review/` (not committed). Captures were checked through labelled contact sheets.
+- **Detector.** `impeccable detect --json` on the app targets: 0 findings, before and after the fixes.
+- **Finish reviewer.** A fresh-context `impeccable-finish-reviewer` ran with the request, the operator decisions, the direction contract, the landing as the world's bar (no catalog card at surface scope) and the Home sketch as the critique reference. Round 1: `disposition: fix`, with eight material fixes. Verdict pass: six resolved; fix 3 partial and 7b open, so `fix`. Final verdict pass (the plan's second round): **`disposition: ship`**, scoped to the scored fixes, not a fresh full review.
+  1. The empty Home's "Add money to get started." moved above Now, and the duplicate link was dropped.
+  2. A zero change reads "₦0 today", unsigned and muted. A null change still drops the line: an adaptation citing spec §Home.
+  3. Finished line rows carry their Lagos time ("Today, 19:45 · …"); transfer rows count down ("4h 0m left"), including unpaid deposits through their deposit's deadline; Activity rows show their time.
+  4. The duplicate "Automatic actions" row label is gone. Settings groups and Earn products stay cards: an adaptation citing spec §Visual system ("Cards are kept for … Earn products and the settings groups").
+  5. Setup's "Step 1 of 4 · …" kicker (a craft-floor ban, even though the spec pinned the string) became a progress hairline with "Step 1 of 4" below the heading.
+  6. Each money-modal step is named once, in the dialog description; the PIN step's second heading is visually removed (kept for screen readers). Document sheets no longer repeat their title.
+  7. The Friday row no longer promises a payout below the minimum ("payouts start at ₦2,000"). **Operator-approved exception to the one-backend-route rule:** the activity feed's subtitle for a waiting pay-by-transfer order now reads "Transfer of ₦10,000 to buy …" instead of the order page's "to the account below". Copy only, pinned in `tests/app/orders-waiting.test.ts`.
+  8. Earnings states the payout minimum once.
+- **Ceiling, applied:** sign-in and setup carry a faint, static signal-green wash at the top; the signed-in app stays plain.
+- **Not verified by the reviewer:** the line's slide across Now (a motion, not visible in stills), the order receipt's new copy, most modal step descriptions beyond the trade and document sheets, and the desktop captures other than Home.
+- **Documenter.** `impeccable-documenter` merges the shipped system into `DESIGN_SYSTEM.md` and `.impeccable/design.json` (never `DESIGN.md`).
