@@ -9,7 +9,7 @@ import { NotificationsButton } from "./notifications-button";
 // right. From 768px only the bell and account show.
 export function TopBar() {
   return (
-    <div className="bg-void/85 supports-[backdrop-filter]:bg-void/60 sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-stroke px-4 backdrop-blur-sm">
+    <div className="bg-void sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-stroke px-4">
       <Link href="/home" className="flex min-h-11 items-center gap-2.5 rounded-full md:hidden">
         <Wordmark className="h-4" />
         <Badge>Beta</Badge>

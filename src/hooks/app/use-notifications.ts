@@ -6,8 +6,9 @@ import { appApi } from "@/utils/app-api";
 import { appKeys } from "@/hooks/app/query-keys";
 
 // The inbox, paged by cursor, plus the read/unread actions.
-export function useNotificationsInfinite() {
+export function useNotificationsInfinite(enabled: boolean) {
   return useInfiniteQuery({
+    enabled,
     queryKey: [...appKeys.notifications, "list"],
     queryFn: ({ pageParam }) => appApi.notifications.list(pageParam),
     initialPageParam: undefined as string | undefined,

@@ -25,9 +25,9 @@ export function AppChrome({ children }: { children: ReactNode }) {
         <main
           id="app-main"
           className={cn(
-            "mx-auto w-full max-w-2xl flex-1 px-4 pt-2",
+            "mx-auto w-full max-w-[720px] flex-1 px-4 pt-2",
             "pb-[calc(64px+env(safe-area-inset-bottom)+24px)]",
-            "md:max-w-3xl md:px-8 md:pb-12",
+            "md:px-8 md:pb-12",
           )}
         >
           {children}
