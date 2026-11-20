@@ -8,11 +8,19 @@ export function chartPath(
   if (points.length < 2) return null;
 
   const xs = points.map((p) => new Date(p.t).getTime());
-  const ys = points.map((p) => Number(BigInt(p.price_kobo)));
+  // Exact extremes for display; Number() only for plotting.
+  const prices = points.map((p) => BigInt(p.price_kobo));
+  let minKobo = prices[0]!;
+  let maxKobo = prices[0]!;
+  for (const price of prices) {
+    if (price < minKobo) minKobo = price;
+    if (price > maxKobo) maxKobo = price;
+  }
+  const ys = prices.map((price) => Number(price));
   const t0 = xs[0]!;
   const t1 = xs[xs.length - 1]!;
-  const min = Math.min(...ys);
-  const max = Math.max(...ys);
+  const min = Number(minKobo);
+  const max = Number(maxKobo);
 
   function coord(value: number): string {
     const rounded = Math.round(value * 10) / 10;
@@ -24,7 +32,7 @@ export function chartPath(
     .map((p, i) => {
       const x = t1 === t0 ? 0 : ((xs[i]! - t0) / (t1 - t0)) * width;
       let y: number;
-      if (max === min) {
+      if (maxKobo === minKobo) {
         y = height / 2;
       } else {
         y = (height - 0.08 * height) - ((ys[i]! - min) / (max - min)) * (height - 0.16 * height);
@@ -37,7 +45,7 @@ export function chartPath(
     d,
     first: points[0]!.price_kobo,
     last: points[points.length - 1]!.price_kobo,
-    min: String(min),
-    max: String(max),
+    min: minKobo.toString(),
+    max: maxKobo.toString(),
   };
 }

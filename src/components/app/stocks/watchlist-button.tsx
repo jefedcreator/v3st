@@ -23,6 +23,8 @@ export function WatchlistButton({ stock }: { stock: AppStockDetailDto }) {
         try {
           const next = await toggle(onWatchlist);
           setOnWatchlist(next.on_watchlist);
+        } catch {
+          // The star keeps its last known state; the list refetches on focus.
         } finally {
           setPending(false);
         }

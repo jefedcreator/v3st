@@ -19,3 +19,14 @@ it("draws a chart only from two or more points", () => {
     chartPath([pts[0]!, { t: "2026-11-19T12:00:00Z", price_kobo: "100000" }], 300, 100)!.d,
   ).toBe("M0,50 L300,50");
 });
+
+it("keeps the extremes exact beyond float precision", () => {
+  const big = [
+    { t: "2026-11-19T08:00:00Z", price_kobo: "9007199254740993" },
+    { t: "2026-11-19T12:00:00Z", price_kobo: "9007199254740995" },
+  ];
+  expect(chartPath(big, 300, 100)).toMatchObject({
+    min: "9007199254740993",
+    max: "9007199254740995",
+  });
+});

@@ -1,49 +1,54 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 
 import type { AppStockListItemDto } from "@/types/app";
 import { useNow } from "@/hooks/app/use-now";
 import { useStocksQuery } from "@/hooks/app/use-stocks";
-import { Input, Label } from "@/primitives";
+import { Input, Label, Skeleton } from "@/primitives";
 import { ListTabs, StockRow } from "./stock-row";
 
-// Find a stock: search plus the All / Watchlist switch, both in the URL.
+// The URL keeps the search and the switch, written with replaceState so the
+// page never re-renders on the server for a keystroke (as fluid does).
+function writeUrl(q: string, watchlist: boolean) {
+  const params = new URLSearchParams();
+  if (q !== "") params.set("q", q);
+  if (watchlist) params.set("watchlist", "true");
+  const suffix = params.toString() === "" ? "" : `?${params.toString()}`;
+  window.history.replaceState(window.history.state, "", `/stocks${suffix}`);
+}
+
+// Find a stock: search plus the All / Watchlist switch.
 export function StocksPage({
   q,
-  watchlist,
+  watchlist: initialWatchlist,
   initial,
 }: {
   q: string;
   watchlist: boolean;
   initial?: AppStockListItemDto[];
 }) {
-  const router = useRouter();
   const now = useNow(60_000);
   const [text, setText] = React.useState(q);
-  const [debounced, setDebounced] = React.useState(q);
+  const [query, setQuery] = React.useState(q.trim());
+  const [watchlist, setWatchlist] = React.useState(initialWatchlist);
 
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebounced(text);
-    }, 250);
+    const timer = setTimeout(() => setQuery(text.trim()), 250);
     return () => clearTimeout(timer);
   }, [text]);
 
-  function writeUrl(nextQ: string, nextWatchlist: boolean) {
-    const params = new URLSearchParams();
-    if (nextQ !== "") params.set("q", nextQ);
-    if (nextWatchlist) params.set("watchlist", "true");
-    const suffix = params.toString() === "" ? "" : `?${params.toString()}`;
-    window.history.replaceState(null, "", `/stocks${suffix}`);
-    void router;
-  }
+  React.useEffect(() => {
+    writeUrl(query, watchlist);
+  }, [query, watchlist]);
 
-  const { data } = useStocksQuery(
-    { q: debounced === "" ? undefined : debounced, watchlist: watchlist || undefined },
-    initial,
+  // The server's list belongs to the server's search only.
+  const isInitialKey = query === q.trim() && watchlist === initialWatchlist;
+  const { data, isPending, error } = useStocksQuery(
+    { q: query === "" ? undefined : query, watchlist: watchlist || undefined },
+    isInitialKey ? initial : undefined,
   );
+  const stocks = data ?? [];
 
   return (
     <div className="flex flex-col gap-4 pt-4">
@@ -54,28 +59,35 @@ export function StocksPage({
           id="stock-search"
           type="search"
           placeholder="Apple, NVIDIA…"
+          autoComplete="off"
           value={text}
           onChange={(event) => setText(event.target.value)}
         />
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <ListTabs
-          watchlist={watchlist}
-          onChange={(next) => {
-            writeUrl(debounced, next);
-            router.replace(`/stocks${next ? "?watchlist=true" : ""}`);
-          }}
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ListTabs watchlist={watchlist} onChange={setWatchlist} />
         <p className="text-subtle text-[13px]">Beta prices in naira</p>
       </div>
-      <div className="flex flex-col">
-        {(data ?? []).map((stock) => (
+      <div className="flex flex-col" aria-busy={isPending}>
+        {isPending && (
+          <div className="flex flex-col gap-3" aria-hidden="true">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        )}
+        {error !== null && stocks.length === 0 && (
+          <p role="status" className="text-loss py-6 text-sm">
+            {error.message}
+          </p>
+        )}
+        {stocks.map((stock) => (
           <StockRow key={stock.id} stock={stock} now={now} />
         ))}
-        {(data ?? []).length === 0 && debounced !== "" && (
-          <p className="text-muted-foreground py-6 text-sm">No stocks match &quot;{debounced}&quot;.</p>
+        {!isPending && error === null && stocks.length === 0 && query !== "" && (
+          <p className="text-muted-foreground py-6 text-sm">No stocks match &quot;{query}&quot;.</p>
         )}
-        {(data ?? []).length === 0 && debounced === "" && watchlist && (
+        {!isPending && error === null && stocks.length === 0 && query === "" && watchlist && (
           <p className="text-muted-foreground py-6 text-sm">
             Your watchlist is empty. Tap the star on a stock to add it.
           </p>

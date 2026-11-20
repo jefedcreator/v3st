@@ -3,7 +3,8 @@
 import * as React from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/primitives";
 import type { AppChartDto, ChartRange } from "@/types/app";
-import { formatChangeBps } from "@/utils/format";
+import { cn } from "@/utils/cn";
+import { formatChangeBps, formatNaira } from "@/utils/format";
 import { chartPath } from "./chart-path";
 
 const RANGES: ChartRange[] = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
@@ -56,7 +57,7 @@ export function PriceChart({
             viewBox={`0 0 ${width} ${height}`}
             className="h-40 w-full"
             role="img"
-            aria-label={`Price from ${path.first} to ${path.last}`}
+            aria-label={`Price from ${formatNaira(path.first)} to ${formatNaira(path.last)}`}
             preserveAspectRatio="none"
           >
             <path
@@ -67,10 +68,15 @@ export function PriceChart({
               vectorEffect="non-scaling-stroke"
             />
           </svg>
-          <p className="text-muted-foreground text-sm">
+          <p
+            className={cn(
+              "text-sm tabular-nums",
+              chart.change_bps === null ? "text-muted-foreground" : up ? "text-gain" : "text-loss",
+            )}
+          >
             {chart.change_bps === null
               ? "Change unavailable"
-              : `Change ${formatChangeBps(chart.change_bps)}`}
+              : `${formatChangeBps(chart.change_bps)} over ${range}`}
           </p>
         </div>
       )}
