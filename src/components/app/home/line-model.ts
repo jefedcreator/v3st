@@ -1,4 +1,4 @@
-import { formatLagosDateTime, formatNaira, formatSignedNaira } from "@/utils/format";
+import { formatLagosDateTime, formatLagosDay, formatNaira, formatSignedNaira } from "@/utils/format";
 import type {
   AppActivityItemDto,
   AppHomeDto,
@@ -13,6 +13,7 @@ export type LineItem = {
   key: string;
   title: string;
   detail: string;
+  // The right-hand figure: an amount, or the payout date on the Friday node.
   amountText: string | null;
   tone: LineTone;
   href: string;
@@ -20,6 +21,15 @@ export type LineItem = {
 };
 
 export type MoneyLineModel = { upcoming: LineItem[]; earlier: LineItem[] };
+
+// The id a row keeps while it crosses Now. An open order is listed as
+// `order:{id}` above the marker and lands below it as its activity item,
+// `activity:ord_{id}`; both share one id so the row slides across instead
+// of vanishing and reappearing.
+export function crossingId(key: string): string {
+  if (key.startsWith("order:")) return `activity:ord_${key.slice("order:".length)}`;
+  return key;
+}
 
 const WAITING_ORDER_STATUSES = new Set(["waiting_for_payment", "waiting_for_price"]);
 const PROGRESS_TONES: Record<AppProgress, LineTone> = {
@@ -76,13 +86,15 @@ function actionItem(item: AppActionItemDto): LineItem {
 }
 
 // Home's money line, exactly: what is coming above Now, what is done below.
+// `now` is part of the contract so a caller re-derives the line each minute;
+// the API's statuses, not the clock, decide which side an item is on.
 export function buildMoneyLine(
   home: AppHomeDto,
   activity: AppActivityItemDto[],
   now: Date,
 ): MoneyLineModel {
-
-  void now;  const upcoming: LineItem[] = [];
+  void now;
+  const upcoming: LineItem[] = [];
 
   // 1. The Friday payout node is always first when there is Earn value.
   const hasEarnValue =
@@ -102,7 +114,7 @@ export function buildMoneyLine(
       key: "friday",
       title: "Friday payout",
       detail,
-      amountText: null,
+      amountText: formatLagosDay(home.earnings.next_payout_on),
       tone: "waiting",
       href: "/earnings",
       due: `${home.earnings.next_payout_on}T07:00:00Z`,

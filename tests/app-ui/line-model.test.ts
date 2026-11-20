@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { buildMoneyLine } from "@/components/app/home/line-model";
+import { buildMoneyLine, crossingId } from "@/components/app/home/line-model";
 import type {
   AppActionItemDto,
   AppActivityItemDto,
@@ -153,4 +153,20 @@ it("keeps five finished items below Now, with failures marked", () => {
     "activity:dep_4",
   ]);
   expect(line.earlier[0]!.tone).toBe("failed");
+});
+
+it("gives an order the same crossing id above and below Now", () => {
+  const above = order({ id: "A", status: "processing" });
+  const upcoming = buildMoneyLine(home({ open_orders: [above] }), [], NOW).upcoming[0]!;
+  const earlier = buildMoneyLine(home(), [act({ id: "ord_A", status: "completed" })], NOW).earlier[0]!;
+  expect(crossingId(upcoming.key)).toBe(crossingId(earlier.key));
+  expect(crossingId("activity:dep_1")).toBe("activity:dep_1");
+});
+
+it("dates the Friday payout node", () => {
+  const h = home({
+    earn_kobo: "477040",
+    earnings: { this_week_kobo: "124000", next_payout_on: "2026-11-20", choice: "payout" },
+  });
+  expect(buildMoneyLine(h, [], NOW).upcoming[0]!.amountText).toBe("Fri 20 Nov");
 });

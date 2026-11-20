@@ -1,17 +1,20 @@
 "use client";
 
-import Link from "next/link";
+import * as React from "react";
 
 import type { AppActivityPageDto, AppHomeDto } from "@/types/app";
 import type { MoneyLimits } from "@/types/app-ui";
 import { useOnboardingComplete } from "@/components/app/app-providers";
-import { useHomeQuery, useActivityPreviewQuery } from "./use-home";
+import { AddMoneyDialog } from "@/components/app/cash/add-money-dialog";
+import { useActivityPreviewQuery, useHomeQuery } from "@/hooks/app/use-home";
 import { useNow } from "@/hooks/app/use-now";
 import { buildMoneyLine } from "./line-model";
 import { HoldingsList } from "./holdings-list";
 import { MoneyLine } from "./money-line";
 import { TotalBand } from "./total-band";
 
+// Home: where your money stands (the total) and what is moving (the line),
+// with your stocks under the fold. One Add money modal serves both pills.
 export function HomePage({
   home,
   activity,
@@ -22,21 +25,19 @@ export function HomePage({
   limits: MoneyLimits;
 }) {
   const complete = useOnboardingComplete();
-  const homeQuery = useHomeQuery(home);
-  const activityQuery = useActivityPreviewQuery(activity);
+  const { data: homeData } = useHomeQuery(home);
+  const { data: activityData } = useActivityPreviewQuery(activity);
   const now = useNow(60_000);
-  const model = buildMoneyLine(homeQuery.data, activityQuery.data.items, now);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const model = buildMoneyLine(homeData, activityData.items, now);
 
   return (
-    <div className="flex flex-col gap-8">
-      <TotalBand home={homeQuery.data} limits={limits} />
-      <MoneyLine model={model} complete={complete} />
-      <p>
-        <Link href="/activity" className="text-gain text-[15px] underline-offset-4 hover:underline">
-          See all activity
-        </Link>
-      </p>
-      <HoldingsList home={homeQuery.data} />
+    <div className="flex flex-col gap-6">
+      <h1 className="sr-only">Home</h1>
+      <TotalBand home={homeData} onAddMoney={() => setAddOpen(true)} />
+      <MoneyLine model={model} complete={complete} onAddMoney={() => setAddOpen(true)} />
+      <HoldingsList home={homeData} />
+      <AddMoneyDialog open={addOpen} onOpenChange={setAddOpen} limits={limits} />
     </div>
   );
 }
