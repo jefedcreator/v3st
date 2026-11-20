@@ -15,8 +15,10 @@ export function Timeline({ steps }: { steps: AppTimelineStepDto[] }) {
           <span
             aria-hidden="true"
             className={cn(
-              "absolute top-0.5 -left-3.5 flex -translate-x-1/2 items-center justify-center rounded-full",
-              step.done ? "bg-signal size-3.5" : "border-stroke bg-surface size-3.5 border-[1.5px]",
+              // Centred on the spine: the spine's centre is 13px into the
+              // list, 19px left of each item's content edge.
+              "absolute top-1 left-[-19px] -translate-x-1/2 rounded-full",
+              step.done ? "bg-signal size-3.5" : "border-control-border bg-void size-3.5 border-2",
             )}
           />
           <span className="flex flex-col gap-0.5">

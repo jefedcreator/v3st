@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { AppApiError } from "@/utils/app-api";
 import { formatNaira } from "@/utils/format";
 import type { AppPayToDto } from "@/types/app";
 import { BetaLine } from "@/components/app/beta-line";
@@ -26,8 +27,10 @@ export function TransferCard({
     setError(null);
     try {
       await onCompleteBeta();
-    } catch {
-      setError("That didn't go through. Try again.");
+    } catch (caught) {
+      setError(
+        caught instanceof AppApiError ? caught.message : "Something went wrong. Please try again.",
+      );
     }
     setPending(false);
   }
