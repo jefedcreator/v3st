@@ -110,7 +110,7 @@ These rules trip agents up on this assignment:
 - **The app stays a beta.** Test money only, simulated Privy or Privy's sandbox app, no deployment, and no email, SMS or push.
   - Don't change financial behaviour, provider modes or `policy.ts`.
   - The only backend change is the beta route in Task 3 (`POST /api/v1/app/beta/orders/[id]/complete-transfer`), plus the two document types.
-- **Commands.** The app's pure-logic tests live in `tests/app-ui/` (`yarn test`). Its browser suite is separate: start the local chain (`yarn testnet:start`, then `yarn testnet:deploy`), export `TEST_DATABASE_URL` (ending in `_test`), `TESTNET_RPC_URL` (loopback, chain 31337) and `TESTNET_SIGNER_PRIVATE_KEY`, then run `yarn app-e2e prepare` and `yarn test:e2e:app` (port 3108). The launcher inherits only those chain settings. The landing suite stays `yarn test:e2e` on port 3107; Playwright's default config ignores `e2e/app/**`.
+- **Commands.** The app's pure-logic tests live in `tests/app-ui/` (`yarn test`). Its browser suite is separate: start the local chain (`yarn testnet:start`, then `yarn testnet:deploy`), export `TEST_DATABASE_URL` (ending in `_test`) and `TESTNET_RPC_URL` (loopback, chain 31337; the relayer key comes from `.testnet/` unless `TESTNET_SIGNER_PRIVATE_KEY` is set), then run `yarn app-e2e prepare` and `yarn test:e2e:app` (port 3108). The launcher inherits only those chain settings. The landing suite stays `yarn test:e2e` on port 3107; Playwright's default config ignores `e2e/app/**`.
 
 ## Skills
 

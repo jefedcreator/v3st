@@ -105,12 +105,11 @@ The app's browser suite needs the isolated `_test` database and the local test c
 ```bash
 export TEST_DATABASE_URL=postgresql://…/v3st_test   # must end in _test
 export TESTNET_RPC_URL=http://127.0.0.1:8545         # loopback, chain 31337
-export TESTNET_SIGNER_PRIVATE_KEY=0x…                # the local chain's test signer
 yarn app-e2e prepare   # migrates and seeds the TSTA test stock
 yarn test:e2e:app
 ```
 
-The launcher clears every other provider variable, and keeps the seeded stock's reference price fresh every 20 seconds while it runs.
+The relayer key comes from the `.testnet/` keystore that `yarn testnet:deploy` uses, or from `TESTNET_SIGNER_PRIVATE_KEY` when set. Run `yarn testnet:deploy` with `DATABASE_URL` set to the same `_test` database, so the network row lands there. The launcher clears every other provider variable, and keeps the seeded stock's reference price fresh every 20 seconds while it runs.
 
 It builds and serves the app on `http://127.0.0.1:3108` with the worker and simulated Privy.
 
