@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/utils/cn";
-import { ProductLogo } from "@/components/product-logo";
+import { Logo } from "@/components/logo";
 import { Badge } from "@/primitives";
 import { APP_TABS, SETTINGS_ITEM, SIDEBAR_EXTRA, isActive } from "./nav";
 
@@ -15,7 +15,7 @@ export function Sidebar() {
   return (
     <div className="border-stroke bg-void sticky top-0 flex h-dvh w-62 shrink-0 flex-col border-r px-4 py-5">
       <Link href="/home" className="mb-6 flex min-h-11 items-center gap-2.5 px-2">
-        <ProductLogo className="h-8 w-auto text-gain" />
+        <Logo />
         <Badge>Beta</Badge>
       </Link>
       <nav aria-label="App" className="flex flex-1 flex-col gap-1">

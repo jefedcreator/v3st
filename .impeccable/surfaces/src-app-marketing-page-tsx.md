@@ -29,7 +29,7 @@ OWN-WORLD: Green-tinted void ground (#020604) with layered surfaces (#08100C) an
 
 STORY: A first-time Nigerian investor understands they can put ₦1,000 into companies they know, sees real beta prices in naira, learns that Earn is optional and can earn nothing, checks the safeguards, and joins the waitlist.
 
-FIRST VIEWPORT: A centred composition on the green fluid field. "Invest. Earn. Harvest." at 6rem, weight 300, white. A one-sentence subline. The waitlist form directly beneath: one pill holding the email field and a green "Join the waitlist" button, with beta and privacy microcopy under it. A three-counter rail along the bottom. The header holds the V3ST grain mark and Beta chip on the left, Katana's centred pill navigation, and a pause control at the right edge; its "Join the waitlist" pill stays hidden until the hero hands over.
+FIRST VIEWPORT: A centred composition on the green fluid field. "Invest. Earn. Harvest." at 6rem, weight 300, white. A one-sentence subline. The waitlist form directly beneath: one pill holding the email field and a green "Join the waitlist" button, with beta and privacy microcopy under it. A three-counter rail along the bottom. The header holds the V3ST logo (grain mark beside the name) and Beta chip on the left, Katana's centred pill navigation, and a pause control at the right edge; its "Join the waitlist" pill stays hidden until the hero hands over.
 
 FORM: Katana's landing grammar, pinned by the operator; position 1 of 1; seed: none (unavailable)
 

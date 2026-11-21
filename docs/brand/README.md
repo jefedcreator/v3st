@@ -1,6 +1,17 @@
 # V3ST logo
 
-Grain is the product logo. The landing and app use its mint treatment, as do the favicon and social image. The original green artwork is in [v3st-grain.svg](v3st-grain.svg). The preview records the three options drawn on 2026-11-20, alongside the former [V3ST wordmark](v3st-wordmark.svg).
+The product logo is a lockup: the grain mark beside the name *V3ST*, set the way Parcours sets its own.
+
+![The lockup large on void, at the 22, 19 and 18px sizes the product uses, and in one ink on signal green, white and mint](v3st-lockup.png)
+
+- **In the product** it is `Logo` in `src/components/logo.tsx`. One font-size sizes the whole lockup: the mark is 1.35em tall and sits 0.32em from the name.
+- **The name is live text**, Archivo 700 at −0.03em, so it stays selectable and screen readers read it as "V3ST". Nothing is outlined, so there is no static lockup file. Use the preview above to see it, and the mark files for anything outside the product.
+- **The mark is mint** (`#3DDC97`) beside a white name on the dark ground. On signal green, white or mint, draw both in one ink (`accent={false}`).
+- **The mark alone** is the favicon (`src/app/icon.svg`, mint on void). The original green artwork is [v3st-grain.svg](v3st-grain.svg). The social image sets the lockup above the headline.
+
+## How the grain was chosen
+
+The preview below records the three options drawn on 2026-11-20, alongside the former [V3ST wordmark](v3st-wordmark.svg).
 
 ![The three options on signal green and on void, small, as app icons and beside the wordmark](v3st-logo-options.png)
 
@@ -30,4 +41,4 @@ Each mark is drawn on a 100-unit square. Each file's viewBox is cropped to the d
 node scripts/logo.mjs
 ```
 
-The script also generates the grain favicon. Both this generator and `scripts/social-image.mjs` render in Playwright's Chromium. Set `LANDING_CHROMIUM_PATH` to use a specific browser binary.
+The script also generates the grain favicon and the lockup preview, which loads Archivo from Google Fonts and refuses to render with a fallback face. Both this generator and `scripts/social-image.mjs` render in Playwright's Chromium. Set `LANDING_CHROMIUM_PATH` to use a specific browser binary.

@@ -247,10 +247,9 @@
   opacity: var(--nav-cue, 1);
   transform: translateY(calc((1 - var(--nav-cue, 1)) * -160%));
 }
-.header-mark {
-  height: 2rem;
-  width: auto;
-  color: var(--color-gain);
+/* The lockup sizes everything from its font-size: the mark is 1.35em tall. */
+.header-lockup {
+  font-size: 1.375rem;
 }
 .desktop-nav {
   display: flex;
@@ -398,7 +397,7 @@
   font-size: 0.875rem;
   line-height: 1.7;
 }
-.footer-mark-wrap {
+.footer-logo-wrap {
   position: relative;
   margin-top: 4rem;
   display: grid;
@@ -414,11 +413,10 @@
   height: 100%;
   object-fit: cover;
 }
-.footer-mark {
+/* The closing lockup, about 3.5em wide: 290px on a 390px phone, 960px at most. */
+.footer-lockup {
   position: relative;
-  width: auto;
-  height: clamp(8rem, 24vw, 18rem);
-  color: var(--color-gain);
+  font-size: clamp(3.75rem, 21vw, 17rem);
 }
 .footer-copy {
   margin-top: 2rem;

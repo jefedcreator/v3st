@@ -29,7 +29,7 @@ OWN-WORLD: The landing's world at Operate density: void ground, surface and rais
 
 STORY: A tester opens the app, reads their total and what is moving (an unpaid transfer, a buy waiting for prices, Friday's payout), acts on what needs them, starts the next job in a modal, and trusts that every value on screen is known or plainly marked unknown.
 
-FIRST VIEWPORT: Home at 390×844. Top bar: V3ST grain mark and Beta chip left; bell with unread dot and initials avatar right. Total value at 40px weight 300, today's change in mint, cash available; Add money (signal pill) and Invest (outline pill); one beta line. Then the money line: a 2px signal spine in the left gutter, dashed above a "Now · 14:20" pill on a hairline and solid below it; Coming up rows with mint-haloed nodes above, Earlier rows with filled nodes below, See all activity. Bottom tabs: Home, Stocks, Cash, Earn.
+FIRST VIEWPORT: Home at 390×844. Top bar: V3ST logo (grain mark beside the name) and Beta chip left; bell with unread dot and initials avatar right. Total value at 40px weight 300, today's change in mint, cash available; Add money (signal pill) and Invest (outline pill); one beta line. Then the money line: a 2px signal spine in the left gutter, dashed above a "Now · 14:20" pill on a hairline and solid below it; Coming up rows with mint-haloed nodes above, Earlier rows with filled nodes below, See all activity. Bottom tabs: Home, Stocks, Cash, Earn.
 
 FORM: Money line — a statement read as one live timeline; position 5 of 7 on the ordered list; seed:bc21f5b0c062fffb
 

@@ -6,6 +6,7 @@
  *   v3st-crop.svg           Yield: three seedlings climb like a chart, each opening into a V
  *   v3st-logo-options.png   the three side by side: on signal green, on void, small, as an app icon and beside the wordmark
  *   src/app/icon.svg        the grain mark in mint on void
+ *   v3st-lockup.png         the product lockup: the grain beside "V3ST" in Archivo 700
  *
  *   node scripts/logo.mjs
  *
@@ -16,9 +17,10 @@
  * draw if any two come closer than 2.8, since lens tips may sit a little inside
  * the gap. Each file's viewBox is cropped to its drawing.
  *
- * The preview keeps the former wordmark as a comparison. Chromium measures
- * the drawings and renders the preview; set LANDING_CHROMIUM_PATH to use a
- * specific one.
+ * The options preview keeps the former wordmark as a comparison. Chromium
+ * measures the drawings and renders both previews; set LANDING_CHROMIUM_PATH
+ * to use a specific one. The lockup preview loads Archivo from Google Fonts at
+ * generation time and refuses to render with a fallback face.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
@@ -188,6 +190,34 @@ try {
     .lockup { gap: 16px; }
   </style></head><body><div class="sheet">${Object.values(drawn).map(column).join("")}</div></body></html>`);
   await page.screenshot({ path: new URL("v3st-logo-options.png", out).pathname, fullPage: true });
+
+  // Lockup preview: the grain beside "V3ST" in Archivo 700, set as src/components/logo.tsx sets
+  // it (mark 1.35em tall, 0.32em gap, -0.03em tracking). Mint mark and white name on void, the
+  // sizes the product ships, then one ink on signal green and on white.
+  const lockup = (size, mark, name) =>
+    `<span class="lk" style="font-size:${size}px;color:${name}">${art(drawn.grain, mark, "")}V3ST</span>`;
+  await page.setContent(`<!doctype html><html><head><meta charset="utf-8">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700&display=block">
+    <style>
+      html, body { margin: 0; width: 1600px; background: #050B08; font-family: "Archivo", sans-serif; }
+      .sheet { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; padding: 56px; }
+      .panel { height: 300px; border-radius: 28px; display: flex; align-items: center; justify-content: center; gap: 56px; }
+      .wide { grid-column: 1 / -1; height: 380px; }
+      .lk { display: inline-flex; align-items: center; gap: 0.32em; font-weight: 700; line-height: 1; letter-spacing: -0.03em; }
+      .lk svg { height: 1.35em; width: auto; display: block; flex: none; }
+    </style></head><body><div class="sheet">
+      <div class="panel wide" style="background:${VOID}">${lockup(112, MINT, WHITE)}</div>
+      <div class="panel" style="background:${VOID}">${[22, 19, 18].map((s) => lockup(s, MINT, WHITE)).join("")}</div>
+      <div class="panel" style="background:${SIGNAL}">${lockup(56, WHITE, WHITE)}</div>
+      <div class="panel" style="background:${WHITE}">${lockup(56, VOID, VOID)}</div>
+      <div class="panel" style="background:#3DDC97">${lockup(56, VOID, VOID)}</div>
+    </div></body></html>`, { waitUntil: "networkidle" });
+  await page.evaluate(() => document.fonts.ready);
+  const archivo = await page.evaluate(() =>
+    [...document.fonts].some((font) => font.family === "Archivo" && font.weight === "700" && font.status === "loaded"),
+  );
+  if (!archivo) throw new Error("Archivo did not load; refusing to render the lockup with a fallback face");
+  await page.screenshot({ path: new URL("v3st-lockup.png", out).pathname, fullPage: true });
 } finally {
   await browser.close();
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ProductLogo } from "@/components/product-logo";
+import { Logo } from "@/components/logo";
 import { Badge } from "@/primitives/badge";
 
 import { HeaderCta } from "./header-cta";
@@ -12,7 +12,7 @@ export function SiteHeader(): React.JSX.Element {
     <header className="site-header">
       <div className="header-inner">
         <Link href="/#top" className="header-logo" aria-label="V3ST — back to top">
-          <ProductLogo className="header-mark" decorative />
+          <Logo className="header-lockup" />
           <Badge>Beta</Badge>
         </Link>
         <nav className="desktop-nav" aria-label="Sections">

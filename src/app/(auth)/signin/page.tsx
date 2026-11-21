@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { env } from "@/env";
-import { ProductLogo } from "@/components/product-logo";
+import { Logo } from "@/components/logo";
 import { Badge } from "@/primitives";
 import { SigninPanel } from "@/components/app/signin/signin-panel";
 import { getCurrentCustomer } from "@/server/app/session";
@@ -27,7 +27,7 @@ export default async function SigninPage({
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-center gap-2.5">
-        <ProductLogo className="h-8 w-auto text-gain" />
+        <Logo className="text-[22px]" />
         <Badge>Beta</Badge>
       </div>
       <SigninPanel

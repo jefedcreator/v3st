@@ -2,11 +2,11 @@
 
 import type { ReactNode } from "react";
 
-import { ProductLogo } from "@/components/product-logo";
+import { Logo } from "@/components/logo";
 import { useSignOut } from "@/components/app/signin/use-sign-out";
 import { Badge, Button } from "@/primitives";
 
-// The setup shell: grain, Beta and Sign out, with no tab bar, under the
+// The setup shell: the logo, Beta and Sign out, with no tab bar, under the
 // same faint wash as sign-in.
 export function SetupShell({ children }: { children: ReactNode }) {
   const { signOut } = useSignOut();
@@ -15,7 +15,7 @@ export function SetupShell({ children }: { children: ReactNode }) {
       <div className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-4 py-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <ProductLogo className="h-7 w-auto text-gain" />
+            <Logo className="text-[18px]" />
             <Badge>Beta</Badge>
           </div>
           <Button variant="ghost" size="sm" onClick={() => void signOut()}>
