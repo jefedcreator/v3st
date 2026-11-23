@@ -24,7 +24,6 @@ afterEach(() => {
   delete process.env.PRIVY_MODE;
   delete process.env.PRIVY_APP_ID;
   delete process.env.PRIVY_VERIFICATION_KEY;
-  delete process.env.PRIVY_BETA_ALLOWLIST;
 });
 
 async function signInWithTokens(tokens: {
@@ -40,7 +39,7 @@ async function signInWithTokens(tokens: {
 }
 
 function sandboxTestTokens(i: {
-  email: string;
+  email: string | null;
   userId?: string;
   sessionId?: string;
   appId?: string;
@@ -68,38 +67,32 @@ function useSandboxMode(keys: ReturnType<typeof privyTestKeys>) {
 
 describe("customer sign-in with Privy email codes", () => {
   it("signs a new customer in from Privy tokens and reuses the account", async () => {
-    const first = await signInCustomer("ada@v3st.test");
-    const second = await signInCustomer("ada@v3st.test");
+    const first = await signInCustomer("ada@example.com");
+    const second = await signInCustomer("ada@example.com");
     expect(second.userId).toBe(first.userId);
     const user = await db.user.findUniqueOrThrow({ where: { id: first.userId } });
-    expect(user.email).toBe("ada@v3st.test");
+    expect(user.email).toBe("ada@example.com");
     expect(user.phone).toBeNull();
   });
 
-  it("accepts only beta test emails", async () => {
-    const rejected = await callRoute(privySignInPOST, {
-      method: "POST",
-      url: `${ORIGIN}/api/v1/app/auth/privy`,
-      body: await mintedTokensFor("someone@gmail.com"),
-    });
-    expect(rejected.status).toBe(403);
-    expect((rejected.json as { code: string }).code).toBe("BETA_TEST_ACCOUNT");
-
-    process.env.PRIVY_BETA_ALLOWLIST = "someone@gmail.com";
-    const allowed = await callAppRoute(privySignInPOST, {
-      method: "POST",
-      url: `${ORIGIN}/api/v1/app/auth/privy`,
-      body: await mintedTokensFor("someone@gmail.com"),
-    });
-    expect(allowed.status).toBe(200);
-
+  it("allows a regular email and Privy's test account in sandbox mode", async () => {
     const keys = privyTestKeys();
     useSandboxMode(keys);
+    const allowed = await signInWithTokens(sandboxTestTokens({ email: "Ada+Beta@Example.com", key: keys }));
+    expect(allowed.status).toBe(200);
+    const user = await db.user.findUniqueOrThrow({ where: { email: "ada+beta@example.com" } });
+    expect(user.identityMode).toBe("sandbox");
+
     const testAccount = await signInWithTokens(sandboxTestTokens({ email: "test-ab12@privy.io", key: keys }));
     expect(testAccount.status).toBe(200);
-    const notTest = await signInWithTokens(sandboxTestTokens({ email: "ada@v3st.test", key: keys }));
-    expect(notTest.status).toBe(403);
-    expect((notTest.json as { code: string }).code).toBe("BETA_TEST_ACCOUNT");
+  });
+
+  it("requires an email account linked to the verified Privy identity", async () => {
+    const keys = privyTestKeys();
+    useSandboxMode(keys);
+    const res = await signInWithTokens(sandboxTestTokens({ email: null, key: keys }));
+    expect(res.status).toBe(403);
+    expect(res.json).toMatchObject({ code: "NOT_ALLOWED", message: "Sign in with an email address." });
   });
 
   it("rejects forged, expired and mismatched tokens", async () => {
@@ -153,16 +146,7 @@ describe("customer sign-in with Privy email codes", () => {
         extraLinkedAccounts: [{ type: "phone", phone_number: "+15555550000", lv: 1_700_000_000 }],
       }),
     );
-    expect(res.status).toBe(403); // @v3st.test is simulated-only; allowlist it
-    process.env.PRIVY_BETA_ALLOWLIST = "tunde@v3st.test";
-    const allowed = await signInWithTokens(
-      sandboxTestTokens({
-        email: "tunde@v3st.test",
-        key: keys,
-        extraLinkedAccounts: [{ type: "phone", phone_number: "+15555550000", lv: 1_700_000_000 }],
-      }),
-    );
-    expect(allowed.status).toBe(200);
+    expect(res.status).toBe(200);
     const user = await db.user.findUniqueOrThrow({ where: { email: "tunde@v3st.test" } });
     expect(user.phone).toBeNull();
   });

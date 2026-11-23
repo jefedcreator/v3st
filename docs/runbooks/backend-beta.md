@@ -63,9 +63,10 @@ mainnet transactions, real BVN or real SMS ever happen in this environment.
   recorded in the transition audit).
 - **Quorum approval:** transfers at or above `policy.treasury.quorumThresholdMicroUsdc` (25,000
   USDC) sit in `awaiting_approval`; two operators call `POST /api/v1/ops/transfers/<id>/approve`.
-- **Invite waitlist testers:** export the list with `GET /api/v1/ops/waitlist`, then add each
-  invited email to `PRIVY_BETA_ALLOWLIST` so it can sign in during the beta. Nothing is emailed
-  automatically — the operator sends invites manually, and the waitlist only stores addresses.
+- **Customer sign-in:** configure the shared beta with `PRIVY_MODE=sandbox` and turn off the
+  allowlist in the Privy development app. Customers enter their email at `/signin` and receive
+  a code from Privy. Export waitlist sign-ups with `GET /api/v1/ops/waitlist`.
+  [Privy setup](../api/customer-app.md#privy-frontend-contract)
 
 ## Recovery
 

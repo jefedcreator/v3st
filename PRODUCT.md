@@ -4,7 +4,7 @@ V3ST is a Nigerian-first beta for understanding naira funding, fractional tokeni
 
 The public landing page speaks to Nigerian first-time investors; Base Stocks Maxxing judges see it as a customer would.
 
-Its action is **Join the waitlist**: an email sign-up that the backend stores and rate-limits. Nothing is ever emailed automatically; the operator invites people in groups by adding them to the beta allowlist.
+Its action is **Join the waitlist**: an email sign-up that the backend stores and rate-limits. Customers can open **Sign in** and use their email address to access the beta.
 
 The page shows the beta's own prices in naira, labelled as beta prices, and keeps crypto vocabulary out of its copy.
 
@@ -26,4 +26,4 @@ The "Built to work with" row shows official marks of the 12 services V3ST is bui
 
 The landing assignment adds a waitlist route, a read-only public ticker and a quiet Sign in link in the header and footer that leads to `/signin`. It includes no deployment, no change to financial behaviour and no live activation.
 
-Beyond the landing, V3ST now has a beta customer app: invited testers sign in at `/signin`, finish setup (identity test card, PIN, documents, bank account), and use the phone-first pages the API serves — home as one live money line, stocks with buying and selling, cash with add money and withdraw, Earn, earnings, activity receipts and settings. Everything runs on test money; every job the API supports is reachable from a 390px phone.
+In the beta customer app, testers sign in at `/signin` with their email address, finish setup (identity test card, PIN, documents, bank account), and use the phone-first pages the API serves. These include home as one live money line, stocks with buying and selling, cash with add money and withdraw, Earn, earnings, activity receipts and settings. Everything runs on test money and every job the API supports is reachable from a 390px phone.

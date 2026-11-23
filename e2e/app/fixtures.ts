@@ -6,9 +6,9 @@ export const ORIGIN = "http://127.0.0.1:3108";
 
 export const PIN = "1357";
 
-// A unique beta email per test.
-export function email(tag: string): string {
-  return `e2e-${tag}-${Math.random().toString(36).slice(2, 10)}@v3st.test`;
+// A unique sign-in email per test.
+export function email(tag: string, domain = "v3st.test"): string {
+  return `e2e-${tag}-${Math.random().toString(36).slice(2, 10)}@${domain}`;
 }
 
 /**

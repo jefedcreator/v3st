@@ -128,8 +128,7 @@ class SecurityService {
     this.assertUsablePin(pin);
     const reauthRequired = () =>
       new UnauthorizedException("A fresh sign-in is required to reset the PIN", "REAUTH_REQUIRED");
-    // Any token that fails verification (forged, expired, not a beta email) is
-    // reported as "sign in again", never as a lost session.
+    // Failed token verification asks the customer to sign in again.
     let login: PrivyLogin;
     try {
       login = await privyAuth.verifyLogin(tokens);

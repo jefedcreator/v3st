@@ -6,7 +6,7 @@ Date: 2026-11-19 · Status: approved by the operator 2026-11-19 · Release: beta
 
 V3ST's customer API (`/api/v1/app/*`) is built and tested, and the public landing page is live. Nothing lets a customer actually use the product: there are no signed-in screens. The [customer app backend design](2026-11-17-v3st-customer-app-backend-design.md) left them to "a separate frontend plan built on this API". This is that design.
 
-Its users are **allowlisted beta testers**: Nigerian first-time investors, on their phones, over several weeks, with test money. They sign in with an email code, set up, add naira, buy and sell US stocks, join and leave Earn, get Friday earnings, withdraw, and read what happened. They should be able to do every job the API supports without help. Every state the API can return should look as honest on screen as it is in the data: waiting looks like waiting, and an unknown value looks unknown.
+Its users are **beta testers**: Nigerian first-time investors, on their phones, over several weeks, with test money. They sign in with an email code, set up, add naira, buy and sell US stocks, join and leave Earn, get Friday earnings, withdraw, and read what happened. They should be able to do every job the API supports without help. Every state the API can return should look as honest on screen as it is in the data: waiting looks like waiting, and an unknown value looks unknown.
 
 ## Operator decisions (2026-11-19)
 
@@ -250,10 +250,10 @@ The first viewport follows the chosen sketch:
 
 - **`/signin`**
   - *Sandbox* (Privy development app):
-    1. Email, then *Send code* (Privy `sendCode`).
+    1. Any email the customer can verify, then *Send code* (Privy `sendCode`).
     2. A six-digit code (`autocomplete="one-time-code"`), then *Sign in* (`loginWithCode`).
     3. The access and identity tokens go to `POST auth/privy`.
-  - *Simulated*: the email goes to `POST beta/privy-tokens`, then on to `auth/privy`. A hint says "Beta: sign in with an @v3st.test email or one on the beta list."
+  - *Simulated*: any valid email goes to `POST beta/privy-tokens`, then on to `auth/privy`.
   - Afterwards: when `next_step` isn't null, go to `/setup`. Otherwise go to the safe `next` path (same-site paths only) or `/home`.
   - `signed-out=1` shows "You're signed out." An already-valid session redirects.
   - A sandbox server with no app ID shows "Sign-in isn't set up on this server yet."

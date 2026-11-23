@@ -9,7 +9,7 @@ related_targets: ["src/app/(app)/home/page.tsx","src/app/(app)/stocks/page.tsx",
 
 Mode: Operate. Scope: every signed-in customer surface — the `(app)` route group and its layout (`/home`, `/stocks`, `/stocks/[id]`, `/orders/[id]`, `/cash`, `/earn`, `/earn/[id]`, `/earnings`, `/activity`, `/activity/[id]`, `/settings`), the `(setup)` flow (`/setup`) and the `(auth)` sign-in page (`/signin`), plus every modal they open.
 
-- Audience: allowlisted beta testers, Nigerian first-time investors, on their phones over several weeks, with test money.
+- Audience: beta testers, Nigerian first-time investors, on their phones over several weeks, with test money.
 - Job: see where their money stands and what is moving, and do every money job the customer API supports, one job per page, short jobs in modals.
 - Action: on Home, act on what needs them (finish a transfer, choose earnings, finish setup) or start a job (Add money, Invest).
 - Proof on hand: the customer API's own DTOs and copy (`src/types/app.ts`, `docs/api/customer-app.md`); beta prices in naira; limits from `policy.ts`. Nothing invented.

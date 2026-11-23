@@ -29,7 +29,7 @@ export function mintPrivyTokens(i: {
   privateKey: KeyObject;
   appId: string;
   userId: string;
-  email: string;
+  email: string | null;
   sessionId: string;
   issuedAt?: Date;
   expiresInSeconds?: number;
@@ -41,10 +41,8 @@ export function mintPrivyTokens(i: {
     { sid: i.sessionId, sub: i.userId, iss: "privy.io", aud: i.appId, iat, exp },
     i.privateKey,
   );
-  const linkedAccounts = [
-    { type: "email", address: i.email, lv: iat },
-    ...(i.extraLinkedAccounts ?? []),
-  ];
+  const linkedAccounts = [...(i.extraLinkedAccounts ?? [])];
+  if (i.email !== null) linkedAccounts.unshift({ type: "email", address: i.email, lv: iat });
   const identity_token = mintJwt(
     {
       sub: i.userId,

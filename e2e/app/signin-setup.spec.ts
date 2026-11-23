@@ -1,7 +1,7 @@
 import { expect, test, email, PIN } from "./fixtures";
 
-test("simulated sign-in lands on /setup", async ({ page }) => {
-  const address = email("signin");
+test("simulated sign-in accepts a regular email and lands on /setup", async ({ page }) => {
+  const address = email("signin", "example.com");
   await page.goto("/signin");
   await page.getByLabel("Email").fill(address);
   await page.getByRole("button", { name: "Continue" }).click();

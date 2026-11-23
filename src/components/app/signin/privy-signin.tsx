@@ -101,8 +101,7 @@ function PrivyFlow({ next, signedOut }: PrivySigninProps) {
         });
         router.replace(afterSignInPath(res.next_step, next));
       } catch (caught) {
-        // V3ST refused this sign-in (not on the beta list, for one): end the
-        // Privy session too, so another email can be tried.
+        // End the Privy session after a failed exchange so another email can be tried.
         setPending(false);
         setError(signinErrorMessage(caught));
         try {

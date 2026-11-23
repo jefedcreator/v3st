@@ -4,8 +4,8 @@ import { AppApiError } from "@/utils/app-api";
 import { canResend, isValidEmail, signinErrorMessage } from "@/components/app/signin/signin";
 
 it("shows the API's copy, or the code message for Privy failures", () => {
-  const beta = new AppApiError("During the beta, sign in with a beta test email.", 403, "BETA_TEST_ACCOUNT");
-  expect(signinErrorMessage(beta)).toBe("During the beta, sign in with a beta test email.");
+  const missingEmail = new AppApiError("Sign in with an email address.", 403, "NOT_ALLOWED");
+  expect(signinErrorMessage(missingEmail)).toBe("Sign in with an email address.");
   expect(signinErrorMessage(new Error("privy: invalid code"))).toBe(
     "That code didn't work. Check it and try again.",
   );

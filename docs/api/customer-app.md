@@ -120,6 +120,7 @@ Internal `ErrorCode`s are mapped to customer codes and copy in `src/backend/serv
 | `SIGN_IN_REQUIRED` | Please sign in to continue. | UNAUTHENTICATED |
 | `SIGN_IN_AGAIN` | Please sign in again to continue. | LOGIN_EXPIRED, REAUTH_REQUIRED |
 | `NOT_ALLOWED` | You can't do that from this account. | FORBIDDEN, CROSS_ORIGIN |
+| `NOT_ALLOWED` | Sign in with an email address. | LOGIN_NOT_ALLOWED |
 | `NOT_FOUND` | We couldn't find that. | NOT_FOUND, ACCOUNT_NOT_FOUND |
 | `CHECK_DETAILS` | Check your details and try again. | BAD_REQUEST, MALFORMED_JSON, VALIDATION_FAILED, PAYLOAD_TOO_LARGE, AMOUNT_OUT_OF_RANGE, BELOW_MINIMUM, BELOW_PROVIDER_MINIMUM |
 | `TRY_AGAIN` | That didn't go through. Please try again. | CONFLICT, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_REUSED, STALE_STATE, INVALID_TRANSITION, LEDGER_KEY_REUSED, MODE_MISMATCH, NOT_DEAD, ALREADY_APPROVED, QUOTE_CONSUMED |
@@ -136,7 +137,7 @@ Internal `ErrorCode`s are mapped to customer codes and copy in `src/backend/serv
 | `PIN_INCORRECT` | That PIN isn't right. | PIN_INCORRECT |
 | `PIN_LOCKED` | Too many wrong PINs. Try again in 30 minutes or reset your PIN. | PIN_LOCKED |
 | `PIN_TOO_SIMPLE` | Choose a PIN that's harder to guess. | PIN_WEAK |
-| `BETA_TEST_ACCOUNT` | During the beta, sign in with a beta test email. | LOGIN_NOT_ALLOWED, TEST_PHONE_REQUIRED |
+| `BETA_TEST_ACCOUNT` | During the beta, use a test phone number. | TEST_PHONE_REQUIRED |
 | `PROCESSING` | We're still finishing your last request. | OPERATION_UNRESOLVED, CONVERSION_PENDING, REWARD_NOT_CONFIRMED |
 | `PRICES_UPDATING` | Prices are updating. You can still place your order and it will go through when they do. | REFERENCE_STALE, PRICE_OUT_OF_RANGE |
 | `UNAVAILABLE` | This isn't available right now. | STOCK_UNAVAILABLE, CAPABILITY_UNAVAILABLE, NO_ROUTE, STRATEGY_UNAVAILABLE, SCENARIO_UNAVAILABLE, INVALID_SCENARIO_STATE |
@@ -169,9 +170,9 @@ Validation failures (`CHECK_DETAILS`, 422) carry a field-specific message for th
 - Session DTO carries `beta: { test_money: true, notice }` on every response.
 - Earn risks copy states that beta fees come mostly from test trading and have no real value.
 
-## Beta sign-in rule
+## Email sign-in
 
-During the beta a sign-in is accepted only when the verified email is Privy's test account (`test-XXXX@privy.io` or `test@privy.io`), an exact entry in `PRIVY_BETA_ALLOWLIST`, or — in `PRIVY_MODE=simulated` only — an address at `@v3st.test`. Anything else is refused with `BETA_TEST_ACCOUNT`. Phone numbers are never stored, and V3ST sends no SMS, email or push.
+Customers can sign in during the beta with any email address linked to their verified Privy identity. Privy delivers sign-in codes in sandbox mode. The local simulated issuer accepts any valid email address and skips inbox verification. Sign-in stores the email from the identity token and ignores linked phone accounts.
 
 ## Privy (frontend contract)
 
@@ -182,7 +183,7 @@ During the beta a sign-in is accepted only when the verified email is Privy's te
 - Test accounts **on** for the beta.
 - Embedded wallets **off** (`createOnLogin: "off"`, the default); custody stays with V3ST test accounts and the app never asks the customer to sign.
 - Allowed domains set to the app origin(s).
-- Privy's own allowlist kept in step with `PRIVY_BETA_ALLOWLIST`. Allowlisted testers receive **real** sign-in emails from Privy.
+- Turn off the app's allowlist under **Users → Access Control** to allow new customers to sign in. [Privy allowlist settings](https://docs.privy.io/user-management/users/managing-users/allowlist)
 
 **Sign-in:** Privy's headless email login — `useLoginWithEmail()`, then `sendCode({ email })` and `loginWithCode({ code })` — then `getAccessToken()` and `getIdentityToken()`, then `POST /api/v1/app/auth/privy` with both tokens. The session cookie is HttpOnly and set by the backend; the response says whether the customer is new and which onboarding step comes next.
 

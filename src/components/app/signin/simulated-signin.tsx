@@ -54,9 +54,6 @@ export function SimulatedSignin({ next }: { next: string | null }) {
           {error}
         </p>
       )}
-      <p className="text-subtle text-sm">
-        Beta: sign in with an @v3st.test email or one on the beta list.
-      </p>
     </form>
   );
 }

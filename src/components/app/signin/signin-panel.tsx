@@ -28,7 +28,9 @@ export function SigninPanel({
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="type-app-title text-heading">Sign in to V3ST</h1>
-        <p className="text-muted-foreground text-[15px]">Use the email you were invited with.</p>
+        {mode === "sandbox" && appId !== null && (
+          <p className="text-muted-foreground text-[15px]">We&apos;ll send you a sign-in code.</p>
+        )}
       </div>
       {signedOut && (
         <p role="status" aria-live="polite" className="text-gain text-sm">

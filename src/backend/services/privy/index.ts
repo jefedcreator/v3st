@@ -13,9 +13,6 @@ export type PrivyLogin = {
   email: string;
 };
 
-const PRIVY_TEST_ACCOUNT = /^test-[a-z0-9]{4}@privy\.io$|^test@privy\.io$/;
-const SIMULATED_TEST_EMAIL = /^[a-z0-9][a-z0-9._+-]{0,63}@v3st\.test$/;
-
 function decodePayload(token: string): Record<string, unknown> | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
@@ -72,22 +69,12 @@ class PrivyAuthService {
     if (emailAccount?.type !== "email" || !emailAccount?.address) {
       throw new ForbiddenException("No email linked to this sign-in", "LOGIN_NOT_ALLOWED");
     }
-    const email = emailAccount.address.toLowerCase();
-    this.assertBetaEmail(email);
     return {
       userId: access.user_id,
       sessionId: access.session_id,
       issuedAt: new Date(access.issued_at * 1_000),
-      email,
+      email: emailAccount.address.toLowerCase(),
     };
-  }
-
-  assertBetaEmail(email: string): void {
-    if (PRIVY_TEST_ACCOUNT.test(email)) return;
-    const runtime = privyRuntime();
-    if (runtime.betaAllowlist.includes(email)) return;
-    if (runtime.mode === "simulated" && SIMULATED_TEST_EMAIL.test(email)) return;
-    throw new ForbiddenException("This email can't sign in during the beta", "LOGIN_NOT_ALLOWED");
   }
 }
 

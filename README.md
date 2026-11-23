@@ -50,8 +50,7 @@ SEPOLIA_LIVE=1 yarn sepolia:smoke              # operator-only end-to-end journe
 Customer beta environment (`APP_STAGE=beta`):
 
 - `APP_CUSTOMER_CHAIN` — `testnet` for the local loopback chain, `basesepolia` for the live beta.
-- `PRIVY_MODE` — `simulated` in the beta (local token issuer); real Privy verification needs `PRIVY_APP_ID` and `PRIVY_VERIFICATION_KEY`.
-- `PRIVY_BETA_ALLOWLIST` — comma-separated tester emails allowed to sign in during the beta; keep Privy's own allowlist in step with it (allowlisted testers receive real sign-in emails from Privy).
+- `PRIVY_MODE` — `simulated` for local development and CI. Use `sandbox` with a Privy development app for email-code sign-in. Set `PRIVY_APP_ID` and `PRIVY_VERIFICATION_KEY` and turn off the app's allowlist in the Privy dashboard.
 - `BASE_SEPOLIA_KEEPER_PRIVATE_KEY` — funds and runs the 300 s test-pool keeper that keeps Base Sepolia stand-in pools aligned (and supplies most testnet Earn fees).
 - `yarn sepolia:treasury --micro <amount>` — operator-only Base Sepolia treasury top-up.
 - `SEPOLIA_LIVE=1 APP_CUSTOMER_CHAIN=basesepolia yarn sepolia:customer-smoke` — operator-only live customer smoke (sign-in → fund → buy); exits non-zero unless the order completes and the DTO passes the customer-vocabulary leak check.
@@ -113,4 +112,4 @@ The relayer key comes from the `.testnet/` keystore that `yarn testnet:deploy` u
 
 It builds and serves the app on `http://127.0.0.1:3108` with the worker and simulated Privy.
 
-Waitlist operations: the form posts to `POST /api/v1/waitlist`, rate-limited to 5 requests per 10 minutes per client address (PostgreSQL buckets keyed by an HMAC of the address, never the raw IP). `RATE_LIMIT_SECRET` is required (at least 32 characters): `.env.example` carries a local-only placeholder, and any shared environment needs its own unique value. Export invited testers with the operator-only `GET /api/v1/ops/waitlist?page=&size=`, then add each invited email to `PRIVY_BETA_ALLOWLIST`; see [docs/runbooks/backend-beta.md](docs/runbooks/backend-beta.md) and [docs/api/waitlist.md](docs/api/waitlist.md). Nothing is emailed automatically.
+Waitlist operations: the form posts to `POST /api/v1/waitlist`, rate-limited to 5 requests per 10 minutes per client address (PostgreSQL buckets keyed by an HMAC of the address, never the raw IP). `RATE_LIMIT_SECRET` is required (at least 32 characters): `.env.example` carries a local-only placeholder, and any shared environment needs its own unique value. The operator-only `GET /api/v1/ops/waitlist?page=&size=` exports sign-ups. Customers can sign in directly at `/signin`. See [docs/runbooks/backend-beta.md](docs/runbooks/backend-beta.md) and [docs/api/waitlist.md](docs/api/waitlist.md).

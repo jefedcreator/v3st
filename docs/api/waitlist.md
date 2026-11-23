@@ -27,4 +27,4 @@ Operator role required (`authMiddleware` + `operatorMiddleware`). Returns the pa
 
 ## Operations
 
-Export the list with `GET /api/v1/ops/waitlist` and invite people in groups by adding their emails to `PRIVY_BETA_ALLOWLIST`. Nothing is emailed automatically; see `docs/runbooks/backend-beta.md`.
+Export sign-ups with `GET /api/v1/ops/waitlist`. Customers can sign in directly at `/signin` with their email address. See the [beta runbook](../runbooks/backend-beta.md).

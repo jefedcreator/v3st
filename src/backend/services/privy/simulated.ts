@@ -9,7 +9,6 @@ export type PrivyRuntime = {
   mode: "sandbox" | "simulated";
   appId: string | undefined;
   verificationKey: string | undefined;
-  betaAllowlist: string[];
 };
 
 // Reads the live process env so tests can switch modes; src/env.js validates
@@ -26,10 +25,6 @@ export function privyRuntime(): PrivyRuntime {
     mode: parsed.data,
     appId: process.env.PRIVY_APP_ID ?? undefined,
     verificationKey: process.env.PRIVY_VERIFICATION_KEY ?? undefined,
-    betaAllowlist: (process.env.PRIVY_BETA_ALLOWLIST ?? "")
-      .split(",")
-      .map((entry) => entry.trim().toLowerCase())
-      .filter((entry) => entry.length > 0),
   };
 }
 
